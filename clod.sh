@@ -280,5 +280,7 @@ if [[ -z "${CLOD_TEST_MODE}" ]]; then
     echo "2. Drag files from the staging folder to Project Knowledge"
     echo "3. Don't forget _path_manifest.json which maps optimized names back to original paths"
     echo "4. Paste the contents of project-instructions.md into the Project Instructions section"
-    echo "5. Start a new conversation to see changes"
+    echo "5. IMPORTANT: You must manually delete previous versions of these files from Project Knowledge"
+    echo "   before starting a new conversation to ensure Claude uses the most recent files"
+    echo "6. Start a new conversation to see changes"
 fi

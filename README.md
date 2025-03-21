@@ -111,7 +111,6 @@ On first run, you'll be prompted to:
 The script creates a staging directory at `~/Claude/ClaudeUpload_TIMESTAMP/` containing:
 - Your code files with optimized names
 - A `_path_manifest.json` file mapping optimized names to original paths
-- A README.txt explaining the contents
 
 ### Uploading to Claude
 
@@ -136,6 +135,17 @@ Claude will:
 3. Generate artifacts showing you the changes
 4. Write the modified files back to your local filesystem
 5. Update or create tests as needed
+
+### Updating Project Knowledge
+
+When you've made changes to your files and want to update Claude's Project Knowledge:
+
+1. Run `clod` to prepare the modified files for upload
+2. **Important**: You must manually delete the previous versions of these files from Claude's Project Knowledge before starting a new conversation
+3. Upload the new files from the staging directory
+4. Start a new conversation within the same Claude Project
+
+> **Note**: Claude does not automatically update existing files with the same name in Project Knowledge. You need to manually delete the previous versions before starting a new conversation to ensure Claude uses the most recent files.
 
 ## Automatic Testing with File Watching
 
@@ -269,6 +279,9 @@ Here's a typical workflow using clod:
    ```bash
    clod  # Now only shows files modified since last run
    ```
+   - Upload the new files from the staging directory
+   - **Important**: Before starting a new conversation, manually delete the previous versions of these files from Project Knowledge
+   - Start a new conversation
 
 ## Configuration
 
