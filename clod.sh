@@ -276,9 +276,9 @@ echo "Staging directory: $CURRENT_STAGING"
 if [[ -z "${CLOD_TEST_MODE}" ]]; then
     echo ""
     echo "Next steps:"
-    echo "1. Navigate to Project Knowledge in your Claude project"
-    echo "2. Drag files from the staging folder (with optimized names)"
+    echo "1. Navigate to Project Knowledge in your Claude Project (Pro or Team account required)"
+    echo "2. Drag files from the staging folder to Project Knowledge"
     echo "3. Don't forget _path_manifest.json which maps optimized names back to original paths"
-    echo "4. Paste project-instructions.md into the Project Instructions section"
+    echo "4. Paste the contents of project-instructions.md into the Project Instructions section"
     echo "5. Start a new conversation to see changes"
 fi
