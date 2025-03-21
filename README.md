@@ -2,6 +2,24 @@
 
 A streamlined workflow system for coding with Claude AI using filesystem access and project knowledge.
 
+## Comparison with Claude Code
+
+While Anthropic's Claude Code offers powerful agentic capabilities directly in your terminal, clod provides a complementary and often more cost-effective approach:
+
+### When to Use clod vs. Claude Code
+
+- **Cost Efficiency**: clod leverages Claude Pro's project knowledge caching, resulting in significantly lower token usage compared to Claude Code's real-time analysis.
+- **Hybrid Approach**: I find success using clod with Claude Pro as their primary workflow, switching to Claude Code only when hitting Pro plan limits.
+- **Test Integration**: When combined with file watching tools like fswatch (see below), clod offers comparable testing capabilities to Claude Code at a fraction of the token cost.
+- **Seamless Fallback**: If you reach Claude Pro limits, you can continue your work with Claude Code until access is restored without changing your workflow significantly.
+
+The ideal workflow for me is:
+1. Use clod with Claude Pro for day-to-day development tasks
+2. Set up fswatch or similar tools for automated testing
+3. Keep Claude Code as a backup for high-volume days or especially complex tasks requiring whole-codebase analysis
+
+This hybrid approach optimizes both cost and capability while ensuring continuous productivity.
+
 ## The Problem
 
 When working with code in Claude, you face several challenges:
