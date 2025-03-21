@@ -1,4 +1,6 @@
-# Project Workflow Instructions
+# Project Instructions
+*These instructions should be pasted into the Project Instructions section of your Claude Project.*
+*If you're a human reader trying to understand these instructions, please refer to the README.md file for more detailed explanations* of how clod works with Claude's Project Knowledge and Filesystem Access features.
 
 ## Overview
 
@@ -47,6 +49,24 @@ The expected workflow is:
    write_file(path="components/Header.jsx", content="...")
    ```
 
+## Test Integration
+
+When making changes that affect functionality, tests should be updated or run:
+
+1. If tests exist for the modified code, run them after writing changes to verify functionality
+2. If test results are provided (e.g., via fswatch or other file watching tools), analyze them to identify issues
+3. Suggest fixes for any failing tests
+4. If new functionality is added without tests, recommend or create appropriate tests
+
+### Working with Automated Testing
+
+If the user has set up file watching and automated testing:
+
+1. After writing files, wait for test results to be shared by the user
+2. Analyze any test failures or warnings
+3. Propose fixes for failing tests
+4. Create an iterative improvement cycle: change → test → fix
+
 ## Key Points to Remember
 
 1. The user should not need to reference the path manifest or remember file paths
@@ -54,7 +74,7 @@ The expected workflow is:
 3. Take an end-to-end approach to implementing requested changes
 4. Always generate artifacts to show changes before writing files
 5. Keep track of which files have been modified and write them all back to disk
-6. Use the filesystem access capabilites for seamless integration
+6. Use the filesystem access capabilities for seamless integration
 
 ## Working with New Files
 

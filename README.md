@@ -2,6 +2,29 @@
 
 A streamlined workflow system for coding with Claude AI using filesystem access and project knowledge.
 
+## What is clod?
+
+clod creates a smooth integration between your local codebase and Claude AI's coding capabilities. It solves key problems when using Claude for coding:
+
+1. It optimizes your files for Claude's project knowledge UI
+2. It tracks which files have changed since your last upload
+3. It maintains a mapping between Claude's filenames and your actual repository paths
+4. It provides clear instructions to Claude on how to implement your requests
+
+## Claude Features Used by clod
+
+**Project Knowledge** is a feature in Claude that allows you to upload files that Claude can reference during your conversation. These files remain accessible throughout your project without consuming your conversation's context window.
+
+**Filesystem Access** is a feature that allows Claude to read from and write to files on your local system (currently available only on macOS and Windows desktop applications). This enables Claude to directly modify your codebase based on your instructions.
+
+## Prerequisites
+
+- **Claude Pro or Team account** with access to:
+  - **Project Knowledge** - Claude's file storage system that keeps files available throughout your project
+  - **Filesystem Access** - Claude's ability to read and write files on your computer (currently available only on macOS and Windows desktop apps)
+- Git repository for your codebase
+- Terminal/command-line access
+
 ## Comparison with Claude Code
 
 While Anthropic's Claude Code offers powerful agentic capabilities directly in your terminal, clod provides a complementary and often more cost-effective approach:
@@ -95,7 +118,9 @@ The script creates a staging directory at `~/Claude/ClaudeUpload_TIMESTAMP/` con
 1. Start a new Claude Project
 2. Open the Project Knowledge section
 3. Drag and drop the files from the staging directory
-4. Upload the project instructions from this repository to set up the workflow
+4. Click on "Project Instructions" in the left sidebar
+5. Paste the contents of `project-instructions.md` into this section
+6. Start coding with Claude!
 
 ### Making Changes
 
@@ -172,6 +197,15 @@ chmod +x test-watcher.sh
 ./test-watcher.sh ~/path/to/your/project
 ```
 
+### Using Test Results with Claude
+
+When using file watchers to run tests:
+
+1. After Claude makes changes to your code, the file watcher will automatically run tests
+2. Share test output with Claude by copying the terminal output
+3. Claude can analyze test failures and suggest fixes
+4. This creates a rapid feedback loop where Claude can iteratively improve the code
+
 This simple setup ensures that as Claude makes changes to your codebase, you'll get immediate feedback on whether those changes maintain the integrity of your project.
 
 ## Safety Guardrails
@@ -187,10 +221,21 @@ We've included a separate [guardrails.md](guardrails.md) document with recommend
 
 **We strongly recommend reviewing these guardrails and implementing those appropriate for your project before using clod in production environments.**
 
-To get started:
+To implement guardrails:
 1. Review [guardrails.md](guardrails.md) 
 2. Select appropriate guardrails for your project
-3. Add them to your project instructions when setting up with Claude
+3. Add them to the **bottom of the Project Instructions section** in your Claude Project
+4. This applies the guardrails to all conversations in that project
+
+For example, you might add these lines to the end of your Project Instructions:
+```
+## Project Guardrails
+
+When working with this codebase, you should:
+1. Create backups of files before modifying them
+2. Only modify files that were in the original project upload
+3. Get explicit confirmation for significant architectural changes
+```
 
 Different teams and projects will have different safety requirements - the guardrails document provides a menu of options to choose from rather than a one-size-fits-all solution.
 
@@ -207,7 +252,10 @@ Here's a typical workflow using clod:
 2. **Upload to Claude**:
    - Create a new Claude Project called "My React Project"
    - Upload files from the staging directory to Project Knowledge
-   - Upload the project instructions
+   - Click on "Project Instructions" in the left sidebar
+   - Paste the contents of `project-instructions.md` into this section
+   - Add any desired guardrails to the bottom of the Project Instructions
+   - Start a new conversation
 
 3. **Request Changes**:
    "Please refactor the user authentication flow to use JWT tokens instead of session cookies"
@@ -224,21 +272,54 @@ Here's a typical workflow using clod:
 
 ## Configuration
 
-The script creates a configuration directory at `.clod/` in your project root:
+The script creates a configuration directory at `.claude-uploader/` in your project root:
 - `last-run-marker`: Tracks when the script was last run for incremental updates
 - Path mappings are stored in each staging directory
 
+## Working with Project Knowledge
+
+When working with Claude on complex codebases, you may sometimes notice that Claude doesn't fully consider all files in the project knowledge section. This is due to how Claude's Retrieval-Augmented Generation (RAG) works with large file collections.
+
+### Tips for Better File Retrieval
+
+1. **Be specific about file references**: If Claude seems to miss context, explicitly mention the relevant files:
+   ```
+   "Please check the file config-settings.js in the project knowledge section to see how we handle environment variables."
+   ```
+
+2. **Prompt thorough examination**: Encourage Claude to thoroughly check all relevant files:
+   ```
+   "Before implementing this change, please carefully consider all files in the project knowledge section that relate to user authentication."
+   ```
+
+3. **Confirm file content understanding**: Ask Claude to summarize key files to ensure proper context:
+   ```
+   "Could you first summarize what our current Header component does based on the file in project knowledge?"
+   ```
+
+4. **Guide file exploration**: If working with a large codebase, guide Claude's attention:
+   ```
+   "The relevant code is primarily in the src/components and src/utils directories. Please focus on those files first."
+   ```
+
+5. **Iterative refinement**: If Claude misses important context, point it out explicitly:
+   ```
+   "I notice you didn't consider how this interacts with the API client in api-client.js. Please review that file and adjust your implementation."
+   ```
+
+These techniques can significantly improve Claude's ability to work effectively with your codebase.
+
 ## Requirements
 
-- macOS with Bash shell environment
+- macOS with Bash shell environment (primary support)
 - Git repository
 - Claude Pro or Team account with filesystem access enabled
 
 ## Platform Support
 
-Currently, clod is designed and tested for macOS environments. While Claude's filesystem access is available on both macOS and Windows, this tool has only been verified on macOS.
+clod is primarily designed and tested for macOS environments. While Claude's filesystem access is available on both macOS and Windows, this tool has been more extensively tested on macOS.
 
-Community contributions to add Windows support are welcome.
+Community contributions to enhance Windows support are welcome.
 
 ## License
 
