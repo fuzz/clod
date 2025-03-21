@@ -250,26 +250,6 @@ fi
 # Close the path manifest JSON
 echo "}" >> "$CURRENT_STAGING/_path_manifest.json"
 
-# Create README.txt with instructions
-cat > "$CURRENT_STAGING/README.txt" << EOF
-# Claude Upload Directory
-
-This directory contains files prepared for upload to Claude's Project Knowledge:
-
-1. Your code files with optimized names where directories are converted to prefixes with dashes
-   - Example: components/Header.jsx → components-Header.jsx
-
-2. A _path_manifest.json file mapping optimized names back to original paths
-   - This is used by Claude to write changes back to the correct locations
-
-## Next Steps:
-
-1. Navigate to Claude's Project Knowledge section
-2. Drag and drop all these files
-3. Upload the project-instructions.md file from the clod repository
-4. Start coding with Claude!
-EOF
-
 # Update the last run marker
 touch "$LAST_RUN_FILE"
 
