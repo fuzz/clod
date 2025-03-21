@@ -4,7 +4,7 @@ A streamlined workflow system for coding with Claude AI using filesystem access 
 
 ## What is clod?
 
-clod creates a smooth integration between your local codebase and Claude AI's coding capabilities. It solves key problems when using Claude for coding:
+clod (meat-robot hybrid) creates a smooth integration between your local codebase and Claude AI's coding capabilities. It solves key problems when using Claude for coding:
 
 1. It optimizes your files for Claude's project knowledge UI
 2. It tracks which files have changed since your last upload
