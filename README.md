@@ -36,7 +36,7 @@ While Anthropic's Claude Code offers powerful agentic capabilities directly in y
 - **Test Integration**: When combined with file watching tools like fswatch (see below), clod offers comparable testing capabilities to Claude Code at a fraction of the token cost.
 - **Seamless Fallback**: If you reach Claude Pro limits, you can continue your work with Claude Code until access is restored without changing your workflow significantly.
 
-The ideal workflow for me is:
+The workflow I use is:
 1. Use clod with Claude Pro for day-to-day development tasks
 2. Set up fswatch or similar tools for automated testing
 3. Keep Claude Code as a backup for high-volume days or especially complex tasks requiring whole-codebase analysis
