@@ -146,9 +146,6 @@ skipped_count=0
 if [ -f "$LAST_RUN_FILE" ]; then
     echo "Finding files modified since last run..."
     
-    # Get modification time of last run marker
-    LAST_RUN_TIME=$(stat -f "%m" "$LAST_RUN_FILE")
-    
     # Get all modified files according to git, ensuring each file is only processed once
     while IFS= read -r file; do
         # Skip empty lines
@@ -232,6 +229,12 @@ else
                     continue
                 fi
                 
+                # Skip any files in the staging directory
+                if [[ "$full_path" == *"$STAGING_DIR"* ]]; then
+                    echo "Skipping: $full_path (in staging directory)"
+                    continue
+                fi
+                
                 # Try to process the file, track skipped files
                 if process_file "$full_path"; then
                     ((file_count++))
@@ -257,7 +260,6 @@ if [ "$file_count" -eq 0 ]; then
     echo "No files processed (skipped: $skipped_count)."
     # Clean up the empty staging directory
     rm -f "$CURRENT_STAGING/_path_manifest.json"
-    rm -f "$CURRENT_STAGING/README.txt"
     rmdir "$CURRENT_STAGING"
     exit 0
 fi
@@ -275,6 +277,8 @@ if [[ -z "${CLOD_TEST_MODE}" ]]; then
     echo ""
     echo "Next steps:"
     echo "1. Navigate to Project Knowledge in your Claude project"
-    echo "2. Drag files from the staging folder"
-    echo "3. Start a new conversation to see changes"
+    echo "2. Drag files from the staging folder (with optimized names)"
+    echo "3. Don't forget _path_manifest.json which maps optimized names back to original paths"
+    echo "4. Paste project-instructions.md into the Project Instructions section"
+    echo "5. Start a new conversation to see changes"
 fi
