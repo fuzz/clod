@@ -119,6 +119,11 @@ process_file() {
         local optimized_name="$file_name"
     fi
     
+    # Handle SVG files specially - change to XML extension for Claude compatibility
+    if [[ "$file_name" == *.svg ]]; then
+        optimized_name="${optimized_name%.svg}-svg.xml"
+    fi
+    
     # Copy file with optimized name
     cp "$file" "$CURRENT_STAGING/$optimized_name"
     

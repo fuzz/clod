@@ -37,6 +37,7 @@ echo -e "\n${YELLOW}Test: Creating test files...${NC}"
 mkdir -p src/components
 mkdir -p src/utils
 mkdir -p test
+mkdir -p public
 
 # Create text files
 echo "# Test Project" > README.md
@@ -44,6 +45,9 @@ echo "export const add = (a, b) => a + b;" > src/utils/math.js
 echo "<div>Header Component</div>" > src/components/Header.jsx
 echo "console.log('Hello, World!');" > src/index.js
 echo "test('adds 1 + 2 to equal 3', () => { expect(add(1, 2)).toBe(3); });" > test/math.test.js
+
+# Create an SVG file for testing SVG handling
+echo '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="blue" /></svg>' > public/logo.svg
 
 # Create a binary file
 dd if=/dev/urandom of=binary-file.bin bs=1024 count=1 2> /dev/null
@@ -111,6 +115,15 @@ else
     exit 1
 fi
 
+# Check if SVG file was correctly converted to XML
+if [ -f "$CLAUDE_UPLOAD_DIR/public-logo-svg.xml" ]; then
+    echo -e "${GREEN}✓ SVG file was correctly converted to XML${NC}"
+else
+    echo -e "${RED}✗ SVG file was not correctly converted to XML${NC}"
+    ls -la "$CLAUDE_UPLOAD_DIR"
+    exit 1
+fi
+
 # Check if binary file was excluded
 if [ -f "$CLAUDE_UPLOAD_DIR/binary-file.bin" ]; then
     echo -e "${RED}✗ Binary file was not excluded${NC}"
@@ -124,7 +137,8 @@ echo -e "\n${YELLOW}Test: Checking manifest content...${NC}"
 MANIFEST_CONTENT=$(cat "$MANIFEST_FILE")
 if [[ $MANIFEST_CONTENT == *"README.md"* ]] && 
    [[ $MANIFEST_CONTENT == *"src/utils/math.js"* ]] && 
-   [[ $MANIFEST_CONTENT == *"src/components/Header.jsx"* ]]; then
+   [[ $MANIFEST_CONTENT == *"src/components/Header.jsx"* ]] && 
+   [[ $MANIFEST_CONTENT == *"public/logo.svg"* ]]; then
     echo -e "${GREEN}✓ Manifest contains correct path mappings${NC}"
 else
     echo -e "${RED}✗ Manifest content is incorrect${NC}"
