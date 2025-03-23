@@ -79,6 +79,37 @@ clod provides a complete, end-to-end workflow for coding with Claude AI:
    - Proactive test coverage for modified code
    - Automatic test updates alongside code changes
 
+## Special File Handling
+
+clod includes special handling for certain file types to ensure optimal compatibility with Claude's Project Knowledge system.
+
+### SVG Files
+
+SVG files are automatically converted to XML files when processed by clod. This is because Claude's Project Knowledge system doesn't officially support the SVG file extension, but it can work with XML files (since SVGs are fundamentally XML files).
+
+#### How SVG Handling Works
+
+1. When clod processes an SVG file, it renames it with a special format:
+   - `logo.svg` becomes `logo-svg.xml`
+   - `public/logo.svg` becomes `public-logo-svg.xml`
+
+2. The original file path is preserved in the `_path_manifest.json` file, ensuring Claude writes back to the correct SVG file when making changes.
+
+3. In your conversations with Claude, you can refer to these files using either name:
+   - "Can you modify the SVG in public/logo.svg?"
+   - "Can you update the XML in public-logo-svg.xml?"
+
+4. When Claude writes the file back to your filesystem, it will use the original SVG path.
+
+#### Benefits
+
+- You can continue working with standard SVG files in your projects without interruption
+- No manual conversion is needed - everything happens automatically
+- Claude can fully view and edit SVG content just like any other XML file
+- Your project structure remains clean with proper SVG extensions
+
+This feature allows you to leverage Claude's capabilities with SVG files while ensuring compatibility with the Project Knowledge system.
+
 ## Installation
 
 1. Clone this repository:
