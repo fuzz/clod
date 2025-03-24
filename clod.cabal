@@ -1,0 +1,17 @@
+name: clod
+version: 0.1.0.0
+build-type: Simple
+cabal-version: >=1.10
+
+executable clod
+  main-is: clod.hs
+  build-depends: base, directory, filepath, process, text, aeson
+               , bytestring, containers, time, temporary
+               , mtl, transformers, unix, directory
+  default-language: Haskell2010
+
+test-suite clod-tests
+  type: exitcode-stdio-1.0
+  main-is: clod-tests.hs
+  build-depends: base, directory, filepath, process, temporary, unix
+  default-language: Haskell2010
