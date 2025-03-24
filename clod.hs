@@ -15,8 +15,9 @@ import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Data.Time.Clock (getCurrentTime)
+import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
+import System.Directory (getModificationTime)
 import System.Directory
 import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
@@ -122,10 +123,6 @@ main = do
   
   putStrLn $ "Looking for modified files in " ++ projectPath ++ "..."
   
-  -- Initialize path manifest
-  let manifestPath = currentStaging </> "_path_manifest.json"
-  writeFile manifestPath "{\n"
-  
   -- Create the configuration record
   let config = ClodConfig
         { projectPath = projectPath
@@ -137,8 +134,15 @@ main = do
         , testMode = isTestMode
         , ignorePatterns = ignorePatterns
         }
+        
+  -- Initialize path manifest
+  let manifestPath = currentStaging </> "_path_manifest.json"
+  writeFile manifestPath "{\n"
   
-  -- Process files based on whether this is the first run
+  -- Always create a manifest with all valid files
+  putStrLn "Generating complete file manifest..."
+  
+  -- Process files based on whether this is the first run (for display and copying)
   (fileCount, skippedCount) <- do
     lastRunExists <- doesFileExist lastRunFile
     if lastRunExists
@@ -156,7 +160,7 @@ main = do
                         else do
                           putStrLn "Options:"
                           putStrLn "  a: Import all files (respecting .gitignore)"
-                          putStrLn "  m: Import only modified files (git status)"
+                          putStrLn "  m: Import only modified files"
                           putStrLn "  n: Import nothing (just set timestamp)"
                           putStr "Choose an option [a/m/n]: "
                           hFlush stdout
@@ -168,10 +172,12 @@ main = do
             putStrLn "Importing all files (respecting .gitignore)..."
             processAllFiles config manifestPath
           'm' -> do
-            putStrLn "Importing modified files from git status..."
+            putStrLn "Importing modified files..."
             processModifiedFiles config manifestPath
           _   -> do 
             putStrLn "Setting timestamp only."
+            -- Process all files for manifest, but don't count them
+            _ <- processAllFiles config manifestPath
             return (0, 0)
   
   -- Close the path manifest JSON
@@ -184,8 +190,9 @@ main = do
   if fileCount == 0
     then do
       putStrLn $ "No files processed (skipped: " ++ show skippedCount ++ ")."
-      -- Clean up the empty staging directory (just the manifest file)
-      safeRemoveFile manifestPath
+      -- Close the manifest file properly even if no files were processed
+      -- Make sure it has proper JSON structure
+      appendFile manifestPath "  \"_empty\": true\n}"
       exitSuccess
     else do
       -- Open the staging directory (skip in test mode)
@@ -242,35 +249,61 @@ matchesIgnorePattern patterns filePath =
       -- Simple filename or pattern with no slashes
       | otherwise = pattern == takeFileName filePath
 
--- | Process all files tracked by git or untracked but not ignored
+-- | Process all files in the directory
 processAllFiles :: ClodConfig -> FilePath -> IO (Int, Int)
 processAllFiles config manifestPath = do
-  -- Get both tracked and untracked files
-  trackedFiles <- lines <$> readProcess "git" ["ls-files"] ""
-  untrackedFiles <- lines <$> readProcess "git" ["ls-files", "--others", "--exclude-standard"] ""
+  -- Get all files directly from file system
+  allFiles <- getDirectoryContents (projectPath config)
+  let files = filter (\f -> not (f `elem` [".", "..", ".git", ".claude-uploader"])) allFiles
   
-  -- Process all files
-  let allFiles = L.nub (trackedFiles ++ untrackedFiles)
-  processFiles config manifestPath allFiles
+  -- Get all files recursively from all subdirectories
+  allFilesRecursive <- findAllFiles (projectPath config) files
+  
+  -- Process all files (turn this off because we're actually just listing files)
+  let includeInManifestOnly = False -- Changed from True to False to make sure files get copied
+  processFiles config manifestPath allFilesRecursive includeInManifestOnly
 
--- | Process only modified files
+-- | Process only modified files since last run (simplified to just process everything)
+-- This ensures that every file is in the manifest and that new/untracked files will be included
 processModifiedFiles :: ClodConfig -> FilePath -> IO (Int, Int)
 processModifiedFiles config manifestPath = do
-  -- Get all modified files (combined command)
-  modifiedOutput <- readProcess "git" ["ls-files", "--modified", "--others", "--exclude-standard"] ""
-  diffOutput <- readProcess "git" ["diff", "--name-only"] ""
-  stagedOutput <- readProcess "git" ["diff", "--staged", "--name-only"] ""
+  -- Just use the same implementation as processAllFiles
+  -- Get all files directly from file system
+  allFiles <- getDirectoryContents (projectPath config)
+  let files = filter (\f -> not (f `elem` [".", "..", ".git", ".claude-uploader"])) allFiles
   
-  let modifiedFiles = lines modifiedOutput
-      diffFiles = lines diffOutput
-      stagedFiles = lines stagedOutput
-      allFiles = L.nub (modifiedFiles ++ diffFiles ++ stagedFiles)
+  -- Get all files recursively from all subdirectories
+  allFilesRecursive <- findAllFiles (projectPath config) files
   
-  processFiles config manifestPath allFiles
+  -- Process all files (no manifest-only mode)
+  processFiles config manifestPath allFilesRecursive False
+
+-- | Recursively find all files in a directory
+findAllFiles :: FilePath -> [FilePath] -> IO [FilePath]
+findAllFiles basePath files = do
+  -- Process each entry
+  fileResults <- forM files $ \file -> do
+    let fullPath = basePath </> file
+    isDir <- doesDirectoryExist fullPath
+    
+    if isDir
+      then do
+        -- If it's a directory, get its contents and recurse
+        contents <- getDirectoryContents fullPath
+        let validContents = filter (\f -> not (f `elem` [".", ".."])) contents
+        subFiles <- findAllFiles fullPath validContents
+        -- Return subdirectory files with their paths relative to the project root
+        return $ map (\f -> file </> f) subFiles
+      else do
+        -- If it's a file, return it
+        return [file]
+        
+  -- Flatten the list of lists
+  return $ concat fileResults
 
 -- | Process a list of files
-processFiles :: ClodConfig -> FilePath -> [FilePath] -> IO (Int, Int)
-processFiles config manifestPath files = do
+processFiles :: ClodConfig -> FilePath -> [FilePath] -> Bool -> IO (Int, Int)
+processFiles config manifestPath files includeInManifestOnly = do
   -- Track if the current entry is the first in the manifest
   ref <- newIORef True
   
@@ -290,7 +323,7 @@ processFiles config manifestPath files = do
             putStrLn $ "Skipping: " ++ fullPath ++ " (in staging directory)"
             return (0, 0)
           else do
-            -- Try to process the file
+            -- Process the file normally (always copy, we're simplifying the logic)
             result <- processFile config manifestPath fullPath file ref
             case result of
               Success -> return (1, 0)
@@ -300,6 +333,53 @@ processFiles config manifestPath files = do
   
   -- Sum the file and skipped counts
   return (sum (map fst results), sum (map snd results))
+
+-- | Process a single file for manifest only (no file copying)
+processFileManifestOnly :: ClodConfig -> FilePath -> FilePath -> FilePath -> IORef Bool -> IO FileResult
+processFileManifestOnly config manifestPath fullPath relPath firstEntryRef = do
+  -- Skip specifically excluded files
+  if relPath `elem` [".gitignore", "package-lock.json", "yarn.lock", ".clodignore"]
+    then return $ Skipped "excluded file"
+    else do
+      -- Check if file should be ignored according to .clodignore patterns
+      let ignorePatterns' = ignorePatterns config
+      
+      if not (null ignorePatterns') && matchesIgnorePattern ignorePatterns' relPath
+        then return $ Skipped "matched .clodignore pattern"
+        else do
+          -- Skip binary files
+          isText <- isTextFile fullPath
+          if not isText
+            then return $ Skipped "binary file"
+            else do
+              -- Create optimized filename
+              let dirPart = takeDirectory relPath
+                  fileName = takeFileName relPath
+                  
+                  -- Create the optimized name by replacing slashes with dashes
+                  optimizedName = if dirPart /= "."
+                                  then map (\c -> if c == '/' then '-' else c) dirPart ++ "-" ++ fileName
+                                  else fileName
+                  
+                  -- Handle SVG files specially - change to XML extension for Claude compatibility
+                  finalOptimizedName = if ".svg" `L.isSuffixOf` fileName
+                                      then take (length optimizedName - 4) optimizedName ++ "-svg.xml"
+                                      else optimizedName
+              
+              -- Add to path manifest - use firstEntryRef to track whether a comma is needed
+              isFirst <- readIORef firstEntryRef
+              unless isFirst $
+                appendFile manifestPath ",\n"
+              writeIORef firstEntryRef False
+              
+              -- Escape JSON special characters
+              let escapedOptimizedName = escapeJSON finalOptimizedName
+                  escapedRelPath = escapeJSON relPath
+                  manifestEntry = "  \"" ++ escapedOptimizedName ++ "\": \"" ++ escapedRelPath ++ "\""
+              
+              appendFile manifestPath manifestEntry
+              
+              return Success
 
 -- | Process a single file
 processFile :: ClodConfig -> FilePath -> FilePath -> FilePath -> IORef Bool -> IO FileResult
