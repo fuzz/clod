@@ -233,7 +233,32 @@ readClodIgnore projectPath = do
 -- | Check if a file matches any ignore pattern
 matchesIgnorePattern :: [String] -> FilePath -> Bool
 matchesIgnorePattern patterns filePath =
-  any (\pattern -> pattern `isInfixOf` filePath || filePath `isInfixOf` pattern) patterns
+  any matchPattern patterns
+  where
+    matchPattern pattern =
+      -- File extension pattern: *.ext
+      if "*." `isPrefixOf` pattern 
+      then 
+        let ext = drop 1 pattern  -- Drop the * and match the extension
+        in ext `isSuffixOf` filePath
+      
+      -- Directory/path pattern (contains slash)
+      else if '/' `elem` pattern 
+      then
+        -- Get normalized versions of paths for comparison
+        let normalizedPattern = if last pattern == '/' 
+                               then pattern
+                               else pattern ++ "/"
+            normalizedPath = filePath ++ "/"
+        -- A file matches a directory pattern if:
+        -- 1. The file is directly inside that directory
+        -- 2. The file is in a subdirectory of the specified directory
+        in normalizedPattern `isPrefixOf` normalizedPath
+      
+      -- Simple filename or pattern with no slashes
+      else 
+        -- For simple patterns, check if it matches the filename part
+        pattern == takeFileName filePath
 
 -- | Process all files tracked by git or untracked but not ignored
 processAllFiles :: ClodConfig -> FilePath -> IORef Int -> IORef Int -> IO ()
@@ -248,6 +273,7 @@ processAllFiles config manifestPath fileCountRef skippedCountRef = do
   firstEntryRef <- newIORef True
   let allFiles = nub (trackedFiles ++ untrackedFiles) -- nub removes duplicates
   
+  -- Process files one by one, checking ignore patterns at the file level
   forM_ allFiles $ \file -> do
     -- Get full path
     let fullPath = projectPath config </> file
@@ -291,6 +317,7 @@ processModifiedFiles config manifestPath fileCountRef skippedCountRef = do
   firstEntryRef <- newIORef True
   let allFiles = nub (modifiedFiles ++ diffFiles ++ untrackedFiles ++ stagedFiles ++ newFiles)
   
+  -- Process files one by one, checking ignore patterns at the file level
   forM_ allFiles $ \file -> do
     -- Get full path
     let fullPath = projectPath config </> file
@@ -320,8 +347,10 @@ processFile config manifestPath fullPath relPath firstEntryRef = do
   if relPath `elem` [".gitignore", "package-lock.json", "yarn.lock", ".clodignore"]
     then return $ Skipped "excluded file"
     else do
-      -- Skip files matching .clodignore patterns
-      if matchesIgnorePattern (ignorePatterns config) relPath
+      -- Check if file should be ignored according to .clodignore patterns
+      let ignorePatterns' = ignorePatterns config
+      
+      if not (null ignorePatterns') && matchesIgnorePattern ignorePatterns' relPath
         then return $ Skipped "matched .clodignore pattern"
         else do
           -- Skip binary files
