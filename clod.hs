@@ -7,7 +7,7 @@
 
 module Main where
 
-import Control.Monad (filterM, forM_, unless, when)
+import Control.Monad (filterM, forM, forM_, unless, when, void)
 import Data.Aeson ((.=), object, encode)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map as Map
@@ -22,19 +22,17 @@ import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
 import System.FilePath
 import System.IO (hFlush, stdout)
-import System.IO.Error (catchIOError)
+import System.IO.Error (catchIOError, IOError)
 import System.Process
-import Data.IORef
-import Data.Char (toLower)
 import qualified Data.List as L
+import Control.Exception (try)
+import Data.IORef
 
 -- | Type for file operation results
--- This is a simple sum type that allows us to track whether operations succeeded
 data FileResult = Success | Skipped String
   deriving (Show, Eq)
 
 -- | Configuration for the clod program
--- Haskell's record syntax gives us a clear way to group related data
 data ClodConfig = ClodConfig
   { projectPath :: FilePath      -- ^ Root path of the git repository
   , stagingDir :: FilePath       -- ^ Directory where files will be staged for Claude
@@ -141,41 +139,40 @@ main = do
         }
   
   -- Process files based on whether this is the first run
-  -- Create refs to track file counts
-  fileCountRef <- newIORef 0
-  skippedCountRef <- newIORef 0
-  
-  lastRunExists <- doesFileExist lastRunFile
-  if lastRunExists
-    then do
-      putStrLn "Finding files modified since last run..."
-      processModifiedFiles config manifestPath fileCountRef skippedCountRef
-    else do
-      putStrLn "First run - no previous timestamp found."
-      
-      -- In test mode, automatically choose option 'a'
-      importOption <- if isTestMode
-                      then do
-                        putStrLn "Test mode: automatically importing all files"
-                        return 'a'
-                      else do
-                        putStrLn "Options:"
-                        putStrLn "  a: Import all files (respecting .gitignore)"
-                        putStrLn "  m: Import only modified files (git status)"
-                        putStrLn "  n: Import nothing (just set timestamp)"
-                        putStr "Choose an option [a/m/n]: "
-                        hFlush stdout
-                        opt <- getLine
-                        return $ if null opt then 'n' else head opt
-      
-      case importOption of
-        'a' -> do
-          putStrLn "Importing all files (respecting .gitignore)..."
-          processAllFiles config manifestPath fileCountRef skippedCountRef
-        'm' -> do
-          putStrLn "Importing modified files from git status..."
-          processModifiedFiles config manifestPath fileCountRef skippedCountRef
-        _   -> putStrLn "Setting timestamp only."
+  (fileCount, skippedCount) <- do
+    lastRunExists <- doesFileExist lastRunFile
+    if lastRunExists
+      then do
+        putStrLn "Finding files modified since last run..."
+        processModifiedFiles config manifestPath
+      else do
+        putStrLn "First run - no previous timestamp found."
+        
+        -- In test mode, automatically choose option 'a'
+        importOption <- if isTestMode
+                        then do
+                          putStrLn "Test mode: automatically importing all files"
+                          return 'a'
+                        else do
+                          putStrLn "Options:"
+                          putStrLn "  a: Import all files (respecting .gitignore)"
+                          putStrLn "  m: Import only modified files (git status)"
+                          putStrLn "  n: Import nothing (just set timestamp)"
+                          putStr "Choose an option [a/m/n]: "
+                          hFlush stdout
+                          opt <- getLine
+                          return $ if null opt then 'n' else head opt
+        
+        case importOption of
+          'a' -> do
+            putStrLn "Importing all files (respecting .gitignore)..."
+            processAllFiles config manifestPath
+          'm' -> do
+            putStrLn "Importing modified files from git status..."
+            processModifiedFiles config manifestPath
+          _   -> do 
+            putStrLn "Setting timestamp only."
+            return (0, 0)
   
   -- Close the path manifest JSON
   appendFile manifestPath "\n}"
@@ -183,16 +180,12 @@ main = do
   -- Update the last run marker
   writeFile lastRunFile ""
   
-  -- Get final file counts
-  fileCount <- readIORef fileCountRef
-  skippedCount <- readIORef skippedCountRef
-  
+  -- Handle results
   if fileCount == 0
     then do
       putStrLn $ "No files processed (skipped: " ++ show skippedCount ++ ")."
-      -- Clean up the empty staging directory
-      removeFile manifestPath
-      removeDirectory currentStaging
+      -- Clean up the empty staging directory (just the manifest file)
+      safeRemoveFile manifestPath
       exitSuccess
     else do
       -- Open the staging directory (skip in test mode)
@@ -216,17 +209,20 @@ main = do
         putStrLn "   before starting a new conversation to ensure Claude uses the most recent files"
         putStrLn "6. Start a new conversation to see changes"
 
+-- | Safely remove a file, ignoring errors if it doesn't exist
+safeRemoveFile :: FilePath -> IO ()
+safeRemoveFile path = do
+  exists <- doesFileExist path
+  when exists $ removeFile path
+
 -- | Read and parse .clodignore file
 readClodIgnore :: FilePath -> IO [String]
 readClodIgnore projectPath = do
   let ignorePath = projectPath </> ".clodignore"
-  exists <- doesFileExist ignorePath
-  if exists
-    then do
-      content <- readFile ignorePath
-      let patterns = filter isValidPattern $ lines content
-      return patterns
-    else return []
+  doesFileExist ignorePath >>= \exists -> 
+    if exists
+      then filter isValidPattern . lines <$> readFile ignorePath
+      else return []
   where
     isValidPattern line = not (null line) && not ("#" `L.isPrefixOf` line)
 
@@ -235,112 +231,77 @@ matchesIgnorePattern :: [String] -> FilePath -> Bool
 matchesIgnorePattern patterns filePath =
   any matchPattern patterns
   where
-    matchPattern pattern =
+    matchPattern pattern
       -- File extension pattern: *.ext
-      if "*." `isPrefixOf` pattern 
-      then 
-        let ext = drop 1 pattern  -- Drop the * and match the extension
-        in ext `isSuffixOf` filePath
-      
+      | "*." `L.isPrefixOf` pattern = drop 1 pattern `L.isSuffixOf` filePath
       -- Directory/path pattern (contains slash)
-      else if '/' `elem` pattern 
-      then
-        -- Get normalized versions of paths for comparison
-        let normalizedPattern = if last pattern == '/' 
-                               then pattern
-                               else pattern ++ "/"
-            normalizedPath = filePath ++ "/"
-        -- A file matches a directory pattern if:
-        -- 1. The file is directly inside that directory
-        -- 2. The file is in a subdirectory of the specified directory
-        in normalizedPattern `isPrefixOf` normalizedPath
-      
+      | '/' `elem` pattern = 
+          let normalizedPattern = if last pattern == '/' then pattern else pattern ++ "/"
+              normalizedPath = filePath ++ "/"
+          in normalizedPattern `L.isPrefixOf` normalizedPath
       -- Simple filename or pattern with no slashes
-      else 
-        -- For simple patterns, check if it matches the filename part
-        pattern == takeFileName filePath
+      | otherwise = pattern == takeFileName filePath
 
 -- | Process all files tracked by git or untracked but not ignored
-processAllFiles :: ClodConfig -> FilePath -> IORef Int -> IORef Int -> IO ()
-processAllFiles config manifestPath fileCountRef skippedCountRef = do
-  -- Get all files tracked by git
+processAllFiles :: ClodConfig -> FilePath -> IO (Int, Int)
+processAllFiles config manifestPath = do
+  -- Get both tracked and untracked files
   trackedFiles <- lines <$> readProcess "git" ["ls-files"] ""
-  
-  -- Get all untracked but not ignored files
   untrackedFiles <- lines <$> readProcess "git" ["ls-files", "--others", "--exclude-standard"] ""
   
   -- Process all files
-  firstEntryRef <- newIORef True
-  let allFiles = nub (trackedFiles ++ untrackedFiles) -- nub removes duplicates
-  
-  -- Process files one by one, checking ignore patterns at the file level
-  forM_ allFiles $ \file -> do
-    -- Get full path
-    let fullPath = projectPath config </> file
-    
-    -- Skip if not a regular file
-    isFile <- doesFileExist fullPath
-    unless isFile $ return ()
-    
-    -- Skip any files in the staging directory
-    when (stagingDir config `isInfixOf` fullPath) $ do
-      putStrLn $ "Skipping: " ++ fullPath ++ " (in staging directory)"
-      return ()
-    
-    -- Try to process the file
-    result <- processFile config manifestPath fullPath file firstEntryRef
-    case result of
-      Success -> modifyIORef fileCountRef (+1)
-      Skipped reason -> do
-        putStrLn $ "Skipping: " ++ file ++ " (" ++ reason ++ ")"
-        modifyIORef skippedCountRef (+1)
+  let allFiles = L.nub (trackedFiles ++ untrackedFiles)
+  processFiles config manifestPath allFiles
 
 -- | Process only modified files
-processModifiedFiles :: ClodConfig -> FilePath -> IORef Int -> IORef Int -> IO ()
-processModifiedFiles config manifestPath fileCountRef skippedCountRef = do
-  -- Get modified files
-  modifiedFiles <- lines <$> readProcess "git" ["ls-files", "--modified"] ""
+processModifiedFiles :: ClodConfig -> FilePath -> IO (Int, Int)
+processModifiedFiles config manifestPath = do
+  -- Get all modified files (combined command)
+  modifiedOutput <- readProcess "git" ["ls-files", "--modified", "--others", "--exclude-standard"] ""
+  diffOutput <- readProcess "git" ["diff", "--name-only"] ""
+  stagedOutput <- readProcess "git" ["diff", "--staged", "--name-only"] ""
   
-  -- Get files that have differences
-  diffFiles <- lines <$> readProcess "git" ["diff", "--name-only"] ""
+  let modifiedFiles = lines modifiedOutput
+      diffFiles = lines diffOutput
+      stagedFiles = lines stagedOutput
+      allFiles = L.nub (modifiedFiles ++ diffFiles ++ stagedFiles)
   
-  -- Get untracked files
-  untrackedFiles <- lines <$> readProcess "git" ["ls-files", "--others", "--exclude-standard"] ""
+  processFiles config manifestPath allFiles
+
+-- | Process a list of files
+processFiles :: ClodConfig -> FilePath -> [FilePath] -> IO (Int, Int)
+processFiles config manifestPath files = do
+  -- Track if the current entry is the first in the manifest
+  ref <- newIORef True
   
-  -- Get staged files (new or modified)
-  stagedFiles <- lines <$> readProcess "git" ["diff", "--staged", "--name-only"] ""
-  
-  -- Get newly added files since last commit
-  newFiles <- lines <$> readProcess "git" ["ls-files", "--others", "--exclude-standard"] ""
-  
-  -- Process the files
-  firstEntryRef <- newIORef True
-  let allFiles = nub (modifiedFiles ++ diffFiles ++ untrackedFiles ++ stagedFiles ++ newFiles)
-  
-  -- Process files one by one, checking ignore patterns at the file level
-  forM_ allFiles $ \file -> do
+  -- Process files and count results
+  results <- forM files $ \file -> do
     -- Get full path
     let fullPath = projectPath config </> file
     
     -- Skip if not a regular file
     isFile <- doesFileExist fullPath
-    unless isFile $ return ()
-    
-    -- Skip any files in the staging directory
-    when (stagingDir config `isInfixOf` fullPath) $ do
-      putStrLn $ "Skipping: " ++ fullPath ++ " (in staging directory)"
-      return ()
-    
-    -- Try to process the file
-    result <- processFile config manifestPath fullPath file firstEntryRef
-    case result of
-      Success -> modifyIORef fileCountRef (+1)
-      Skipped reason -> do
-        putStrLn $ "Skipping: " ++ file ++ " (" ++ reason ++ ")"
-        modifyIORef skippedCountRef (+1)
+    if not isFile
+      then return (0, 0)
+      else do
+        -- Skip any files in the staging directory
+        if stagingDir config `L.isInfixOf` fullPath
+          then do
+            putStrLn $ "Skipping: " ++ fullPath ++ " (in staging directory)"
+            return (0, 0)
+          else do
+            -- Try to process the file
+            result <- processFile config manifestPath fullPath file ref
+            case result of
+              Success -> return (1, 0)
+              Skipped reason -> do
+                putStrLn $ "Skipping: " ++ file ++ " (" ++ reason ++ ")"
+                return (0, 1)
+  
+  -- Sum the file and skipped counts
+  return (sum (map fst results), sum (map snd results))
 
 -- | Process a single file
--- Here we use pattern matching and early returns to handle special cases
 processFile :: ClodConfig -> FilePath -> FilePath -> FilePath -> IORef Bool -> IO FileResult
 processFile config manifestPath fullPath relPath firstEntryRef = do
   -- Skip specifically excluded files
@@ -395,7 +356,7 @@ processFile config manifestPath fullPath relPath firstEntryRef = do
 isTextFile :: FilePath -> IO Bool
 isTextFile file = do
   -- Use 'file' command to check mime type
-  result <- try $ readProcess "file" ["--mime-type", "-b", file] ""
+  result <- try (readProcess "file" ["--mime-type", "-b", file] "") :: IO (Either IOError String)
   case result of
     Left _ -> checkByExtension file  -- If command fails, fall back to extension
     Right mimeType -> 
@@ -419,35 +380,3 @@ escapeJSON = concatMap escapeChar
     escapeChar '\\' = "\\\\"
     escapeChar '"'  = "\\\""
     escapeChar c    = [c]
-
--- | Check if a string is a substring of another
-isInfixOf :: String -> String -> Bool
-isInfixOf needle haystack = any (Main.isPrefixOf needle) (tails haystack)
-
--- | Check if a string is a prefix of another
-isPrefixOf :: String -> String -> Bool
-isPrefixOf [] _ = True
-isPrefixOf _ [] = False
-isPrefixOf (x:xs) (y:ys) = (x == y) && Main.isPrefixOf xs ys
-
--- | Check if a string is a suffix of another
-isSuffixOf :: String -> String -> Bool
-isSuffixOf x y = reverse x `Main.isPrefixOf` reverse y
-
--- | Get all tails of a list
-tails :: [a] -> [[a]]
-tails [] = [[]]
-tails xs@(_:xs') = xs : tails xs'
-
--- | Get unique elements from a list
-nub :: Eq a => [a] -> [a]
-nub [] = []
-nub (x:xs) = x : nub (filter (/= x) xs)
-
--- | Try executing an IO action, returning Left e on exception
-try :: IO a -> IO (Either IOError a)
-try action = (Right <$> action) `catch` (return . Left)
-
--- | Catch an exception
-catch :: IO a -> (IOError -> IO a) -> IO a
-catch = catchIOError
