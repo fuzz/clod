@@ -44,6 +44,9 @@ main = do
     createDirectoryIfMissing True (testDir </> "src" </> "utils")
     createDirectoryIfMissing True (testDir </> "test")
     createDirectoryIfMissing True (testDir </> "public")
+    createDirectoryIfMissing True (testDir </> "node_modules" </> "lodash")
+    createDirectoryIfMissing True (testDir </> "dist" </> "js")
+    createDirectoryIfMissing True (testDir </> "build" </> "temp")
     
     -- Create text files
     writeFile (testDir </> "README.md") "# Test Project"
@@ -55,8 +58,23 @@ main = do
     -- Create an SVG file for testing SVG handling
     writeFile (testDir </> "public" </> "logo.svg") "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"blue\" /></svg>"
     
+    -- Create files in node_modules (should be ignored)
+    writeFile (testDir </> "node_modules" </> "package.json") "{\"name\": \"test-package\"}"
+    writeFile (testDir </> "node_modules" </> "lodash" </> "index.js") "// Lodash module"
+    
+    -- Create nested node_modules (should be ignored)
+    createDirectoryIfMissing True (testDir </> "src" </> "node_modules" </> "some-local-package")
+    writeFile (testDir </> "src" </> "node_modules" </> "some-local-package" </> "index.js") "// Nested node_modules package"
+    
+    -- Create files in build/dist directories (should be ignored)
+    writeFile (testDir </> "dist" </> "js" </> "bundle.js") "// Bundled JavaScript"
+    writeFile (testDir </> "build" </> "temp" </> "cache.txt") "Temporary build cache"
+    
     -- Create a binary file
     callProcess "dd" ["if=/dev/urandom", "of=" ++ testDir </> "binary-file.bin", "bs=1024", "count=1", "status=none"]
+    
+    -- Create .gitignore file with standard format (leading slash for node_modules)
+    writeFile (testDir </> ".gitignore") "# Common ignored directories\n/node_modules\ndist/\nbuild/\n*.log\n.DS_Store\n"
     
     -- Add files to git
     callProcess "git" ["config", "--local", "user.email", "test@example.com"]
@@ -201,6 +219,26 @@ main = do
           else do
             putStrLn $ red ++ "✗ Manifest content is incorrect" ++ noColor
             putStrLn manifestContent
+            exitFailure
+            
+        -- Test .gitignore functionality
+        putStrLn $ "\n" ++ yellow ++ "Test: Testing .gitignore support..." ++ noColor
+        
+        -- Check that node_modules, dist, and build files were not included
+        let gitignoreFiles = [ claudeUploadDir </> "node_modules-package.json"
+                             , claudeUploadDir </> "node_modules-lodash-index.js"
+                             , claudeUploadDir </> "dist-js-bundle.js"
+                             , claudeUploadDir </> "build-temp-cache.txt"
+                             , claudeUploadDir </> "src-node_modules-some-local-package-index.js"
+                             ]
+                             
+        gitignoreFilesExist <- mapM doesFileExist gitignoreFiles
+        
+        if not (or gitignoreFilesExist)
+          then putStrLn $ green ++ "✓ Files matched by .gitignore patterns were correctly excluded" ++ noColor
+          else do
+            putStrLn $ red ++ "✗ Files matched by .gitignore patterns were not excluded" ++ noColor
+            callProcess "ls" ["-la", claudeUploadDir]
             exitFailure
         
         -- Test .clodignore functionality

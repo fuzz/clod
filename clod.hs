@@ -117,9 +117,17 @@ main = do
   createDirectoryIfMissing True currentStaging
   
   -- Read .clodignore file if it exists
-  ignorePatterns <- readClodIgnore projectPath
-  when (not (null ignorePatterns)) $ do
-    putStrLn $ "Found .clodignore with " ++ show (length ignorePatterns) ++ " patterns"
+  clodIgnorePatterns <- readClodIgnore projectPath
+  when (not (null clodIgnorePatterns)) $ do
+    putStrLn $ "Found .clodignore with " ++ show (length clodIgnorePatterns) ++ " patterns"
+    
+  -- Read .gitignore file if it exists
+  gitIgnorePatterns <- readGitIgnore projectPath
+  when (not (null gitIgnorePatterns)) $ do
+    putStrLn $ "Found .gitignore with " ++ show (length gitIgnorePatterns) ++ " patterns"
+    
+  -- Combine both sets of ignore patterns
+  let ignorePatterns = clodIgnorePatterns ++ gitIgnorePatterns
   
   putStrLn $ "Looking for modified files in " ++ projectPath ++ "..."
   
@@ -233,21 +241,126 @@ readClodIgnore projectPath = do
   where
     isValidPattern line = not (null line) && not ("#" `L.isPrefixOf` line)
 
+-- | Read and parse .gitignore file
+readGitIgnore :: FilePath -> IO [String]
+readGitIgnore projectPath = do
+  let gitIgnorePath = projectPath </> ".gitignore"
+  doesFileExist gitIgnorePath >>= \exists -> 
+    if exists
+      then do
+        lines' <- lines <$> readFile gitIgnorePath
+        -- Process each line to handle standard git patterns
+        let validPatterns = filter isValidPattern lines'
+        return validPatterns
+      else return []
+  where
+    isValidPattern line = not (null line) && not ("#" `L.isPrefixOf` line) && not ("!" `L.isPrefixOf` line)
+
 -- | Check if a file matches any ignore pattern
 matchesIgnorePattern :: [String] -> FilePath -> Bool
 matchesIgnorePattern patterns filePath =
-  any matchPattern patterns
+  any (matchPattern filePath) patterns
   where
-    matchPattern pattern
+    matchPattern :: FilePath -> String -> Bool
+    matchPattern path pattern
+      -- Skip empty patterns
+      | null pattern = False
+      
+      -- Normalize the pattern to remove trailing slashes for consistency
+      | "/" `L.isSuffixOf` pattern = matchPattern path (init pattern)
+      
+      -- Special handling for common directory patterns that need to match at any level
+      | pattern == "node_modules" || pattern == "/node_modules" =
+          -- Explicitly check for node_modules in path components
+          let pathComponents = splitDirectories path
+          in "node_modules" `elem` pathComponents
+          
+      -- Handle leading slash (anchored to root)
+      | "/" `L.isPrefixOf` pattern =
+          let patternWithoutSlash = drop 1 pattern
+          in matchFromRoot patternWithoutSlash path
+              
       -- File extension pattern: *.ext
-      | "*." `L.isPrefixOf` pattern = drop 1 pattern `L.isSuffixOf` filePath
-      -- Directory/path pattern (contains slash)
+      | "*." `L.isPrefixOf` pattern = 
+          let ext = drop 2 pattern  -- Skip "*."
+              fileExt = takeExtension path
+          in if null fileExt then False else tail fileExt == ext  -- Remove the dot from extension
+              
+      -- Directory pattern inside path (contains slash)
       | '/' `elem` pattern = 
-          let normalizedPattern = if last pattern == '/' then pattern else pattern ++ "/"
-              normalizedPath = filePath ++ "/"
-          in normalizedPattern `L.isPrefixOf` normalizedPath
-      -- Simple filename or pattern with no slashes
-      | otherwise = pattern == takeFileName filePath
+          let 
+            -- Split both pattern and path into components
+            patternComponents = splitDirectories pattern
+            pathComponents = splitDirectories path
+            
+            -- For multi-component patterns, check if they match a subsequence of path components
+            multiComponentMatch = any (L.isPrefixOf patternComponents) (tails pathComponents)
+            
+            -- Also check if pattern matches path directly
+            directMatch = pattern `L.isPrefixOf` path || ("/" ++ pattern) `L.isPrefixOf` ("/" ++ path)
+          in directMatch || multiComponentMatch
+              
+      -- Simple filename or pattern with no slashes - could be a directory name or a file
+      | otherwise = 
+          let
+            fileName = takeFileName path
+            -- Split path into components for directory matching
+            pathComponents = splitDirectories path
+            
+            -- Check for exact filename match
+            exactMatch = pattern == fileName
+            
+            -- Check for directory name match anywhere in path
+            dirMatch = pattern `elem` pathComponents
+            
+            -- For common directory patterns like 'dist', 'build' - match them anywhere in path
+            commonDirPatterns = ["dist", "build", "node_modules", "tmp", "temp"]
+            isCommonDirPattern = pattern `elem` commonDirPatterns
+          in exactMatch || dirMatch || (isCommonDirPattern && any (== pattern) pathComponents)
+    
+    -- Get all tails of a list
+    tails :: [a] -> [[a]]
+    tails [] = [[]]
+    tails xs@(_:xs') = xs : tails xs'
+    
+    -- Match a pattern that should start from the root
+    matchFromRoot :: String -> FilePath -> Bool
+    matchFromRoot pattern path =
+      let 
+        -- Split both pattern and path into components
+        patternComponents = splitDirectories pattern
+        pathComponents = splitDirectories path
+      in
+        -- Root patterns must match from the beginning of the path
+        L.isPrefixOf patternComponents pathComponents || 
+        -- Special case: if the root pattern is a directory name (like "/node_modules"),
+        -- it should match that directory anywhere in the path to be compatible with git behavior
+        (length patternComponents == 1 && head patternComponents `elem` pathComponents)
+
+-- | Simple glob pattern matching
+simpleGlobMatch :: String -> String -> Bool
+simpleGlobMatch [] [] = True
+simpleGlobMatch ('*':xs) [] = simpleGlobMatch xs []
+simpleGlobMatch _ [] = False
+simpleGlobMatch [] _ = False
+simpleGlobMatch ('*':'*':'/':ps) path =
+    -- **/ can match zero or more directories
+    let restPath = dropWhile (/= '/') path
+    in  simpleGlobMatch ('*':'*':'/':ps) (drop 1 restPath) || 
+        simpleGlobMatch ps path || 
+        simpleGlobMatch ps (drop 1 restPath)
+simpleGlobMatch ('*':'*':ps) (c:cs) =
+    -- ** can match zero or more characters 
+    simpleGlobMatch ps (c:cs) || simpleGlobMatch ('*':'*':ps) cs
+simpleGlobMatch ('*':ps) (c:cs) =
+    -- * can match zero or more characters except /
+    if c == '/' 
+       then simpleGlobMatch ('*':ps) cs
+       else simpleGlobMatch ps (c:cs) || simpleGlobMatch ('*':ps) cs
+simpleGlobMatch ('?':ps) (c:cs) = simpleGlobMatch ps cs  -- ? matches any single character
+simpleGlobMatch (p:ps) (c:cs)
+    | p == c    = simpleGlobMatch ps cs
+    | otherwise = False
 
 -- | Process all files in the directory
 processAllFiles :: ClodConfig -> FilePath -> IO (Int, Int)
