@@ -26,7 +26,7 @@ import Control.Monad.Except (throwError)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.List as L
 import Data.Time.Clock (UTCTime)
-import System.Directory
+import System.Directory (doesFileExist, getModificationTime, getCurrentDirectory, setCurrentDirectory, getDirectoryContents)
 import System.FilePath
 import System.IO (hFlush, stdout)
 import System.Process (readProcess)
@@ -70,14 +70,19 @@ checkUncommittedChanges config = do
 
 -- | Get newly added files from git that might not be caught by modification time check
 getGitNewFiles :: FilePath -> ClodM [FilePath]
-getGitNewFiles _ = do
+getGitNewFiles basePath = do
+  -- Change to the directory to ensure git commands work with the correct context
+  oldDir <- liftIO getCurrentDirectory
+  liftIO $ setCurrentDirectory basePath
   -- Use git status to find untracked files (might not have changed modification time)
   result <- liftIO $ try $ readProcess "git" ["ls-files", "--others", "--exclude-standard"] "" :: ClodM (Either SomeException String)
   case result of
     Left err -> do
       liftIO $ putStrLn $ "Warning: Failed to get git untracked files: " ++ show err
       return []  -- If git command fails, return empty list
-    Right output ->
+    Right output -> do
+      -- Restore the original directory and return the results
+      liftIO $ setCurrentDirectory oldDir
       -- Parse git output and return list of paths
       return $ filter (not . null) $ lines output
 
