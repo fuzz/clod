@@ -5,6 +5,8 @@
 
 Clod is a utility for preparing and uploading files to Claude AI's Project Knowledge feature. It tracks file changes, respects `.gitignore` and `.clodignore` patterns, and optimizes filenames for Claude's UI.
 
+See [HUMAN.md](HUMAN.md) for a complete workflow guide to using `clod` with Claude AI.
+
 ## Features
 
 - Track modified files since last run
