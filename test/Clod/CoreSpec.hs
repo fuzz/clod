@@ -13,14 +13,10 @@
 module Clod.CoreSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
-import Control.Monad (unless)
 import System.Directory
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
 import Data.Time.Clock (getCurrentTime)
-import Data.Time.Format (defaultTimeLocale, formatTime)
-import Control.Monad.IO.Class (liftIO)
 import Data.List (isPrefixOf)
 
 import Clod.Core
@@ -35,9 +31,9 @@ spec = do
         -- Initialize a git repository
         createDirectoryIfMissing True (tmpDir </> ".git")
         
-        -- Create timestamp
-        now <- getCurrentTime
-        let timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" now
+        -- Timestamp would be created in actual implementation
+        -- but we don't need it for the test
+        _ <- getCurrentTime
         
         -- Call initializeConfig via ClodM monad
         configEither <- runClodM $ initializeConfig tmpDir (tmpDir </> "staging") True
@@ -46,8 +42,8 @@ spec = do
           Right config -> do
             projectPath config `shouldBe` tmpDir
             stagingDir config `shouldBe` tmpDir </> "staging"
-            configDir config `shouldBe` tmpDir </> ".claude-uploader"
-            lastRunFile config `shouldBe` tmpDir </> ".claude-uploader" </> "last-run-marker"
+            configDir config `shouldBe` tmpDir </> ".clod"
+            lastRunFile config `shouldBe` tmpDir </> ".clod" </> "last-run-marker"
             testMode config `shouldBe` True
             
             -- Check if directories were created

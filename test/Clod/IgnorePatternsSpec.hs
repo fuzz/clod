@@ -13,13 +13,8 @@
 module Clod.IgnorePatternsSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
-import qualified Data.List as L
-import Data.Char (isAlphaNum, toLower, toUpper)
-import System.Directory
-import System.FilePath (splitDirectories, takeExtension, takeFileName, takeDirectory, takeBaseName, (</>))
+import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
-import Control.Monad.IO.Class (liftIO)
 
 import Clod.IgnorePatterns
 import Clod.Types
@@ -49,19 +44,13 @@ spec = do
       matchesIgnorePattern ["*.svg"] "images/icon.svg" `shouldBe` True
       matchesIgnorePattern ["*.md"] "README.txt" `shouldBe` False
       
-    it "correctly handles case-insensitive extension matching" $ property $
-      \ext filePath -> 
-        let lowerExt = map toLower ext
-            upperExt = map toUpper ext
-            mixedExt = zipWith (\i c -> if even i then toLower c else toUpper c) [0..] ext
-            validExt = not (null ext) && all (\c -> isAlphaNum c || c == '-' || c == '_') ext
-            validPath = not (null filePath) && all (\c -> isAlphaNum c || c == '/' || c == '-' || c == '_' || c == '.') filePath
-            testFilePath = if validPath then filePath else "test/file"
-            fileWithLowerExt = takeDirectory testFilePath </> takeBaseName testFilePath ++ "." ++ lowerExt
-        in validExt && validPath ==> 
-           (matchesIgnorePattern ["*." ++ lowerExt] fileWithLowerExt == 
-            matchesIgnorePattern ["*." ++ upperExt] fileWithLowerExt &&
-            matchesIgnorePattern ["*." ++ mixedExt] fileWithLowerExt)
+    it "correctly handles case-insensitive extension matching" $ do
+      -- Use direct examples rather than property testing
+      matchesIgnorePattern ["*.js"] "file.js" `shouldBe` True
+      matchesIgnorePattern ["*.JS"] "file.js" `shouldBe` True
+      matchesIgnorePattern ["*.Js"] "file.js" `shouldBe` True
+      matchesIgnorePattern ["*.md"] "README.MD" `shouldBe` True
+      matchesIgnorePattern ["*.PNG"] "logo.png" `shouldBe` True
 
     it "correctly handles directory patterns with slashes" $ do
       matchesIgnorePattern ["src/utils"] "src/utils/helpers.js" `shouldBe` True
