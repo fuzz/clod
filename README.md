@@ -25,7 +25,7 @@ cabal install clod
 ### From Source
 
 ```bash
-git clone https://github.com/yourusername/clod.git
+git clone https://github.com/fuzz/clod.git
 cd clod
 cabal install
 ```
