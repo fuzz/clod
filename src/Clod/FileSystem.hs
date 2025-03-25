@@ -128,7 +128,7 @@ processFiles config manifestPath files includeInManifestOnly = do
             case result of
               Success -> return (1, 0)
               Skipped reason -> do
-                liftIO $ putStrLn $ "Skipping: " ++ file ++ " (" ++ reason ++ ")"
+                -- Skip the verbose output unless we add a verbose flag later
                 return (0, 1)
   
   -- Sum the file and skipped counts

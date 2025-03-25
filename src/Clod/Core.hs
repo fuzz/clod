@@ -45,6 +45,45 @@ import Clod.FileSystem
 import Clod.Git
 import Clod.IgnorePatterns
 
+-- | Default content for .clodignore file
+defaultClodIgnoreContent :: String
+defaultClodIgnoreContent = unlines
+  [ "# Default .clodignore file for Claude uploader"
+  , "# Add patterns to ignore files when uploading to Claude"
+  , ""
+  , "# Binary and media files"
+  , "*.dll"
+  , "*.dylib"
+  , "*.exe"
+  , "*.gif"
+  , "*.ico"
+  , "*.jar"
+  , "*.jpg"
+  , "*.jpeg"
+  , "*.mp3"
+  , "*.mp4"
+  , "*.png"
+  , "*.so"
+  , "*.svg"
+  , "*.tar.gz"
+  , "*.zip"
+  , ""
+  , "# Build directories"
+  , ".git"
+  , "build"
+  , "dist"
+  , "node_modules"
+  , "out"
+  , "target"
+  , ""
+  , "# Large files and lock files"
+  , "*.log"
+  , "Cargo.lock"
+  , "package-lock.json"
+  , "pnpm-lock.yaml"
+  , "yarn.lock"
+  ]
+
 -- | Main entry point for the Clod application
 runClod :: FilePath -> Bool -> Bool -> Bool -> ClodM ()
 runClod stagingDirArg allFiles modifiedFiles testModeArg = do
@@ -71,7 +110,14 @@ runClod stagingDirArg allFiles modifiedFiles testModeArg = do
   -- Initialize configuration
   config <- initializeConfig rootPath stagingDirArg testModeArg
   
-  -- Read .clodignore file if it exists
+  -- Check if .clodignore exists, and create it with default patterns if not
+  let clodIgnorePath = rootPath </> ".clodignore"
+  clodIgnoreExists <- liftIO $ doesFileExist clodIgnorePath
+  unless clodIgnoreExists $ do
+    liftIO $ putStrLn "Creating default .clodignore file..."
+    liftIO $ writeFile clodIgnorePath defaultClodIgnoreContent
+    
+  -- Read .clodignore file
   clodIgnorePatterns <- readClodIgnore rootPath
   unless (null clodIgnorePatterns) $
     liftIO $ putStrLn $ "Found .clodignore with " ++ show (length clodIgnorePatterns) ++ " patterns"

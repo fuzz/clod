@@ -22,6 +22,7 @@ module Clod.IgnorePatterns
 
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.List as L
+import Data.Char (toLower)
 import System.Directory (doesFileExist)
 import System.FilePath (splitDirectories, takeExtension, takeFileName, takeDirectory, (</>))
 
@@ -93,7 +94,9 @@ matchesIgnorePattern patterns filePath =
                          then let dirParts = splitDirectories dirPattern
                               in L.isPrefixOf dirParts pathComponents
                          else True
-          in dirCheck && extWithoutDot == ext  -- Check extension equality
+              -- File extension check should be case-insensitive and exact match
+              extensionCheck = map toLower extWithoutDot == map toLower ext
+          in dirCheck && extensionCheck  -- Check extension equality
               
       -- Directory pattern inside path (contains slash)
       | '/' `elem` pattern = 
@@ -194,7 +197,7 @@ simpleGlobMatch ('*':'.':ext) path
         let fileExt = takeExtension path
         in if null fileExt
             then False
-            else drop 1 fileExt == ext
+            else map toLower (drop 1 fileExt) == map toLower ext
 simpleGlobMatch ('*':'*':'/':ps) path =
     -- **/ can match zero or more directories
     let restPath = dropWhile (/= '/') path
