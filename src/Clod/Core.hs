@@ -11,6 +11,29 @@
 --
 -- This module provides the core functionality for the Clod application,
 -- including the main entry point and configuration handling.
+--
+-- Clod (Claude Loader) is a utility for preparing and uploading files to
+-- Claude AI's Project Knowledge feature. It tracks file changes, respects
+-- .gitignore and .clodignore patterns, and optimizes filenames for Claude's UI.
+--
+-- === Main Features
+--
+-- * Track modified files since last run
+-- * Respect .gitignore and .clodignore patterns
+-- * Handle binary vs. text files
+-- * Optimize filenames for Claude's UI
+-- * Generate a path manifest for mapping optimized names back to original paths
+--
+-- === Workflow
+--
+-- 1. Initialize configuration (staging directory, etc.)
+-- 2. Check for .clodignore or create a default one if not found
+-- 3. Read ignore patterns from .gitignore and .clodignore
+-- 4. Process files (all files or just modified ones)
+-- 5. Generate a path manifest
+-- 6. Provide next steps for using the files with Claude
+--
+-- This module coordinates all these steps through the 'runClod' function.
 
 module Clod.Core
   ( -- * Main application entry point
@@ -69,6 +92,7 @@ defaultClodIgnoreContent = unlines
   , "*.zip"
   , ""
   , "# Build directories"
+  , ".clod"
   , ".git"
   , "build"
   , "dist"
@@ -85,10 +109,36 @@ defaultClodIgnoreContent = unlines
   ]
 
 -- | Main entry point for the Clod application
-runClod :: FilePath -> Bool -> Bool -> Bool -> ClodM ()
+--
+-- This function is the primary entry point for the Clod application.
+-- It coordinates the entire process of preparing files for Claude AI:
+-- 
+-- 1. Verifies requirements (git installed, macOS or compatible platform)
+-- 2. Finds the git repository root
+-- 3. Initializes configuration (creating directories as needed)
+-- 4. Sets up or reads .clodignore and .gitignore patterns
+-- 5. Processes files based on command options
+-- 6. Generates the path manifest
+-- 7. Shows next steps for integrating with Claude
+--
+-- @
+-- -- Process only modified files with default staging directory
+-- runClodM $ runClod "" False True False
+--
+-- -- Process all files with custom staging directory
+-- runClodM $ runClod "/path/to/staging" True False False
+--
+-- -- Run in test mode
+-- runClodM $ runClod "" False False True
+-- @
+runClod :: FilePath  -- ^ Custom staging directory (empty for default)
+        -> Bool      -- ^ Whether to process all files
+        -> Bool      -- ^ Whether to process only modified files
+        -> Bool      -- ^ Whether to run in test mode
+        -> ClodM ()
 runClod stagingDirArg allFiles modifiedFiles testModeArg = do
   -- Print version information
-  liftIO $ putStrLn "clod version 1.1.0 (Haskell)"
+  liftIO $ putStrLn "clod version 1.0.0 (Haskell)"
   
   -- Check platform
   platform <- liftIO $ readProcess "uname" ["-s"] ""
@@ -208,8 +258,8 @@ initializeConfig rootPath stagingDirArg testModeArg = do
           response <- promptUser "Staging directory" defaultStagingDir
           return response
   
-  -- Config files - store in the git repo under .claude-uploader
-  let configDir = rootPath </> ".claude-uploader"
+  -- Config files - store in the git repo under .clod
+  let configDir = rootPath </> ".clod"
       lastRunFile = configDir </> "last-run-marker"
   
   -- Create config directory if it doesn't exist

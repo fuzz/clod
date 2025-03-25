@@ -10,6 +10,24 @@
 --
 -- This module provides functionality for interacting with Git repositories,
 -- including finding modified files and checking Git status.
+--
+-- The module integrates with the Git CLI to:
+--
+-- * Locate the repository root directory
+-- * Check for uncommitted changes
+-- * Find files that have been modified since a previous run
+-- * Discover untracked files
+-- * Process modified or all files for Claude integration
+--
+-- === File Change Detection
+--
+-- The module uses two complementary methods to detect file changes:
+--
+-- 1. File modification times - Detects files modified since last run
+-- 2. Git status - Identifies untracked and modified files that git is aware of
+--
+-- This approach ensures that both tracked and untracked files are properly
+-- processed.
 
 module Clod.Git
   ( -- * Git repository operations
@@ -35,6 +53,16 @@ import Clod.Types
 import Clod.FileSystem (findAllFiles, isModifiedSince, processFiles)
 
 -- | Get the root directory of the Git repository
+--
+-- This function uses `git rev-parse --show-toplevel` to find the root
+-- directory of the current Git repository. It throws a 'GitError' if
+-- the command fails or if the current directory is not in a Git repository.
+--
+-- @
+-- -- Get the repository root
+-- repoRoot <- getRepositoryRoot
+-- liftIO $ setCurrentDirectory repoRoot  -- Change to repository root
+-- @
 getRepositoryRoot :: ClodM FilePath
 getRepositoryRoot = do
   result <- liftIO $ try $ readProcess "git" ["rev-parse", "--show-toplevel"] "" :: ClodM (Either SomeException String)
@@ -68,8 +96,21 @@ checkUncommittedChanges config = do
             return ()
       return hasChanges
 
--- | Get newly added files from git that might not be caught by modification time check
-getGitNewFiles :: FilePath -> ClodM [FilePath]
+-- | Get newly added (untracked) files from Git
+--
+-- This function uses `git ls-files --others --exclude-standard` to find
+-- all untracked files in the Git repository. These are files that Git
+-- is not tracking but are not ignored according to .gitignore rules.
+--
+-- This is important for finding new files that wouldn't be detected
+-- by modification time checks alone.
+--
+-- @
+-- -- Get untracked files
+-- newFiles <- getGitNewFiles repoRoot
+-- @
+getGitNewFiles :: FilePath  -- ^ The path to the Git repository root
+               -> ClodM [FilePath]  -- ^ List of untracked files
 getGitNewFiles basePath = do
   -- Change to the directory to ensure git commands work with the correct context
   oldDir <- liftIO getCurrentDirectory
@@ -87,8 +128,23 @@ getGitNewFiles basePath = do
       return $ filter (not . null) $ lines output
 
 -- | Process only modified files since last run
--- Gets the list of files that have been modified since the last run of clod
-processModifiedFiles :: ClodConfig -> FilePath -> ClodM (Int, Int)
+--
+-- This function identifies and processes files that have been modified
+-- since the last run of Clod. It combines two detection methods:
+--
+-- 1. Check file modification times against the last run timestamp
+-- 2. Get untracked files from Git that wouldn't be caught by timestamp checking
+--
+-- This comprehensive approach ensures that all relevant changes are detected.
+-- If no last run marker exists, it falls back to processing all files.
+--
+-- @
+-- -- Process only modified files
+-- (processedCount, skippedCount) <- processModifiedFiles config manifestPath
+-- @
+processModifiedFiles :: ClodConfig  -- ^ Configuration for the Clod program
+                     -> FilePath    -- ^ Path to the manifest file
+                     -> ClodM (Int, Int)  -- ^ (Processed count, Skipped count)
 processModifiedFiles config manifestPath = do
   -- Check if the lastRunFile exists
   lastRunExists <- liftIO $ doesFileExist (lastRunFile config)
@@ -104,7 +160,7 @@ processModifiedFiles config manifestPath = do
       
       -- Get all files from the repository
       allFiles <- liftIO $ getDirectoryContents (projectPath config)
-      let files = filter (\f -> not (f `elem` [".", "..", ".git", ".claude-uploader"])) allFiles
+      let files = filter (\f -> not (f `elem` [".", "..", ".git", ".clod"])) allFiles
       
       -- Get all files recursively from all subdirectories
       allFilesRecursive <- findAllFiles (projectPath config) files
@@ -128,7 +184,7 @@ processAllFiles :: ClodConfig -> FilePath -> ClodM (Int, Int)
 processAllFiles config manifestPath = do
   -- Get all files directly from file system
   allFiles <- liftIO $ getDirectoryContents (projectPath config)
-  let files = filter (\f -> not (f `elem` [".", "..", ".git", ".claude-uploader"])) allFiles
+  let files = filter (\f -> not (f `elem` [".", "..", ".git", ".clod"])) allFiles
   
   -- Get all files recursively from all subdirectories
   allFilesRecursive <- findAllFiles (projectPath config) files

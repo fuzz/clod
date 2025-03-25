@@ -9,7 +9,35 @@
 -- Stability   : experimental
 --
 -- This module provides functionality for parsing and matching .gitignore and
--- .clodignore patterns to determine which files should be excluded.
+-- .clodignore patterns to determine which files should be excluded from processing.
+--
+-- The module supports common gitignore patterns including:
+--
+-- * Simple file patterns: @README.md@, @LICENSE@
+-- * Directory patterns: @node_modules/@, @dist/@
+-- * Extension patterns: @*.js@, @*.svg@
+-- * Path patterns: @src/components/@
+-- * Patterns with wildcards: @**\/node_modules@, @src\/**\/*.js@
+--
+-- === Pattern Matching Rules
+--
+-- 1. File extension patterns (@*.ext@) match any file with that extension
+-- 2. Directory patterns match at any level in the directory tree
+-- 3. Patterns with leading slash (@\/dist@) are anchored to the repository root
+-- 4. Patterns with trailing slash are treated as directories
+-- 5. Patterns with wildcards use simplified glob matching
+--
+-- === Usage
+--
+-- @
+-- -- Read patterns from a .clodignore file
+-- patterns <- readClodIgnore "/path/to/repo"
+--
+-- -- Check if a file matches any pattern
+-- if matchesIgnorePattern patterns "src/components/Button.jsx"
+--   then -- Skip the file
+--   else -- Process the file
+-- @
 
 module Clod.IgnorePatterns
   ( -- * Pattern reading functions
@@ -29,6 +57,14 @@ import System.FilePath (splitDirectories, takeExtension, takeFileName, takeDirec
 import Clod.Types (ClodM, IgnorePattern)
 
 -- | Read and parse .clodignore file
+-- 
+-- This function reads patterns from a .clodignore file in the specified directory.
+-- If the file doesn't exist, an empty list is returned.
+-- Comments (lines starting with '#') and empty lines are ignored.
+--
+-- @
+-- patterns <- readClodIgnore "/path/to/repo"
+-- @
 readClodIgnore :: FilePath -> ClodM [IgnorePattern]
 readClodIgnore projectPath = do
   let ignorePath = projectPath </> ".clodignore"
@@ -42,6 +78,15 @@ readClodIgnore projectPath = do
     isValidPattern line = not (null line) && not ("#" `L.isPrefixOf` line)
 
 -- | Read and parse .gitignore file
+--
+-- This function reads patterns from a .gitignore file in the specified directory.
+-- If the file doesn't exist, an empty list is returned.
+-- Comments (lines starting with '#'), negation patterns (lines starting with '!'), 
+-- and empty lines are ignored.
+--
+-- @
+-- patterns <- readGitIgnore "/path/to/repo"
+-- @
 readGitIgnore :: FilePath -> ClodM [IgnorePattern]
 readGitIgnore projectPath = do
   let gitIgnorePath = projectPath </> ".gitignore"
@@ -58,6 +103,23 @@ readGitIgnore projectPath = do
     isValidPattern line = not (null line) && not ("#" `L.isPrefixOf` line) && not ("!" `L.isPrefixOf` line)
 
 -- | Check if a file matches any ignore pattern
+--
+-- This function checks if a given file path matches any of the provided ignore patterns.
+-- It supports various pattern types including file patterns, directory patterns,
+-- extension patterns, and wildcards.
+--
+-- === Examples
+--
+-- @
+-- -- Check if a file should be ignored
+-- matchesIgnorePattern ["*.js", "node_modules"] "src/app.js"  -- Returns True (matches *.js)
+-- matchesIgnorePattern ["*.js", "node_modules"] "src/app.py"  -- Returns False (no match)
+-- matchesIgnorePattern ["src/*.svg"] "src/logo.svg"  -- Returns True
+-- matchesIgnorePattern ["node_modules"] "src/node_modules/file.js"  -- Returns True
+-- @
+--
+-- The function handles special cases for common patterns like node_modules, build directories,
+-- and extension patterns.
 matchesIgnorePattern :: [IgnorePattern] -> FilePath -> Bool
 matchesIgnorePattern patterns filePath =
   any (matchPattern filePath) patterns
@@ -185,7 +247,27 @@ matchesIgnorePattern patterns filePath =
               not (pattern == "src" && "other" `elem` pathComponents && 
                    L.elemIndex "other" pathComponents < L.elemIndex "src" pathComponents))
 
--- | Simple glob pattern matching
+-- | Simple glob pattern matching for wildcard patterns
+--
+-- This function implements a simplified glob pattern matching algorithm 
+-- that handles the most common wildcard patterns:
+--
+-- * @*@ - matches any sequence of characters except /
+-- * @**@ - matches any sequence of characters including /
+-- * @?@ - matches any single character
+-- * @*.ext@ - matches files with the specified extension
+-- * @**/pattern@ - matches pattern at any directory level
+--
+-- The implementation is designed to be compatible with common .gitignore patterns.
+--
+-- === Examples
+--
+-- @
+-- simpleGlobMatch "*.js" "app.js"  -- Returns True
+-- simpleGlobMatch "src/*.js" "src/app.js"  -- Returns True
+-- simpleGlobMatch "src/**/*.js" "src/components/Button.js"  -- Returns True
+-- simpleGlobMatch "*.txt" "file.md"  -- Returns False
+-- @
 simpleGlobMatch :: String -> String -> Bool
 simpleGlobMatch [] [] = True
 simpleGlobMatch ('*':xs) [] = simpleGlobMatch xs []

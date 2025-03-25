@@ -1,10 +1,23 @@
 name: clod
-version: 0.1.0.0
+version: 1.0.0
 synopsis: Project file manager for Claude AI integrations
 description: 
-  clod helps manage file transfers between local projects and Claude AI's 
-  project knowledge system. It respects .gitignore patterns, tracks modified files,
-  and optimizes filenames for Claude's UI.
+  Clod (Claude Loader) is a utility for preparing and uploading files to Claude AI's 
+  Project Knowledge feature. It tracks file changes, respects .gitignore and .clodignore 
+  patterns, and optimizes filenames for Claude's UI.
+  .
+  Key features:
+  .
+  * Track modified files since last run
+  * Respect .gitignore and .clodignore patterns
+  * Handle binary vs. text files automatically
+  * Create optimized filenames for Claude's UI
+  * Generate a path manifest for mapping optimized names back to original paths
+  * Color-coded, user-friendly terminal interface
+  .
+  Clod is particularly useful for developers working with large codebases who need
+  to selectively upload files to Claude AI for code assistance, documentation
+  generation, or other AI-assisted tasks.
 license: MIT
 license-file: LICENSE
 author: fuzz
@@ -12,7 +25,14 @@ maintainer: fuzz@github.com
 category: AI, Development
 build-type: Simple
 cabal-version: >=1.10
-extra-source-files: README.md, guardrails.md, project-instructions.md
+extra-source-files: 
+  README.md,
+  CHANGELOG.md,
+  CONTRIBUTING.md, 
+  RELEASING.md,
+  guardrails.md,
+  project-instructions.md,
+  LICENSE
 
 library
   hs-source-dirs: src

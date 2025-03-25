@@ -9,6 +9,17 @@
 -- Stability   : experimental
 --
 -- This module provides functions for user interaction and output formatting.
+-- It handles terminal output with consistent styling, user prompts, and
+-- guidance for next steps after file processing.
+--
+-- The module uses ANSI color codes to provide a clear, color-coded interface:
+--
+-- * Green for success messages
+-- * Red for error messages
+-- * Yellow for warnings and headers
+--
+-- It also provides interactive prompts for users to make decisions
+-- and displays next steps for using the processed files with Claude AI.
 
 module Clod.Output
   ( -- * Terminal output
@@ -55,7 +66,17 @@ printWarning :: String -> ClodM ()
 printWarning msg = liftIO $ putStrLn $ yellow ++ "! " ++ msg ++ noColor
 
 -- | Prompt the user for input with a default value
-promptUser :: String -> String -> ClodM String
+--
+-- This function displays a prompt with a default value in brackets.
+-- If the user presses Enter without typing anything, the default value is used.
+--
+-- @
+-- -- Prompt for staging directory with default
+-- stagingDir <- promptUser "Staging directory" "/home/user/Claude"
+-- @
+promptUser :: String  -- ^ The prompt to display
+           -> String  -- ^ Default value to use if user input is empty
+           -> ClodM String  -- ^ The user's input or default value
 promptUser prompt defaultValue = do
   liftIO $ putStr $ prompt ++ " [" ++ defaultValue ++ "]: "
   liftIO $ hFlush stdout
@@ -73,8 +94,27 @@ promptYesNo prompt defaultYes = do
     "" -> defaultYes
     r  -> (r `elem` ["y", "Y", "yes", "Yes", "YES"])
 
--- | Show next steps for the user
-showNextSteps :: ClodConfig -> FilePath -> ClodM ()
+-- | Show next steps for using the processed files with Claude AI
+--
+-- This function displays guidance on how to use the processed files
+-- with Claude AI's Project Knowledge feature. It's shown after successful
+-- file processing, unless in test mode.
+--
+-- The instructions cover:
+--
+-- * Navigating to Project Knowledge in Claude
+-- * Uploading files from the staging folder
+-- * Using the path manifest to understand file origins
+-- * Adding project instructions
+-- * Managing file versions
+--
+-- @
+-- -- Show next steps after processing files
+-- showNextSteps config stagingDir
+-- @
+showNextSteps :: ClodConfig  -- ^ Program configuration
+              -> FilePath    -- ^ Path to the staging directory
+              -> ClodM ()
 showNextSteps config _ = unless (testMode config) $ do
   liftIO $ putStrLn ""
   liftIO $ putStrLn "Next steps:"

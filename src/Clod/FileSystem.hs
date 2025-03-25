@@ -10,6 +10,33 @@
 --
 -- This module provides functionality for working with files and directories,
 -- including finding, reading, copying, and checking files.
+--
+-- The module handles various file system tasks:
+--
+-- * Recursively finding files in a directory structure
+-- * Detecting modified files since a given timestamp
+-- * Identifying text vs. binary files
+-- * Processing files according to ignore patterns
+-- * Creating an optimized file structure for Claude AI integration
+--
+-- === File Processing Pipeline
+--
+-- 1. Files are discovered recursively in the repository
+-- 2. Each file is checked against .gitignore and .clodignore patterns
+-- 3. Binary files are excluded
+-- 4. Remaining files are copied to a staging directory with optimized names
+-- 5. A path manifest is created to map optimized names back to original paths
+--
+-- === Optimized Naming
+--
+-- Files are renamed for Claude's UI by:
+--
+-- * Replacing directory separators with dashes
+-- * Flattening the directory structure
+-- * Special handling for certain file types (e.g., .svg files become .xml)
+--
+-- This ensures that all files can be easily distinguished in Claude's UI
+-- while maintaining a mapping back to their original locations.
 
 module Clod.FileSystem
   ( -- * File finding and filtering
@@ -45,6 +72,18 @@ import Clod.Types
 import Clod.IgnorePatterns (matchesIgnorePattern)
 
 -- | Recursively find all files in a directory
+--
+-- This function takes a base path and a list of files/directories,
+-- and recursively finds all files within those directories.
+-- It returns paths relative to the base path.
+--
+-- @
+-- -- Find all files in the "src" directory
+-- files <- findAllFiles "/path/to/repo" ["src"]
+--
+-- -- Find all files in multiple directories
+-- files <- findAllFiles "/path/to/repo" ["src", "docs", "tests"]
+-- @
 findAllFiles :: FilePath -> [FilePath] -> ClodM [FilePath]
 findAllFiles basePath files = do
   -- Process each entry
@@ -99,8 +138,29 @@ checkByExtension file = do
                      ".rb", ".php", ".hs", ".cabal", ".h", ".c", ".cpp", ".java"]
   return $ ext `elem` textExtensions
 
--- | Process a list of files
-processFiles :: ClodConfig -> FilePath -> [FilePath] -> Bool -> ClodM (Int, Int)
+-- | Process a list of files for Claude integration
+--
+-- This is the core function that processes files for Claude integration.
+-- It filters files based on ignore patterns, skips binary files, and
+-- either copies the files to the staging directory or just adds them to the manifest.
+--
+-- The function returns a tuple with:
+-- 
+-- * The number of files successfully processed
+-- * The number of files skipped
+--
+-- @
+-- -- Process all files in a list
+-- (processed, skipped) <- processFiles config manifestPath allFiles False
+--
+-- -- Process files but only include in manifest (no copying)
+-- (processed, skipped) <- processFiles config manifestPath allFiles True
+-- @
+processFiles :: ClodConfig    -- ^ Configuration for the Clod program
+             -> FilePath      -- ^ Path to the manifest file
+             -> [FilePath]    -- ^ List of files to process
+             -> Bool          -- ^ Whether to only include in manifest (no file copying)
+             -> ClodM (Int, Int)  -- ^ (Processed count, Skipped count)
 processFiles config manifestPath files includeInManifestOnly = do
   -- Track if the current entry is the first in the manifest
   ref <- liftIO $ newIORef True
