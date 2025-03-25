@@ -284,7 +284,9 @@ matchesIgnorePattern patterns filePath =
       | "*." `L.isPrefixOf` pattern = 
           let ext = drop 2 pattern  -- Skip "*."
               fileExt = takeExtension path
-          in if null fileExt then False else tail fileExt == ext  -- Remove the dot from extension
+              -- Get extension without the dot, safely
+              extWithoutDot = if null fileExt then "" else drop 1 fileExt
+          in extWithoutDot == ext  -- Check extension equality
               
       -- Directory pattern inside path (contains slash)
       | '/' `elem` pattern = 
@@ -343,6 +345,13 @@ simpleGlobMatch [] [] = True
 simpleGlobMatch ('*':xs) [] = simpleGlobMatch xs []
 simpleGlobMatch _ [] = False
 simpleGlobMatch [] _ = False
+simpleGlobMatch ('*':'.':ext) path
+    -- Special case for file extensions
+    | not (null ext) =
+        let fileExt = takeExtension path
+        in if null fileExt
+            then False
+            else drop 1 fileExt == ext
 simpleGlobMatch ('*':'*':'/':ps) path =
     -- **/ can match zero or more directories
     let restPath = dropWhile (/= '/') path
@@ -376,20 +385,64 @@ processAllFiles config manifestPath = do
   let includeInManifestOnly = False -- Changed from True to False to make sure files get copied
   processFiles config manifestPath allFilesRecursive includeInManifestOnly
 
--- | Process only modified files since last run (simplified to just process everything)
--- This ensures that every file is in the manifest and that new/untracked files will be included
+-- | Process only modified files since last run
+-- Gets the list of files that have been modified since the last run of clod
 processModifiedFiles :: ClodConfig -> FilePath -> IO (Int, Int)
 processModifiedFiles config manifestPath = do
-  -- Just use the same implementation as processAllFiles
-  -- Get all files directly from file system
-  allFiles <- getDirectoryContents (projectPath config)
-  let files = filter (\f -> not (f `elem` [".", "..", ".git", ".claude-uploader"])) allFiles
+  -- Check if the lastRunFile exists
+  lastRunExists <- doesFileExist (lastRunFile config)
   
-  -- Get all files recursively from all subdirectories
-  allFilesRecursive <- findAllFiles (projectPath config) files
-  
-  -- Process all files (no manifest-only mode)
-  processFiles config manifestPath allFilesRecursive False
+  if not lastRunExists
+    then do
+      putStrLn "No last run marker found - considering all files as modified"
+      processAllFiles config manifestPath
+    else do
+      -- Get last run file's modification time
+      lastRunTime <- getModificationTime (lastRunFile config)
+      putStrLn $ "Last run time: " ++ show lastRunTime
+      
+      -- Get all files from the repository
+      allFiles <- getDirectoryContents (projectPath config)
+      let files = filter (\f -> not (f `elem` [".", "..", ".git", ".claude-uploader"])) allFiles
+      
+      -- Get all files recursively from all subdirectories
+      allFilesRecursive <- findAllFiles (projectPath config) files
+      
+      -- Filter to just the files modified since the last run
+      modifiedFiles <- filterM (isModifiedSince (projectPath config) lastRunTime) allFilesRecursive
+      
+      -- Also use git status to find newly added files
+      gitNewFiles <- getGitNewFiles (projectPath config)
+      
+      -- Combine modified and new files (removing duplicates)
+      let allChangedFiles = L.nub $ modifiedFiles ++ gitNewFiles
+      
+      putStrLn $ "Found " ++ show (length allChangedFiles) ++ " modified files"
+      
+      -- Process the modified files
+      processFiles config manifestPath allChangedFiles False
+
+-- | Check if a file has been modified since the given time
+isModifiedSince :: FilePath -> UTCTime -> FilePath -> IO Bool
+isModifiedSince basePath lastRunTime relPath = do
+  let fullPath = basePath </> relPath
+  fileExists <- doesFileExist fullPath
+  if not fileExists
+    then return False
+    else do
+      modTime <- getModificationTime fullPath
+      return (modTime > lastRunTime)
+
+-- | Get newly added files from git that might not be caught by modification time check
+getGitNewFiles :: FilePath -> IO [FilePath]
+getGitNewFiles basePath = do
+  -- Use git status to find untracked files (might not have changed modification time)
+  result <- try $ readProcess "git" ["ls-files", "--others", "--exclude-standard"] "" :: IO (Either IOError String)
+  case result of
+    Left _ -> return []  -- If git command fails, return empty list
+    Right output ->
+      -- Parse git output and return list of paths
+      return $ filter (not . null) $ lines output
 
 -- | Recursively find all files in a directory
 findAllFiles :: FilePath -> [FilePath] -> IO [FilePath]
