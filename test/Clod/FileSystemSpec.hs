@@ -3,9 +3,9 @@
 -- |
 -- Module      : Clod.FileSystemSpec
 -- Description : Tests for file system operations
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module contains tests for file system operations.
@@ -13,14 +13,11 @@
 module Clod.FileSystemSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
-import Control.Monad (unless, when)
 import System.Directory
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
 import Data.IORef (newIORef)
-import Control.Monad.IO.Class (liftIO)
 
 import Clod.FileSystem
 import Clod.Types hiding (Success) -- Avoid name collision with QuickCheck.Success
@@ -101,10 +98,10 @@ spec = do
         let config = ClodConfig {
               projectPath = tmpDir,
               stagingDir = tmpDir </> "staging",
-              configDir = tmpDir </> ".claude-uploader", 
-              lastRunFile = tmpDir </> ".claude-uploader" </> "last-run-marker",
+              configDir = tmpDir </> ".clod", 
+              lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
               timestamp = "20250325",
-              currentStaging = tmpDir </> "staging" </> "ClaudeUpload_20250325",
+              currentStaging = tmpDir </> "staging" </> "clod_20250325",
               testMode = True,
               ignorePatterns = []
             }

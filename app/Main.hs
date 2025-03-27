@@ -3,9 +3,9 @@
 -- |
 -- Module      : Main
 -- Description : Main entry point for the Clod application
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module provides the main CLI interface for the Clod application.
@@ -14,14 +14,13 @@ module Main where
 
 import Options.Applicative
 import System.Exit (exitFailure)
-import Control.Monad.IO.Class (liftIO)
 
 import Clod.Core (runClod)
 import Clod.Types (runClodM)
 
 -- | Command line options for Clod
 data Options = Options
-  { optStagingDir :: String   -- ^ Directory where files will be staged
+  { optStagingDir :: String   -- ^ Directory where files will be staged (test mode only)
   , optAllFiles   :: Bool     -- ^ Import all files
   , optModified   :: Bool     -- ^ Import only modified files
   , optTestMode   :: Bool     -- ^ Run in test mode
@@ -35,7 +34,7 @@ optionsParser = Options
       ( long "staging-dir"
      <> short 'd'
      <> metavar "DIR"
-     <> help "Directory where files will be staged for Claude"
+     <> help "Directory where files will be staged for Claude (only used in test mode)"
      <> value ""
      <> showDefault )
   <*> switch

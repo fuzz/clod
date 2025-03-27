@@ -3,9 +3,9 @@
 -- |
 -- Module      : Spec
 -- Description : Test suite for the Clod application
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module orchestrates the test suite for the Clod application.

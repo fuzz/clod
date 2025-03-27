@@ -4,9 +4,9 @@
 -- |
 -- Module      : Clod.Core
 -- Description : Core functionality for the Clod application
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module provides the core functionality for the Clod application,
@@ -42,31 +42,33 @@ module Clod.Core
     -- * Configuration handling
   , initializeConfig
   , createStagingDir
+  , createTempStagingDir
+  , cleanupPreviousTempDir
   
     -- * File processing
   , prepareManifest
   , handleFirstRun
   ) where
 
-import Control.Exception (try)
-import Control.Monad (filterM, forM, forM_, unless, when)
-import Control.Monad.Except (catchError, throwError)
-import Control.Monad.IO.Class (liftIO)
-import Data.Maybe (fromMaybe, isJust)
+import Control.Exception (try, SomeException)
+import Control.Monad (unless, when)
+import Data.Maybe (isJust)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import System.Directory
-import System.Environment (getArgs, lookupEnv)
-import System.Exit (exitFailure, exitSuccess)
 import System.FilePath
 import System.IO (hFlush, stdout)
+import System.IO.Temp (createTempDirectory, getCanonicalTemporaryDirectory)
 import System.Process (callProcess, readProcess)
 
 import Clod.Types
 import Clod.Output
-import Clod.FileSystem
 import Clod.Git
 import Clod.IgnorePatterns
+
+-- | Path to store the last temporary directory location
+lastTempDirFile :: ClodConfig -> FilePath
+lastTempDirFile config = configDir config </> "last-temp-dir"
 
 -- | Default content for .clodignore file
 defaultClodIgnoreContent :: String
@@ -140,123 +142,174 @@ runClod stagingDirArg allFiles modifiedFiles testModeArg = do
   -- Print version information
   liftIO $ putStrLn "clod version 1.0.0 (Haskell)"
   
-  -- Check platform
-  platform <- liftIO $ readProcess "uname" ["-s"] ""
-  when (platform /= "Darwin\n") $ do
-    printWarning $ "clod is primarily designed for macOS. Some features may not work on " ++ platform
-    printWarning "Claude's filesystem access is currently only available on macOS and Windows desktop applications."
-  
-  -- Check for git dependency
-  gitExists <- isExecutable "git"
-  unless gitExists $ throwError $ GitError "git is required but not installed or not in PATH"
+  -- Check platform and dependencies
+  platform <- checkPlatform
+  ensureGitInstalled
   
   -- Change to git repository root
   rootPath <- getRepositoryRoot
   liftIO $ setCurrentDirectory rootPath
   
-  -- Check for uncommitted changes
-  _ <- checkUncommittedChanges (ClodConfig rootPath "" "" "" "" "" testModeArg [])
+  -- Create a temporary config just for checking uncommitted changes
+  let tempConfig = ClodConfig rootPath "" "" "" "" "" testModeArg []
+  _ <- checkUncommittedChanges tempConfig
   
-  -- Initialize configuration
-  config <- initializeConfig rootPath stagingDirArg testModeArg
+  -- Initialize configuration with temporary directory support
+  config <- initializeTempConfig rootPath stagingDirArg testModeArg
   
-  -- Check if .clodignore exists, and create it with default patterns if not
-  let clodIgnorePath = rootPath </> ".clodignore"
-  clodIgnoreExists <- liftIO $ doesFileExist clodIgnorePath
-  unless clodIgnoreExists $ do
-    liftIO $ putStrLn "Creating default .clodignore file..."
-    liftIO $ writeFile clodIgnorePath defaultClodIgnoreContent
-    
-  -- Read .clodignore file
-  clodIgnorePatterns <- readClodIgnore rootPath
-  unless (null clodIgnorePatterns) $
-    liftIO $ putStrLn $ "Found .clodignore with " ++ show (length clodIgnorePatterns) ++ " patterns"
-    
-  -- Read .gitignore file if it exists
-  gitIgnorePatterns <- readGitIgnore rootPath
-  unless (null gitIgnorePatterns) $
-    liftIO $ putStrLn $ "Found .gitignore with " ++ show (length gitIgnorePatterns) ++ " patterns"
-    
-  -- Combine both sets of ignore patterns
-  let ignorePatterns' = clodIgnorePatterns ++ gitIgnorePatterns
-      config' = config { ignorePatterns = ignorePatterns' }
+  -- Setup and load ignore patterns
+  config' <- setupIgnorePatterns rootPath config
   
   liftIO $ putStrLn $ "Looking for modified files in " ++ rootPath ++ "..."
   
-  -- Initialize path manifest
+  -- Initialize and process files
   let manifestPath = currentStaging config' </> "_path_manifest.json"
   liftIO $ writeFile manifestPath "{\n"
-  
-  -- Always create a manifest with all valid files
   liftIO $ putStrLn "Generating complete file manifest..."
   
-  -- Process files based on command line arguments or interactive mode
-  (fileCount, skippedCount) <- do
-    lastRunExists <- liftIO $ doesFileExist (lastRunFile config')
-    if lastRunExists
-      then do
-        liftIO $ putStrLn "Finding files modified since last run..."
+  -- Process files and finalize  
+  (fileCount, skippedCount) <- processAppropriateFiles config' manifestPath allFiles modifiedFiles
+  finalizeManifest manifestPath config' fileCount skippedCount platform
+  
+  where
+    -- Check platform compatibility
+    checkPlatform :: ClodM String
+    checkPlatform = do
+      platform <- liftIO $ readProcess "uname" ["-s"] ""
+      when (platform /= "Darwin\n") $ do
+        printWarning $ "clod is primarily designed for macOS. Some features may not work on " ++ platform
+        printWarning "Claude's filesystem access is currently only available on macOS and Windows desktop applications."
+      return platform
+      
+    -- Ensure git is installed
+    ensureGitInstalled :: ClodM ()
+    ensureGitInstalled = do
+      gitExists <- isExecutable "git"
+      unless gitExists $ throwError $ GitError "git is required but not installed or not in PATH"
+      
+    -- Setup and load ignore patterns
+    setupIgnorePatterns :: FilePath -> ClodConfig -> ClodM ClodConfig
+    setupIgnorePatterns rootPath config = do
+      let clodIgnorePath = rootPath </> ".clodignore"
+      
+      -- Create .clodignore if it doesn't exist
+      clodIgnoreExists <- liftIO $ doesFileExist clodIgnorePath
+      unless clodIgnoreExists $ do
+        liftIO $ putStrLn "Creating default .clodignore file..."
+        liftIO $ writeFile clodIgnorePath defaultClodIgnoreContent
+      
+      -- Read patterns
+      clodPatterns <- readClodIgnore rootPath
+      unless (null clodPatterns) $
+        liftIO $ putStrLn $ "Found .clodignore with " ++ show (length clodPatterns) ++ " patterns"
         
-        -- Handle options: all, modified, or interactive
-        if allFiles 
-          then do
-            liftIO $ putStrLn "Importing all files (respecting .gitignore)..."
-            processAllFiles config' manifestPath
-          else if modifiedFiles || not testModeArg -- default to modified in normal mode
-            then processModifiedFiles config' manifestPath
-            else handleFirstRun config' manifestPath
-      else do
-        liftIO $ putStrLn "First run - no previous timestamp found."
-        handleFirstRun config' manifestPath
-  
-  -- Close the path manifest JSON
-  liftIO $ appendFile manifestPath "\n}"
-  
-  -- Update the last run marker
-  liftIO $ writeFile (lastRunFile config') ""
-  
-  -- Handle results
-  if fileCount == 0
-    then do
-      liftIO $ putStrLn $ "No files processed (skipped: " ++ show skippedCount ++ ")."
-      -- Close the manifest file properly even if no files were processed
-      -- Make sure it has proper JSON structure
-      liftIO $ appendFile manifestPath "  \"_empty\": true\n}"
-    else do
-      -- Open the staging directory (skip in test mode)
-      unless testModeArg $ do
-        liftIO $ case platform of
-          "Darwin\n" -> callProcess "open" [currentStaging config']
-          _          -> putStrLn $ "Staging directory: " ++ currentStaging config'
+      gitPatterns <- readGitIgnore rootPath
+      unless (null gitPatterns) $
+        liftIO $ putStrLn $ "Found .gitignore with " ++ show (length gitPatterns) ++ " patterns"
       
-      liftIO $ putStrLn $ "Success! " ++ show fileCount ++ " files prepared for upload. Skipped: " ++ show skippedCount
-      liftIO $ putStrLn $ "Staging directory: " ++ currentStaging config'
+      -- Combine patterns and return updated config
+      return $ config { ignorePatterns = clodPatterns ++ gitPatterns }
       
-      -- Show next steps
-      showNextSteps config' (currentStaging config')
-
--- | Initialize configuration for the application
-initializeConfig :: FilePath -> FilePath -> Bool -> ClodM ClodConfig
-initializeConfig rootPath stagingDirArg testModeArg = do
-  -- Allow user to configure staging directory
-  homeDir <- liftIO getHomeDirectory
-  let defaultStagingDir = homeDir </> "Claude"
-  
-  -- Get staging directory (from args, env var in test mode, or prompt)
-  isTestMode <- if testModeArg 
-                then return True
-                else liftIO $ isJust <$> lookupEnv "CLOD_TEST_MODE"
-                
-  testStagingDir <- liftIO $ lookupEnv "CLOD_TEST_STAGING_DIR"
-  
-  stagingDirFinal <- 
-    if not (null stagingDirArg)
-      then return stagingDirArg
-      else if isTestMode
-        then return $ fromMaybe defaultStagingDir testStagingDir
+    -- Process appropriate files based on options and state
+    processAppropriateFiles :: ClodConfig -> FilePath -> Bool -> Bool -> ClodM (Int, Int)
+    processAppropriateFiles config manifestPath allFilesFlag modifiedFilesFlag = do
+      lastRunExists <- liftIO $ doesFileExist (lastRunFile config)
+      
+      if lastRunExists
+        then do
+          liftIO $ putStrLn "Finding files modified since last run..."
+          case (allFilesFlag, modifiedFilesFlag || not (testMode config)) of
+            (True, _) -> do
+              liftIO $ putStrLn "Importing all files (respecting .gitignore)..."
+              processAllFiles config manifestPath
+            (_, True) -> 
+              processModifiedFiles config manifestPath
+            _ -> 
+              handleFirstRun config manifestPath
         else do
-          response <- promptUser "Staging directory" defaultStagingDir
-          return response
+          liftIO $ putStrLn "First run - no previous timestamp found."
+          handleFirstRun config manifestPath
+          
+    -- Finalize manifest and show results
+    finalizeManifest :: FilePath -> ClodConfig -> Int -> Int -> String -> ClodM ()
+    finalizeManifest manifestPath config fileCount skippedCount platform = do
+      -- Close the path manifest JSON
+      liftIO $ appendFile manifestPath "\n}"
+      
+      -- Update the last run marker
+      liftIO $ writeFile (lastRunFile config) ""
+      
+      -- Handle results based on file count
+      if fileCount == 0
+        then do
+          liftIO $ putStrLn $ "No files processed (skipped: " ++ show skippedCount ++ ")."
+          -- Ensure proper JSON structure even with no files
+          liftIO $ appendFile manifestPath "  \"_empty\": true\n}"
+        else do
+          -- Open the staging directory (skip in test mode)
+          unless (testMode config) $ do
+            liftIO $ case platform of
+              "Darwin\n" -> callProcess "open" [currentStaging config]
+              _          -> putStrLn $ "Staging directory: " ++ currentStaging config
+          
+          liftIO $ putStrLn $ "Success! " ++ show fileCount ++ 
+                              " files prepared for upload. Skipped: " ++ show skippedCount
+          liftIO $ putStrLn $ "Staging directory: " ++ currentStaging config
+          
+          -- Show next steps
+          showNextSteps config (currentStaging config)
+
+-- | Clean up the previous temporary directory if it exists
+cleanupPreviousTempDir :: ClodConfig -> ClodM ()
+cleanupPreviousTempDir config = do
+  -- Check if we have a record of a previous temp directory
+  prevDirExists <- liftIO $ doesFileExist (lastTempDirFile config)
+  
+  when prevDirExists $ do
+    -- Read the previous directory path
+    prevDirPath <- liftIO $ readFile (lastTempDirFile config)
+    
+    -- Check if that directory still exists
+    dirExists <- liftIO $ doesDirectoryExist prevDirPath
+    
+    when dirExists $ do
+      -- Try to remove the directory and its contents
+      result <- liftIO $ try $ removeDirectoryRecursive prevDirPath
+      
+      case result of
+        Right _ -> 
+          liftIO $ putStrLn $ "Cleaned up previous staging directory: " ++ prevDirPath
+        Left err -> 
+          liftIO $ putStrLn $ "Warning: Could not clean up previous staging directory: " ++ 
+                               show (err :: SomeException)
+
+-- | Create a temporary staging directory for this run
+-- Uses system temporary directory that will be cleaned up on reboot
+createTempStagingDir :: ClodConfig -> ClodM FilePath
+createTempStagingDir config = do
+  -- Get the system's canonical temporary directory
+  tmpBaseDir <- liftIO getCanonicalTemporaryDirectory
+  
+  -- Create a timestamped directory name
+  let dirPrefix = "clod_" ++ timestamp config ++ "_"
+  
+  -- Create the temporary directory
+  stagingPath <- liftIO $ createTempDirectory tmpBaseDir dirPrefix
+  
+  -- Store this path for cleanup on next run
+  liftIO $ writeFile (lastTempDirFile config) stagingPath
+  
+  -- Return the created directory path
+  return stagingPath
+
+-- | Initialize configuration for the application with temporary directory support
+initializeTempConfig :: FilePath -> FilePath -> Bool -> ClodM ClodConfig
+initializeTempConfig rootPath stagingDirArg testModeArg = do
+  -- Initialize configuration with temporary directory support
+  
+  -- Get current time for timestamp
+  now <- liftIO getCurrentTime
+  let timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" now
   
   -- Config files - store in the git repo under .clod
   let configDir = rootPath </> ".clod"
@@ -264,37 +317,52 @@ initializeConfig rootPath stagingDirArg testModeArg = do
   
   -- Create config directory if it doesn't exist
   liftIO $ createDirectoryIfMissing True configDir
-  liftIO $ createDirectoryIfMissing True stagingDirFinal
   
-  -- Create timestamp directory for this run
-  now <- liftIO getCurrentTime
-  let timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" now
-      currentStaging = stagingDirFinal </> ("ClaudeUpload_" ++ timestamp)
+  -- Create a base config with empty staging dir (will be filled in later)
+  let baseConfig = ClodConfig
+        { projectPath = rootPath
+        , stagingDir = ""  -- Will be set later
+        , configDir = configDir
+        , lastRunFile = lastRunFile
+        , timestamp = timestamp
+        , currentStaging = ""  -- Will be set later
+        , testMode = testModeArg
+        , ignorePatterns = []  -- Will be populated later
+        }
   
-  liftIO $ createDirectoryIfMissing True currentStaging
+  -- Clean up previous temp directory if possible
+  cleanupPreviousTempDir baseConfig
+  
+  -- Get staging directory based on mode
+  stagingDir <- if testModeArg && not (null stagingDirArg)
+                then do
+                  -- For test mode, use the provided directory if specified
+                  liftIO $ createDirectoryIfMissing True stagingDirArg
+                  return stagingDirArg
+                else do
+                  -- Create a temporary directory
+                  createTempStagingDir baseConfig
   
   -- Return the complete configuration
-  return $ ClodConfig
-    { projectPath = rootPath
-    , stagingDir = stagingDirFinal
-    , configDir = configDir
-    , lastRunFile = lastRunFile
-    , timestamp = timestamp
-    , currentStaging = currentStaging
-    , testMode = isTestMode
-    , ignorePatterns = []  -- Will be populated later
+  return $ baseConfig
+    { stagingDir = stagingDir
+    , currentStaging = stagingDir  -- For temp dirs, these are the same
     }
 
+-- | Initialize configuration for the application
+-- 
+-- This function is kept for backward compatibility with tests and other modules
+-- but internally calls initializeTempConfig for the actual implementation
+initializeConfig :: FilePath -> FilePath -> Bool -> ClodM ClodConfig
+initializeConfig rootPath stagingDirArg testModeArg =
+  initializeTempConfig rootPath stagingDirArg testModeArg
+
 -- | Create the staging directory structure
+-- 
+-- This function is kept for backward compatibility with tests and other modules
+-- but returns the stagingDir directly since we're now using temporary directories
 createStagingDir :: ClodConfig -> ClodM FilePath
-createStagingDir config = do
-  -- Create timestamp directory for this run
-  now <- liftIO getCurrentTime
-  let timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" now
-      currentStaging = stagingDir config </> ("ClaudeUpload_" ++ timestamp)
-  
-  liftIO $ createDirectoryIfMissing True currentStaging
-  return currentStaging
+createStagingDir config = return (stagingDir config)
 
 -- | Prepare the path manifest file
 prepareManifest :: FilePath -> ClodM ()
@@ -304,21 +372,10 @@ prepareManifest manifestPath =
 -- | Handle the first run scenario
 handleFirstRun :: ClodConfig -> FilePath -> ClodM (Int, Int)
 handleFirstRun config manifestPath = do
-  -- In test mode, automatically choose option 'a'
-  importOption <- if testMode config
-                  then do
-                    liftIO $ putStrLn "Test mode: automatically importing all files"
-                    return 'a'
-                  else do
-                    liftIO $ putStrLn "Options:"
-                    liftIO $ putStrLn "  a: Import all files (respecting .gitignore)"
-                    liftIO $ putStrLn "  m: Import only modified files"
-                    liftIO $ putStrLn "  n: Import nothing (just set timestamp)"
-                    liftIO $ putStr "Choose an option [a/m/n]: "
-                    liftIO $ hFlush stdout
-                    opt <- liftIO getLine
-                    return $ if null opt then 'n' else head opt
+  -- Determine import option based on mode
+  importOption <- getImportOption (testMode config)
   
+  -- Process files based on option
   case importOption of
     'a' -> do
       liftIO $ putStrLn "Importing all files (respecting .gitignore)..."
@@ -329,6 +386,23 @@ handleFirstRun config manifestPath = do
     _   -> do 
       liftIO $ putStrLn "Setting timestamp only."
       return (0, 0)
+  where
+    -- Helper function to get import option based on mode
+    getImportOption :: Bool -> ClodM Char
+    getImportOption True = do
+      liftIO $ putStrLn "Test mode: automatically importing all files"
+      return 'a'
+    getImportOption False = do
+      liftIO $ putStrLn "Options:"
+      liftIO $ putStrLn "  a: Import all files (respecting .gitignore)"
+      liftIO $ putStrLn "  m: Import only modified files"
+      liftIO $ putStrLn "  n: Import nothing (just set timestamp)"
+      liftIO $ putStr "Choose an option [a/m/n]: "
+      liftIO $ hFlush stdout
+      userInput <- liftIO getLine
+      return $ case userInput of
+        []    -> 'n'  -- Default to 'n' for empty input
+        (c:_) -> c    -- Take first character of input
 
 -- | Check if an executable exists in PATH
 isExecutable :: String -> ClodM Bool

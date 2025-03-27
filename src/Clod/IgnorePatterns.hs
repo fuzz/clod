@@ -3,9 +3,9 @@
 -- |
 -- Module      : Clod.IgnorePatterns
 -- Description : Functions for handling ignore patterns (.gitignore, .clodignore)
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module provides functionality for parsing and matching .gitignore and
@@ -269,36 +269,45 @@ matchesIgnorePattern patterns filePath =
 -- simpleGlobMatch "*.txt" "file.md"  -- Returns False
 -- @
 simpleGlobMatch :: String -> String -> Bool
-simpleGlobMatch [] [] = True
-simpleGlobMatch ('*':xs) [] = simpleGlobMatch xs []
-simpleGlobMatch _ [] = False
-simpleGlobMatch [] _ = False
-simpleGlobMatch ('*':'.':ext) path
-    -- Special case for file extensions
-    | not (null ext) =
-        let fileExt = takeExtension path
-        in if null fileExt
-            then False
-            else map toLower (drop 1 fileExt) == map toLower ext
-simpleGlobMatch ('*':'*':'/':ps) path =
-    -- **/ can match zero or more directories
+simpleGlobMatch pattern path = case (pattern, path) of
+  -- Base cases
+  ([], []) -> True
+  ([], _)  -> False
+  
+  -- Pattern with characters left but no path to match
+  (('*':ps), []) -> simpleGlobMatch ps []
+  (_, [])        -> False
+  
+  -- File extension special case: *.ext
+  (('*':'.':ext), _) | not (null ext) ->
+    let fileExt = takeExtension path
+    in not (null fileExt) && map toLower (drop 1 fileExt) == map toLower ext
+    
+  -- Directory wildcard: **/
+  (('*':'*':'/':ps), (_:_)) ->
     let restPath = dropWhile (/= '/') path
-    in  simpleGlobMatch ('*':'*':'/':ps) (drop 1 restPath) || 
-        simpleGlobMatch ps path || 
-        simpleGlobMatch ps (drop 1 restPath)
-simpleGlobMatch ('*':'*':ps) (c:cs) =
-    -- ** can match zero or more characters 
+    in simpleGlobMatch ('*':'*':'/':ps) (drop 1 restPath) || 
+       simpleGlobMatch ps path || 
+       simpleGlobMatch ps (drop 1 restPath)
+       
+  -- Multi-level wildcard: **
+  (('*':'*':ps), (c:cs)) ->
     simpleGlobMatch ps (c:cs) || simpleGlobMatch ('*':'*':ps) cs
-simpleGlobMatch ('*':ps) (c:cs) =
-    -- * can match zero or more characters except /
+    
+  -- Single-level wildcard: *
+  (('*':ps), (c:cs)) ->
     if c == '/' 
-       then simpleGlobMatch ('*':ps) cs  -- Skip the slash
-       else if ps == [] && ('/' `elem` cs)  
-            then False  -- Don't let * cross directory boundaries for patterns like "src/*.js"
-            else if cs == [] || not ('/' `elem` cs)
-                 then simpleGlobMatch ps (c:cs) || simpleGlobMatch ('*':ps) cs
-                 else False  -- Don't match across directory boundaries for *.js pattern
-simpleGlobMatch ('?':ps) (_:cs) = simpleGlobMatch ps cs  -- ? matches any single character
-simpleGlobMatch (p:ps) (c:cs)
-    | p == c    = simpleGlobMatch ps cs
-    | otherwise = False
+      then simpleGlobMatch ('*':ps) cs  -- Skip the slash
+      else if ps == [] && ('/' `elem` cs)  
+          then False  -- Don't let * cross directory boundaries for patterns like "src/*.js"
+          else if cs == [] || not ('/' `elem` cs)
+              then simpleGlobMatch ps (c:cs) || simpleGlobMatch ('*':ps) cs
+              else False  -- Don't match across directory boundaries for *.js pattern
+              
+  -- Single character wildcard: ?
+  (('?':ps), (_:cs)) ->
+    simpleGlobMatch ps cs
+    
+  -- Regular character matching
+  ((p:ps), (c:cs)) ->
+    p == c && simpleGlobMatch ps cs

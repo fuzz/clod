@@ -3,9 +3,9 @@
 -- |
 -- Module      : Clod.Git
 -- Description : Git-related operations for the Clod application
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module provides functionality for interacting with Git repositories,
@@ -40,12 +40,8 @@ module Clod.Git
 
 import Control.Exception (try, SomeException)
 import Control.Monad (filterM, unless, when)
-import Control.Monad.Except (throwError)
-import Control.Monad.IO.Class (liftIO)
 import qualified Data.List as L
-import Data.Time.Clock (UTCTime)
 import System.Directory (doesFileExist, getModificationTime, getCurrentDirectory, setCurrentDirectory, getDirectoryContents)
-import System.FilePath
 import System.IO (hFlush, stdout)
 import System.Process (readProcess)
 

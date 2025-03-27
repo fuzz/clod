@@ -3,9 +3,9 @@
 -- |
 -- Module      : Clod.Output
 -- Description : User interface and output formatting
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module provides functions for user interaction and output formatting.
@@ -37,7 +37,6 @@ module Clod.Output
   ) where
 
 import Control.Monad (unless)
-import Control.Monad.IO.Class (liftIO)
 import System.IO (hFlush, stdout)
 
 import Clod.Types
@@ -125,3 +124,6 @@ showNextSteps config _ = unless (testMode config) $ do
   liftIO $ putStrLn "5. IMPORTANT: You must manually delete previous versions of these files from Project Knowledge"
   liftIO $ putStrLn "   before starting a new conversation to ensure Claude uses the most recent files"
   liftIO $ putStrLn "6. Start a new conversation to see changes"
+  liftIO $ putStrLn ""
+  liftIO $ putStrLn $ "Note: The staging directory is temporary"
+  liftIO $ putStrLn $ "      and will be cleaned up on your next run of clod (or system reboot)."

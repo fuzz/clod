@@ -3,9 +3,9 @@
 -- |
 -- Module      : Clod.IgnorePatternsSpec
 -- Description : Tests for ignore pattern functionality
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module contains tests for the ignore pattern functionality.

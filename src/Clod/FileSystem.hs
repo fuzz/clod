@@ -3,9 +3,9 @@
 -- |
 -- Module      : Clod.FileSystem
 -- Description : File system operations for the Clod application
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module provides functionality for working with files and directories,
@@ -48,24 +48,23 @@ module Clod.FileSystem
     -- * File content operations  
   , processFiles
   , processFile
+  , processFileManifestOnly
   , copyFile
   , safeRemoveFile
   
     -- * Path and filename handling
+  , createOptimizedName
+  , addToManifest
   , escapeJSON
   ) where
 
 import Control.Exception (try)
-import Control.Monad (filterM, forM, forM_, unless, void, when)
-import Control.Monad.Except (throwError)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad (forM, unless, when)
 import qualified Data.List as L
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Data.Maybe (fromMaybe, isJust)
 import Data.Time.Clock (UTCTime)
 import System.Directory
 import System.FilePath
-import System.IO.Error (catchIOError, IOError)
 import System.Process (readProcess)
 
 import Clod.Types
@@ -85,26 +84,25 @@ import Clod.IgnorePatterns (matchesIgnorePattern)
 -- files <- findAllFiles "/path/to/repo" ["src", "docs", "tests"]
 -- @
 findAllFiles :: FilePath -> [FilePath] -> ClodM [FilePath]
-findAllFiles basePath files = do
-  -- Process each entry
-  fileResults <- forM files $ \file -> do
-    let fullPath = basePath </> file
-    isDir <- liftIO $ doesDirectoryExist fullPath
-    
-    if isDir
-      then do
-        -- If it's a directory, get its contents and recurse
-        contents <- liftIO $ getDirectoryContents fullPath
-        let validContents = filter (\f -> not (f `elem` [".", ".."])) contents
-        subFiles <- findAllFiles fullPath validContents
-        -- Return subdirectory files with their paths relative to the project root
-        return $ map (\f -> file </> f) subFiles
-      else do
-        -- If it's a file, return it
-        return [file]
-        
-  -- Flatten the list of lists
-  return $ concat fileResults
+findAllFiles basePath = fmap concat . mapM findFilesRecursive
+  where
+    findFilesRecursive :: FilePath -> ClodM [FilePath]
+    findFilesRecursive file = do
+      let fullPath = basePath </> file
+      isDir <- liftIO $ doesDirectoryExist fullPath
+      
+      case isDir of
+        False -> return [file]  -- Just return the file path
+        True  -> do
+          -- Get directory contents, excluding "." and ".."
+          contents <- liftIO $ getDirectoryContents fullPath
+          let validContents = filter (`notElem` [".", ".."]) contents
+          
+          -- Recursively process subdirectories
+          subFiles <- findAllFiles fullPath validContents
+          
+          -- Prepend current path to subdirectory files
+          return $ map (file </>) subFiles
 
 -- | Check if a file has been modified since the given time
 isModifiedSince :: FilePath -> UTCTime -> FilePath -> ClodM Bool
@@ -187,7 +185,7 @@ processFiles config manifestPath files includeInManifestOnly = do
                      else processFile config manifestPath fullPath file ref
             case result of
               Success -> return (1, 0)
-              Skipped reason -> do
+              Skipped _ -> do
                 -- Skip the verbose output unless we add a verbose flag later
                 return (0, 1)
   
@@ -195,16 +193,50 @@ processFiles config manifestPath files includeInManifestOnly = do
   return (sum (map fst results), sum (map snd results))
 
 -- | Process a single file for manifest only (no file copying)
-processFileManifestOnly :: ClodConfig -> FilePath -> FilePath -> FilePath -> IORef Bool -> ClodM FileResult
-processFileManifestOnly config manifestPath fullPath relPath firstEntryRef = do
-  -- Skip specifically excluded files
-  if relPath `elem` [".gitignore", "package-lock.json", "yarn.lock", ".clodignore"]
-    then return $ Skipped "excluded file"
-    else do
-      -- Check if file should be ignored according to ignore patterns
-      let ignorePatterns' = ignorePatterns config
+-- | Create an optimized filename for Claude UI
+createOptimizedName :: FilePath -> String
+createOptimizedName relPath = 
+  let dirPart = takeDirectory relPath
+      fileName = takeFileName relPath
       
-      if not (null ignorePatterns') && matchesIgnorePattern ignorePatterns' relPath
+      -- Create the optimized name by replacing slashes with dashes
+      optimizedName = case dirPart of
+        "." -> fileName
+        _   -> map (\c -> if c == '/' then '-' else c) dirPart ++ "-" ++ fileName
+      
+      -- Handle SVG files specially - change to XML extension for Claude compatibility
+      finalOptimizedName 
+        | ".svg" `L.isSuffixOf` fileName = take (length optimizedName - 4) optimizedName ++ "-svg.xml"
+        | otherwise = optimizedName
+  in finalOptimizedName
+
+-- | Add entry to path manifest
+addToManifest :: FilePath -> FilePath -> String -> IORef Bool -> ClodM ()
+addToManifest manifestPath relPath optimizedName firstEntryRef = do
+  -- Use firstEntryRef to track whether a comma is needed
+  isFirst <- liftIO $ readIORef firstEntryRef
+  unless isFirst $
+    liftIO $ appendFile manifestPath ",\n"
+  liftIO $ writeIORef firstEntryRef False
+  
+  -- Escape JSON special characters
+  let escapedOptimizedName = escapeJSON optimizedName
+      escapedRelPath = escapeJSON relPath
+      manifestEntry = "  \"" ++ escapedOptimizedName ++ "\": \"" ++ escapedRelPath ++ "\""
+  
+  liftIO $ appendFile manifestPath manifestEntry
+
+-- | Process a single file for manifest only (no file copying)
+processFileManifestOnly :: ClodConfig -> FilePath -> FilePath -> FilePath -> IORef Bool -> ClodM FileResult
+processFileManifestOnly config manifestPath fullPath relPath firstEntryRef
+  -- Skip specifically excluded files
+  | relPath `elem` [".gitignore", "package-lock.json", "yarn.lock", ".clodignore"] = 
+      return $ Skipped "excluded file"
+  | otherwise = do
+      -- Check if file should be ignored according to ignore patterns
+      let patterns = ignorePatterns config
+      
+      if not (null patterns) && matchesIgnorePattern patterns relPath
         then return $ Skipped "matched .clodignore pattern"
         else do
           -- Skip binary files
@@ -213,45 +245,24 @@ processFileManifestOnly config manifestPath fullPath relPath firstEntryRef = do
             then return $ Skipped "binary file"
             else do
               -- Create optimized filename
-              let dirPart = takeDirectory relPath
-                  fileName = takeFileName relPath
-                  
-                  -- Create the optimized name by replacing slashes with dashes
-                  optimizedName = if dirPart /= "."
-                                  then map (\c -> if c == '/' then '-' else c) dirPart ++ "-" ++ fileName
-                                  else fileName
-                  
-                  -- Handle SVG files specially - change to XML extension for Claude compatibility
-                  finalOptimizedName = if ".svg" `L.isSuffixOf` fileName
-                                      then take (length optimizedName - 4) optimizedName ++ "-svg.xml"
-                                      else optimizedName
+              let finalOptimizedName = createOptimizedName relPath
               
-              -- Add to path manifest - use firstEntryRef to track whether a comma is needed
-              isFirst <- liftIO $ readIORef firstEntryRef
-              unless isFirst $
-                liftIO $ appendFile manifestPath ",\n"
-              liftIO $ writeIORef firstEntryRef False
-              
-              -- Escape JSON special characters
-              let escapedOptimizedName = escapeJSON finalOptimizedName
-                  escapedRelPath = escapeJSON relPath
-                  manifestEntry = "  \"" ++ escapedOptimizedName ++ "\": \"" ++ escapedRelPath ++ "\""
-              
-              liftIO $ appendFile manifestPath manifestEntry
+              -- Add to path manifest
+              addToManifest manifestPath relPath finalOptimizedName firstEntryRef
               
               return Success
 
 -- | Process a single file
 processFile :: ClodConfig -> FilePath -> FilePath -> FilePath -> IORef Bool -> ClodM FileResult
-processFile config manifestPath fullPath relPath firstEntryRef = do
+processFile config manifestPath fullPath relPath firstEntryRef 
   -- Skip specifically excluded files
-  if relPath `elem` [".gitignore", "package-lock.json", "yarn.lock", ".clodignore"]
-    then return $ Skipped "excluded file"
-    else do
+  | relPath `elem` [".gitignore", "package-lock.json", "yarn.lock", ".clodignore"] = 
+      return $ Skipped "excluded file"
+  | otherwise = do
       -- Check if file should be ignored according to ignore patterns
-      let ignorePatterns' = ignorePatterns config
+      let patterns = ignorePatterns config
       
-      if not (null ignorePatterns') && matchesIgnorePattern ignorePatterns' relPath
+      if not (null patterns) && matchesIgnorePattern patterns relPath
         then return $ Skipped "matched .clodignore pattern"
         else do
           -- Skip binary files
@@ -260,34 +271,13 @@ processFile config manifestPath fullPath relPath firstEntryRef = do
             then return $ Skipped "binary file"
             else do
               -- Create optimized filename
-              let dirPart = takeDirectory relPath
-                  fileName = takeFileName relPath
-                  
-                  -- Create the optimized name by replacing slashes with dashes
-                  optimizedName = if dirPart /= "."
-                                  then map (\c -> if c == '/' then '-' else c) dirPart ++ "-" ++ fileName
-                                  else fileName
-                  
-                  -- Handle SVG files specially - change to XML extension for Claude compatibility
-                  finalOptimizedName = if ".svg" `L.isSuffixOf` fileName
-                                      then take (length optimizedName - 4) optimizedName ++ "-svg.xml"
-                                      else optimizedName
+              let finalOptimizedName = createOptimizedName relPath
               
               -- Copy file with optimized name
               liftIO $ copyFile fullPath (currentStaging config </> finalOptimizedName)
               
-              -- Add to path manifest - use firstEntryRef to track whether a comma is needed
-              isFirst <- liftIO $ readIORef firstEntryRef
-              unless isFirst $
-                liftIO $ appendFile manifestPath ",\n"
-              liftIO $ writeIORef firstEntryRef False
-              
-              -- Escape JSON special characters
-              let escapedOptimizedName = escapeJSON finalOptimizedName
-                  escapedRelPath = escapeJSON relPath
-                  manifestEntry = "  \"" ++ escapedOptimizedName ++ "\": \"" ++ escapedRelPath ++ "\""
-              
-              liftIO $ appendFile manifestPath manifestEntry
+              -- Add to path manifest
+              addToManifest manifestPath relPath finalOptimizedName firstEntryRef
               
               liftIO $ putStrLn $ "Copied: " ++ relPath ++ " → " ++ finalOptimizedName
               return Success

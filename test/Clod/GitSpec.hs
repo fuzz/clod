@@ -3,9 +3,9 @@
 -- |
 -- Module      : Clod.GitSpec
 -- Description : Tests for Git-related operations
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module contains tests for Git-related operations.
@@ -13,14 +13,11 @@
 module Clod.GitSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
-import Control.Monad (unless)
 import System.Directory
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
-import System.Process (callProcess, readProcess)
+import System.Process (callProcess)
 import Control.Exception (try, SomeException)
-import Control.Monad.IO.Class (liftIO)
 
 import Clod.Git
 import Clod.Types

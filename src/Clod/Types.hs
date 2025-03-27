@@ -4,9 +4,9 @@
 -- |
 -- Module      : Clod.Types
 -- Description : Core types for the Clod application
--- Copyright   : (c) fuzz, 2025
+-- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : fuzz@github.com
+-- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
 -- This module defines the core types used throughout the Clod application.
@@ -41,8 +41,6 @@ module Clod.Types
 
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
-import Data.Time.Clock (UTCTime)
-import System.IO.Error (IOError)
 
 -- | Type alias for ignore patterns
 type IgnorePattern = String
