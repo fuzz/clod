@@ -77,6 +77,7 @@ module Clod.Effects
   , logInfo
   , logWarning
   , logError
+  , logOutput
   , runConsoleIO
     
     -- * Error Handling

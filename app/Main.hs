@@ -77,7 +77,7 @@ main = do
   
   -- Create a unique staging directory for this run
   timestamp <- formatTime defaultTimeLocale "%Y%m%d%H%M%S" <$> getCurrentTime
-  let uniqueId = take 8 $ hash $ currentDir ++ timestamp
+  let uniqueId = take 8 $ show $ hash $ currentDir ++ timestamp
   let stagingDirPath = if null (optStagingDir options) 
                     then stagingDirBase </> uniqueId
                     else optStagingDir options
