@@ -51,8 +51,7 @@ extra-source-files:
   LICENSE,
   resources/default_clodignore,
   bin/generate-man-pages.sh,
-  bin/cld,
-  Formula/clod.rb.template
+  bin/cld
   
 extra-doc-files:
   CHANGELOG.md
