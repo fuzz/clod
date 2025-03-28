@@ -46,6 +46,7 @@ import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>), splitDirectories)
 import System.IO (writeFile)
 import Data.Version (showVersion)
+import Control.Monad (when)
 
 import Polysemy
 import Polysemy.Error
@@ -101,36 +102,35 @@ processFileWithEffects readCap writeCap fullPath relPath = do
     
 -- | Run a computation with the Clod effects system
 runClodApp :: T.ClodConfig -> FilePath -> Bool -> Bool -> Bool -> IO (Either T.ClodError ())
-runClodApp config stagingDirArg _ _ _ = do
+runClodApp config stagingDirArg verbose _ _ = do
   -- Run with polysemy effects
   runM . runReader config . runError . runConsoleIO . runGitIO . runFileSystemIO $ do
-    -- Print version information
-    logInfo $ "clod version " ++ showVersion Meta.version ++ " (Haskell) - Effects Edition"
+    when verbose $ do
+      -- Print version information only in verbose mode
+      logInfo $ "clod version " ++ showVersion Meta.version ++ " (Haskell)"
     
     -- Execute main logic with capabilities
-    effectsBasedMain stagingDirArg
+    effectsBasedMain stagingDirArg verbose
     
 -- | Main function using effects system
 effectsBasedMain :: Members '[FileSystem, Git, Console, Error T.ClodError, Reader T.ClodConfig, Embed IO] r
-                 => FilePath -> Sem r ()
-effectsBasedMain stagingDirArg = do
+                 => FilePath -> Bool -> Sem r ()
+effectsBasedMain stagingDirArg verbose = do
   config <- PR.ask
-  
-  -- Log start
-  logInfo $ "Running with capabilities, safely restricting operations to: " ++ projectPath config
-  logInfo $ "Safe staging directory: " ++ stagingDirArg
   
   -- Create directories
   embed $ createDirectoryIfMissing True (configDir config)
   embed $ createDirectoryIfMissing True (stagingDir config)
   
-  -- This is where we would implement the full logic using our effects system
-  -- For this initial version, we'll just show logging from the capabilities
-  logInfo "Effect system successfully initialized!"
-  logInfo "AI safety guardrails active with capability-based security"
+  -- Only show additional info in verbose mode
+  when verbose $ do
+    logInfo $ "Running with capabilities, safely restricting operations to: " ++ projectPath config
+    logInfo $ "Safe staging directory: " ++ stagingDirArg
+    logInfo "AI safety guardrails active with capability-based security"
   
   -- Update the last run marker to track when clod was last run
   embed $ System.IO.writeFile (lastRunFile config) ""
   
-  -- Print staging directory for easier integration with other tools
-  logInfo $ "Files staged in: " ++ stagingDir config
+  -- Output ONLY the staging directory path to stdout for piping to other tools
+  -- This follows Unix principles - single line of output for easy piping
+  logOutput $ stagingDir config

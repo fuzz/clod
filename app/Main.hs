@@ -14,9 +14,12 @@ module Main where
 
 import Options.Applicative
 import System.Exit (exitFailure)
-import System.Directory (createDirectoryIfMissing, getCurrentDirectory, getHomeDirectory)
+import System.Directory (createDirectoryIfMissing, getCurrentDirectory, getTemporaryDirectory)
 import System.FilePath ((</>))
 import System.Environment (lookupEnv)
+import Data.Time (getCurrentTime)
+import Data.Time.Format (formatTime, defaultTimeLocale)
+import Data.Hashable (hash)
 
 import Clod.Core (runClodApp)
 import Clod.Types (ClodConfig(..))
@@ -64,17 +67,19 @@ main = do
   
   -- Create a minimal configuration for the effects system
   currentDir <- getCurrentDirectory
-  -- Default to XDG config home if environment variable is set, otherwise ~/.config
-  xdgConfigHome <- lookupEnv "XDG_CONFIG_HOME"
-  let configHome = maybe (getHomeDirectory >>= \home -> return $ home </> ".config") return xdgConfigHome
-  configHomeDir <- configHome
   
-  let configDir = if optTestMode options
-                 then currentDir </> ".clod"
-                 else configHomeDir </> "clod"
-                 
+  -- For config dir: use local .clod in project directory
+  let configDir = currentDir </> ".clod"
+  
+  -- For staging directory: use system temp directory
+  tempDir <- getTemporaryDirectory
+  let stagingDirBase = tempDir </> "clod-staging"
+  
+  -- Create a unique staging directory for this run
+  timestamp <- formatTime defaultTimeLocale "%Y%m%d%H%M%S" <$> getCurrentTime
+  let uniqueId = take 8 $ hash $ currentDir ++ timestamp
   let stagingDirPath = if null (optStagingDir options) 
-                    then configDir </> "staging"
+                    then stagingDirBase </> uniqueId
                     else optStagingDir options
   
   do
@@ -97,9 +102,9 @@ main = do
       -- Run with effects system
       result <- runClodApp config 
                   (optStagingDir options)
+                  (optVerbose options)
                   (optAllFiles options)
                   (optModified options)
-                  (optTestMode options)
       
       case result of
         Left err -> do

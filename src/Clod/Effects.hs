@@ -129,6 +129,7 @@ data Console m a where
   LogInfo :: String -> Console m ()
   LogWarning :: String -> Console m ()
   LogError :: String -> Console m ()
+  LogOutput :: String -> Console m ()  -- For stdout output that follows Unix principles (directly pipeable)
 
 makeSem ''Console
 
@@ -181,3 +182,4 @@ runConsoleIO = interpret $ \case
   LogInfo msg -> embed $ putStrLn msg
   LogWarning msg -> embed $ putStrLn $ "Warning: " ++ msg
   LogError msg -> embed $ putStrLn $ "Error: " ++ msg
+  LogOutput msg -> embed $ putStrLn msg  -- Clean output for piping
