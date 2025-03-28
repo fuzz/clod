@@ -37,6 +37,21 @@ cd clod
 cabal install
 ```
 
+For detailed installation instructions, including how to install man pages, see [INSTALLING.md](INSTALLING.md).
+
+After installing, run the provided script to install the man pages to your user directory:
+
+```bash
+# Clone the repository 
+git clone https://github.com/fuzz/clod.git
+cd clod
+
+# Install the man pages
+./bin/install-man-pages.sh
+```
+
+This will make the documentation accessible via `man clod`.
+
 ### Prerequisites
 
 - GHC (Glasgow Haskell Compiler) 9.0 or newer

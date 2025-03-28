@@ -37,19 +37,29 @@ homepage: https://github.com/fuzz/clod
 bug-reports: https://github.com/fuzz/clod/issues
 category: Development
 build-type: Simple
-cabal-version: >=1.10
+cabal-version: 2.0
 extra-source-files: 
   README.md,
-  CHANGELOG.md,
   CONTRIBUTING.md, 
   RELEASING.md,
   EFFECTS.md,
   HUMAN.md,
   HASKELL.md,
+  INSTALLING.md,
   guardrails.md,
   project-instructions.md,
   LICENSE,
-  resources/default_clodignore
+  resources/default_clodignore,
+  bin/generate-man-pages.sh,
+  bin/install-man-pages.sh
+  
+extra-doc-files:
+  CHANGELOG.md
+
+data-files:
+  man/clod.1,
+  man/clod.7,
+  man/clod.8
 
 source-repository head
   type:     git
@@ -73,6 +83,7 @@ library
                  , Clod.Effects
                  , Clod.Capability
   other-modules: Paths_clod
+  autogen-modules: Paths_clod
   build-depends: base >= 4.7 && < 5
                , directory >= 1.3 && < 1.4
                , filepath >= 1.4 && < 1.5
@@ -86,7 +97,7 @@ library
                , mtl >= 2.2 && < 2.4
                , transformers >= 0.5 && < 0.6
                , unix >= 2.7 && < 2.8
-               , hlibgit2 >= 0.18.0.14
+               , hlibgit2 >= 0.18.0.14 && < 0.19
                , polysemy >= 1.7 && < 1.8
                , polysemy-plugin >= 0.4 && < 0.5
   default-language: Haskell2010

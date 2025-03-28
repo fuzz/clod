@@ -14,8 +14,9 @@ module Main where
 
 import Options.Applicative
 import System.Exit (exitFailure)
-import System.Directory (createDirectoryIfMissing, getCurrentDirectory)
+import System.Directory (createDirectoryIfMissing, getCurrentDirectory, getHomeDirectory)
 import System.FilePath ((</>))
+import System.Environment (lookupEnv)
 
 import Clod.Core (runClodApp)
 import Clod.Types (ClodConfig(..))
@@ -63,19 +64,29 @@ main = do
   
   -- Create a minimal configuration for the effects system
   currentDir <- getCurrentDirectory
+  -- Default to XDG config home if environment variable is set, otherwise ~/.config
+  xdgConfigHome <- lookupEnv "XDG_CONFIG_HOME"
+  let configHome = maybe (getHomeDirectory >>= \home -> return $ home </> ".config") return xdgConfigHome
+  configHomeDir <- configHome
+  
+  let configDir = if optTestMode options
+                 then currentDir </> ".clod"
+                 else configHomeDir </> "clod"
+                 
   let stagingDirPath = if null (optStagingDir options) 
-                    then currentDir </> ".clod" </> "staging"
+                    then configDir </> "staging"
                     else optStagingDir options
   
   -- Create staging directory if it doesn't exist
   createDirectoryIfMissing True stagingDirPath
+  createDirectoryIfMissing True configDir
   
   -- Create a basic config
   let config = ClodConfig {
         projectPath = currentDir,
         stagingDir = stagingDirPath,
-        configDir = currentDir </> ".clod",
-        lastRunFile = currentDir </> ".clod" </> "last-run-marker",
+        configDir = configDir,
+        lastRunFile = configDir </> "last-run-marker",
         timestamp = "",  -- Will be set internally
         currentStaging = stagingDirPath,
         testMode = optTestMode options,
