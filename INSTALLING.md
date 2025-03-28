@@ -1,6 +1,17 @@
 # Installing Clod
 
-Clod can be installed using Cabal:
+## Using Homebrew (macOS)
+
+```bash
+# Install from the tap
+brew tap fuzz/tap
+brew install clod
+
+# Or in one command:
+brew install fuzz/tap/clod
+```
+
+## Using Cabal (All Platforms)
 
 ```bash
 cabal install clod

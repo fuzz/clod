@@ -42,6 +42,9 @@ For detailed installation instructions, including how to install man pages, see 
 Man pages are automatically installed when using package managers like Homebrew:
 ```bash
 # On macOS
+brew tap fuzz/tap
+brew install clod
+# Or in one command:
 brew install fuzz/tap/clod
 ```
 
