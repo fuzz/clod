@@ -26,6 +26,10 @@ module Clod.Git.LibGit
   , checkUncommittedChanges
   , getModifiedFiles
   , getUntrackedFiles
+  
+    -- * Direct IO operations (for effects system)
+  , directGetModifiedFiles
+  , directGetUntrackedFiles
   ) where
 
 import Control.Exception (try, bracket, SomeException)
@@ -199,6 +203,68 @@ type StatusCallback = CString -> CInt -> Ptr () -> IO CInt
 
 foreign import ccall "wrapper"
   mkStatusCallback :: StatusCallback -> IO (FunPtr StatusCallback)
+
+-- | Direct IO version of getModifiedFiles for use with effects system
+directGetModifiedFiles :: FilePath -> IO [FilePath]
+directGetModifiedFiles repoPath = do
+  -- Use git_status_foreach with a callback to collect modified files
+  withRepository repoPath $ \repoPtr -> do
+    -- Create a list to store modified files
+    modifiedFilesRef <- newIORef []
+    
+    -- Create callback function for status
+    cb <- mkStatusCallback $ \pathPtr status _ -> do
+      -- Check if file is modified in index or working tree
+      let statusInt = fromIntegral status :: Int
+          -- Use direct CInt conversions to avoid type-default warnings
+          wt_modified = fromIntegral (GitStatus.c'GIT_STATUS_WT_MODIFIED :: CInt) :: Int
+          index_modified = fromIntegral (GitStatus.c'GIT_STATUS_INDEX_MODIFIED :: CInt) :: Int
+          modifiedFlag = wt_modified .|. index_modified
+          isModified = (statusInt .&. modifiedFlag) /= 0
+      
+      when isModified $ do
+        -- Get file path and add to the list
+        path <- BC.unpack <$> BS.packCString pathPtr
+        modifyIORef' modifiedFilesRef ((repoPath </> path) :)
+      
+      return 0
+    
+    -- Run the foreach function with our callback
+    ret <- GitStatus.c'git_status_foreach repoPtr (castFunPtr cb) nullPtr
+    when (ret < 0) $ error "Failed to get git status"
+    
+    -- Read the list of modified files
+    readIORef modifiedFilesRef
+
+-- | Direct IO version of getUntrackedFiles for use with effects system
+directGetUntrackedFiles :: FilePath -> IO [FilePath]
+directGetUntrackedFiles repoPath = do
+  -- Use git_status_foreach with a callback to collect untracked files
+  withRepository repoPath $ \repoPtr -> do
+    -- Create a list to store untracked files
+    untrackedFilesRef <- newIORef []
+    
+    -- Create callback function for status
+    cb <- mkStatusCallback $ \pathPtr status _ -> do
+      -- Check if file is untracked
+      let statusInt = fromIntegral status :: Int
+          -- Use direct CInt conversion to avoid type-default warnings
+          untrackedFlag = fromIntegral (GitStatus.c'GIT_STATUS_WT_NEW :: CInt) :: Int
+          isUntracked = (statusInt .&. untrackedFlag) /= 0
+      
+      when isUntracked $ do
+        -- Get file path and add to the list
+        path <- BC.unpack <$> BS.packCString pathPtr
+        modifyIORef' untrackedFilesRef ((repoPath </> path) :)
+      
+      return 0
+    
+    -- Run the foreach function with our callback
+    ret <- GitStatus.c'git_status_foreach repoPtr (castFunPtr cb) nullPtr
+    when (ret < 0) $ error "Failed to get git status"
+    
+    -- Read the list of untracked files
+    readIORef untrackedFilesRef
 
 -- | Helper function to open a repository and perform an action with it
 withRepository :: FilePath -> (Ptr Git.C'git_repository -> IO a) -> IO a

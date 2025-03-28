@@ -88,6 +88,19 @@ This document contains learning points about working with Haskell from Claude Co
 - Resource files should be loaded from standardized locations, not hardcoded.
 - Version information should be derived from the cabal file, not hardcoded.
 
+## Algebraic Effects and Capability-Based Security
+
+- Use algebraic effects libraries like `polysemy` to make side effects explicit at the type level.
+- Implement capability-based security for operations with potential security implications:
+  - Define a capability as a token that grants specific permissions (e.g., read access to specific directories).
+  - Require these tokens as parameters for any potentially unsafe operations.
+  - Check permissions at runtime before performing the operation.
+- Make effect handlers composable and modular to enable selective capabilities.
+- Design test cases specifically to verify that capability restrictions work correctly.
+- For file system operations, use path prefix checking to restrict access to allowed directories.
+- Use the containing directory structure for temporary outputs to maintain clean repository state.
+- Add output directories to .gitignore to avoid committing generated artifacts.
+
 ## Tips
 
 - Haskell has a sophisticated type system you can use to reason about code

@@ -1,5 +1,5 @@
 name: clod
-version: 0.2.0
+version: 0.1.0
 x-revision: 1
 synopsis: Project file manager for Claude AI integrations
 description: 
@@ -16,6 +16,8 @@ description:
   * Create optimized filenames for Claude's UI
   * Generate a path manifest for mapping optimized names back to original paths
   * Color-coded, user-friendly terminal interface
+  * Type-safe effects system with capability-based security
+  * Path-restricted file access to prevent unauthorized operations
   .
   Clod is particularly useful for reducing AI development costs while working with 
   Claude. By handling file selection, staging, and tracking efficiently, it can cut 
@@ -24,7 +26,9 @@ description:
   the wealthiest and the scrappiest.
   .
   Clod uses the libgit2 library via hlibgit2 bindings for Git operations, providing
-  a pure Haskell implementation without relying on shell commands.
+  a pure Haskell implementation without relying on shell commands. It also implements
+  a capability-based security model using algebraic effects to ensure safe AI interactions
+  with the file system.
 license: MIT
 license-file: LICENSE
 author: Fuzz Leonard
@@ -39,6 +43,9 @@ extra-source-files:
   CHANGELOG.md,
   CONTRIBUTING.md, 
   RELEASING.md,
+  EFFECTS.md,
+  HUMAN.md,
+  HASKELL.md,
   guardrails.md,
   project-instructions.md,
   LICENSE,
@@ -63,6 +70,8 @@ library
                  , Clod.IgnorePatterns
                  , Clod.Output
                  , Clod.Types
+                 , Clod.Effects
+                 , Clod.Capability
   other-modules: Paths_clod
   build-depends: base >= 4.7 && < 5
                , directory >= 1.3 && < 1.4
@@ -78,7 +87,19 @@ library
                , transformers >= 0.5 && < 0.6
                , unix >= 2.7 && < 2.8
                , hlibgit2 >= 0.18.0.14
+               , polysemy >= 1.7 && < 1.8
+               , polysemy-plugin >= 0.4 && < 0.5
   default-language: Haskell2010
+  default-extensions: OverloadedStrings
+                    , TypeOperators
+                    , FlexibleContexts
+                    , GADTs
+                    , DataKinds
+                    , ScopedTypeVariables
+                    , TypeApplications
+                    , TemplateHaskell
+                    , LambdaCase
+                    , RecordWildCards
   ghc-options: -Wall
 
 executable clod
@@ -95,7 +116,17 @@ executable clod
                , time >= 1.9 && < 1.13
                , process >= 1.6 && < 1.7
                , optparse-applicative >= 0.16 && < 0.18
+               , polysemy >= 1.7 && < 1.8
+               , polysemy-plugin >= 0.4 && < 0.5
   default-language: Haskell2010
+  default-extensions: OverloadedStrings
+                    , TypeOperators
+                    , FlexibleContexts
+                    , GADTs
+                    , DataKinds
+                    , ScopedTypeVariables
+                    , TypeApplications
+                    , RecordWildCards
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
 
 test-suite clod-test
@@ -117,5 +148,39 @@ test-suite clod-test
                , hspec >= 2.8 && < 2.12
                , QuickCheck >= 2.14 && < 2.16
                , unix >= 2.7 && < 2.8
+               , polysemy >= 1.7 && < 1.8
+               , polysemy-plugin >= 0.4 && < 0.5
+               , bytestring >= 0.10 && < 0.12
   default-language: Haskell2010
+  default-extensions: OverloadedStrings
+                    , TypeOperators
+                    , FlexibleContexts
+                    , GADTs
+                    , DataKinds
+                    , ScopedTypeVariables
+                    , TypeApplications
+                    , RecordWildCards
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  
+executable effects-example
+  hs-source-dirs: examples
+  main-is: EffectsExample.hs
+  build-depends: base >= 4.7 && < 5
+               , clod
+               , directory >= 1.3 && < 1.4
+               , filepath >= 1.4 && < 1.5
+               , text >= 1.2 && < 1.3
+               , bytestring >= 0.10 && < 0.12
+               , process >= 1.6 && < 1.7
+               , polysemy >= 1.7 && < 1.8
+               , polysemy-plugin >= 0.4 && < 0.5
+  default-language: Haskell2010
+  default-extensions: OverloadedStrings
+                    , TypeOperators
+                    , FlexibleContexts
+                    , GADTs
+                    , DataKinds
+                    , ScopedTypeVariables
+                    , TypeApplications
+                    , RecordWildCards
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N

@@ -1,6 +1,7 @@
 dist-newstyle/
 .clod/
 .stack-work/
+output/
 *.o
 *.hi
 *.hie

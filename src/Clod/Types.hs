@@ -95,38 +95,31 @@ data ClodError
 
 -- | The Clod transformer monad
 --
+-- NOTE: This traditional monad stack has been largely replaced by the effects system,
+-- but is kept for backward compatibility with legacy code and tests.
+--
 -- This monad transformer stack combines:
 --
 -- * Reader for dependency injection of ClodConfig
 -- * Error handling with ExceptT for 'ClodError'
 -- * IO for filesystem, git, and other side effects
 --
--- This design provides clean dependency injection and error handling.
+-- New code should use the effects system in Clod.Effects instead.
 type ClodT m a = ReaderT ClodConfig (ExceptT ClodError m) a
 
 -- | Monad for Clod operations
 --
--- All Clod operations that can fail or require IO should use this monad.
--- It allows for clean error propagation and access to configuration.
+-- NOTE: This traditional monad has been largely replaced by the effects system,
+-- but is kept for backward compatibility with legacy code and tests.
 --
--- @
--- runProject :: ClodM Int
--- runProject = do
---   config <- ask
---   liftIO $ putStrLn $ "Working in " ++ projectPath config
---   return 42
--- @
+-- New code should use the effects system in Clod.Effects instead.
 type ClodM a = ClodT IO a
 
 -- | Run a ClodM computation, returning either an error or a result
 --
--- Example:
+-- NOTE: This function has been largely replaced by effects-based runners,
+-- but is kept for backward compatibility with legacy code and tests.
 --
--- @
--- result <- runClodM $ do
---   config <- initializeConfig "/path/to/repo" "" False
---   files <- findAllFiles ["src"]  -- Notice no need to pass config explicitly
---   processFiles manifestPath files False
--- @
+-- New code should use the effects system in Clod.Effects instead.
 runClodM :: ClodM a -> IO (Either ClodError a)
 runClodM = runExceptT . flip runReaderT (error "ClodConfig not initialized")

@@ -1,4 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 -- |
 -- Module      : Clod.CoreSpec
@@ -15,121 +18,200 @@ module Clod.CoreSpec (spec) where
 import Test.Hspec
 import System.Directory
 import System.FilePath
-import System.IO.Temp (withSystemTempDirectory, getCanonicalTemporaryDirectory)
-import Data.List (isPrefixOf)
+import System.IO.Temp (withSystemTempDirectory)
+import Data.Either (isRight)
+import qualified System.IO
+
+import Polysemy
+import Polysemy.Error
+import Polysemy.Reader
 
 import Clod.Core
-import Clod.Types
+import Clod.Types (ClodConfig(..), ClodError(..), FileResult(..))
+import Clod.Effects
+import Clod.Capability
 
 -- | Test specification for Core module
 spec :: Spec
 spec = do
-  describe "initializeConfig" $ do
-    it "creates a valid configuration with temporary directory" $ do
-      withSystemTempDirectory "clod-test" $ \tmpDir -> do
-        -- Initialize a git repository
-        createDirectoryIfMissing True (tmpDir </> ".git")
-        
-        -- Call initializeConfig via ClodM monad
-        configEither <- runClodM $ initializeConfig tmpDir "" True
-        case configEither of
-          Left err -> expectationFailure $ "Failed to initialize config: " ++ show err
-          Right config -> do
-            projectPath config `shouldBe` tmpDir
-            configDir config `shouldBe` tmpDir </> ".clod"
-            lastRunFile config `shouldBe` tmpDir </> ".clod" </> "last-run-marker"
-            testMode config `shouldBe` True
-            
-            -- Check if config directory was created
-            doesDirectoryExist (configDir config) >>= \exists ->
-              exists `shouldBe` True
-              
-            -- Check if staging directory was created and is a temp directory
-            doesDirectoryExist (stagingDir config) >>= \exists ->
-              exists `shouldBe` True
-              
-            -- In test mode with empty staging dir arg, should still create a temp directory
-            tmpRoot <- getCanonicalTemporaryDirectory
-            stagingDir config `shouldSatisfy` (\path -> tmpRoot `isPrefixOf` path)
-            
-            -- Should have the correct prefix format
-            takeFileName (stagingDir config) `shouldSatisfy` ("clod_" `isPrefixOf`)
+  effectsApiSpec
+  runClodAppSpec
   
-  describe "createTempStagingDir" $ do
-    it "creates a temp staging directory with proper naming" $ do
-      withSystemTempDirectory "clod-test" $ \tmpDir -> do
-        -- Create a minimal config for testing
-        let config = ClodConfig {
-              projectPath = tmpDir,
-              stagingDir = "",
-              configDir = tmpDir </> ".clod", 
-              lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
-              timestamp = "20250325",
-              currentStaging = "",
-              testMode = True,
-              ignorePatterns = []
-            }
-        
-        -- Create the config directory
-        createDirectoryIfMissing True (configDir config)
-        
-        -- Call createTempStagingDir via ClodM monad
-        result <- runClodM $ createTempStagingDir config
-        case result of
-          Left err -> expectationFailure $ "Failed to create staging dir: " ++ show err
-          Right stagingPath -> do
-            -- Verify directory exists
-            doesDirectoryExist stagingPath >>= \exists ->
-              exists `shouldBe` True
-              
-            -- Verify it's in the system temp directory
-            tmpRoot <- getCanonicalTemporaryDirectory
-            stagingPath `shouldSatisfy` (\path -> tmpRoot `isPrefixOf` path)
-            
-            -- Verify the naming convention
-            takeFileName stagingPath `shouldSatisfy` ("clod_20250325_" `isPrefixOf`)
-            
-            -- Verify tracking file was created
-            trackingFile <- doesFileExist (tmpDir </> ".clod" </> "last-temp-dir")
-            trackingFile `shouldBe` True
+-- | Tests for the effects-based API
+effectsApiSpec :: Spec
+effectsApiSpec = describe "Effects-based API" $ do
+  it "can process text files with capabilities" $ do
+    withSystemTempDirectory "clod-test" $ \tmpDir -> do
+      -- Create test files
+      createDirectoryIfMissing True (tmpDir </> "src")
+      System.IO.writeFile (tmpDir </> "src" </> "test.txt") "test content"
+      
+      -- Create a mock binary file (a small executable)
+      createDirectoryIfMissing True (tmpDir </> "bin")
+      System.IO.writeFile (tmpDir </> "bin" </> "testbin") "\x7F\x45\x4C\x46" -- ELF header magic
+      
+      -- Create test config
+      let config = ClodConfig {
+            projectPath = tmpDir,
+            stagingDir = tmpDir </> "staging",
+            configDir = tmpDir </> ".clod", 
+            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            timestamp = "20250325",
+            currentStaging = tmpDir </> "staging",
+            testMode = True,
+            ignorePatterns = []
+          }
+      
+      -- Create staging directory
+      createDirectoryIfMissing True (stagingDir config)
+      
+      -- Create capabilities
+      let readCap = fileReadCap [tmpDir]
+          writeCap = fileWriteCap [tmpDir, stagingDir config]
+      
+      -- Run test with effects
+      result <- runM . runError @ClodError . runReader config . runConsoleIO . runFileSystemIO $
+        processFileWithEffects readCap writeCap (tmpDir </> "src" </> "test.txt") "src/test.txt"
+      
+      -- Verify result
+      result `shouldSatisfy` isRight
+      case result of
+        Right Success -> do
+          -- Check if file was copied to staging
+          let destPath = tmpDir </> "staging" </> "test.txt"
+          exists <- doesFileExist destPath
+          exists `shouldBe` True
+          
+          -- Check content
+          content <- System.IO.readFile destPath
+          content `shouldBe` "test content"
+        _ -> expectationFailure "File processing didn't succeed"
   
-  describe "cleanupPreviousTempDir" $ do
-    it "cleans up previous temporary directory if it exists" $ do
-      withSystemTempDirectory "clod-test" $ \tmpDir -> do
-        -- Create a minimal config for testing
-        let config = ClodConfig {
-              projectPath = tmpDir,
-              stagingDir = "",
-              configDir = tmpDir </> ".clod", 
-              lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
-              timestamp = "20250325",
-              currentStaging = "",
-              testMode = True,
-              ignorePatterns = []
-            }
+  it "respects capability restrictions" $ do
+    withSystemTempDirectory "clod-test" $ \tmpDir -> do
+      -- Create test files
+      createDirectoryIfMissing True (tmpDir </> "src")
+      System.IO.writeFile (tmpDir </> "src" </> "test.txt") "test content"
+      createDirectoryIfMissing True (tmpDir </> "private")
+      System.IO.writeFile (tmpDir </> "private" </> "secret.txt") "secret data"
+      
+      -- Create test config
+      let config = ClodConfig {
+            projectPath = tmpDir,
+            stagingDir = tmpDir </> "staging",
+            configDir = tmpDir </> ".clod", 
+            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            timestamp = "20250325",
+            currentStaging = tmpDir </> "staging",
+            testMode = True,
+            ignorePatterns = []
+          }
+      
+      -- Create staging directory
+      createDirectoryIfMissing True (stagingDir config)
+      
+      -- Create limited capabilities (only src directory, not private)
+      let readCap = fileReadCap [tmpDir </> "src"]
+          writeCap = fileWriteCap [tmpDir </> "staging"]
+      
+      -- Try to access file outside allowed directory
+      result <- runM . runError @ClodError . runReader config . runConsoleIO . runFileSystemIO $
+        processFileWithEffects readCap writeCap (tmpDir </> "private" </> "secret.txt") "private/secret.txt"
+      
+      -- Should fail due to capability restriction
+      result `shouldSatisfy` isLeft
+      where
+        isLeft (Left _) = True
+        isLeft _ = False
+
+-- | Tests for runClodApp
+runClodAppSpec :: Spec
+runClodAppSpec = describe "runClodApp" $ do
+  it "initializes paths correctly" $ do
+    withSystemTempDirectory "clod-test" $ \tmpDir -> do
+      -- Create a git repo structure
+      createDirectoryIfMissing True (tmpDir </> ".git")
+      
+      -- Create a test config
+      let config = ClodConfig {
+            projectPath = tmpDir,
+            stagingDir = tmpDir </> "staging",
+            configDir = tmpDir </> ".clod", 
+            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            timestamp = "20250325",
+            currentStaging = tmpDir </> "staging",
+            testMode = True,
+            ignorePatterns = []
+          }
+          
+      -- Run initialization effect
+      result <- runClodApp config "" False False True
+      
+      -- Should succeed
+      result `shouldSatisfy` isRight
+      
+      -- Check if directories were created
+      stagingExists <- doesDirectoryExist (tmpDir </> "staging")
+      stagingExists `shouldBe` True
+      
+      configDirExists <- doesDirectoryExist (tmpDir </> ".clod")
+      configDirExists `shouldBe` True
+      
+  it "updates last run marker" $ do
+    withSystemTempDirectory "clod-test" $ \tmpDir -> do
+      -- Create a git repo structure
+      createDirectoryIfMissing True (tmpDir </> ".git")
+      createDirectoryIfMissing True (tmpDir </> ".clod")
+      
+      -- Create a test config
+      let config = ClodConfig {
+            projectPath = tmpDir,
+            stagingDir = tmpDir </> "staging",
+            configDir = tmpDir </> ".clod", 
+            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            timestamp = "20250325",
+            currentStaging = tmpDir </> "staging",
+            testMode = True,
+            ignorePatterns = []
+          }
+          
+      -- Run effects
+      result <- runClodApp config "" False False True
+      
+      -- Should succeed
+      result `shouldSatisfy` isRight
+      
+      -- Check if last run marker was created
+      markerExists <- doesFileExist (tmpDir </> ".clod" </> "last-run-marker")
+      markerExists `shouldBe` True
+      
+  it "properly honors capability restrictions" $ do
+    withSystemTempDirectory "clod-test" $ \tmpDir -> do
+      -- Create a git repo structure with a forbidden directory outside the repo
+      createDirectoryIfMissing True (tmpDir </> ".git")
+      let forbiddenDir = "/tmp/forbidden"  -- A directory outside our capability
+      
+      -- Create a test config
+      let config = ClodConfig {
+            projectPath = tmpDir,
+            stagingDir = tmpDir </> "staging",
+            configDir = tmpDir </> ".clod", 
+            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            timestamp = "20250325",
+            currentStaging = tmpDir </> "staging",
+            testMode = True,
+            ignorePatterns = []
+          }
+      
+      -- Test that our capability restricts access as expected
+      result <- runM . runError @ClodError . runReader config . runFileSystemIO $ do
+        -- Create capability that only allows access to the test directory
+        let readCap = fileReadCap [tmpDir]
         
-        -- Create the config directory
-        createDirectoryIfMissing True (configDir config)
-        
-        -- Create a previous temp directory to clean up
-        prevTempDir <- getCanonicalTemporaryDirectory
-        let prevDirPath = prevTempDir </> "clod_previous_test"
-        createDirectoryIfMissing True prevDirPath
-        writeFile (prevDirPath </> "test-file.txt") "test content"
-        
-        -- Write the tracking file
-        createDirectoryIfMissing True (tmpDir </> ".clod")
-        writeFile (tmpDir </> ".clod" </> "last-temp-dir") prevDirPath
-        
-        -- Verify the directory exists before cleanup
-        beforeExists <- doesDirectoryExist prevDirPath
-        beforeExists `shouldBe` True
-        
-        -- Call cleanupPreviousTempDir via ClodM monad
-        result <- runClodM $ cleanupPreviousTempDir config
-        case result of
-          Left err -> expectationFailure $ "Failed to clean up previous temp dir: " ++ show err
-          Right _ -> do
-            -- Verify the directory was removed
-            afterExists <- doesDirectoryExist prevDirPath
-            afterExists `shouldBe` False
+        -- Try to access a file outside our capability
+        safeFileExists readCap forbiddenDir
+      
+      -- Should fail with a permission error
+      case result of
+        Left _ -> return ()  -- Expected to fail
+        Right _ -> expectationFailure "Access was granted to a directory outside our capability"

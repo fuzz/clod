@@ -14,9 +14,11 @@ module Main where
 
 import Options.Applicative
 import System.Exit (exitFailure)
+import System.Directory (createDirectoryIfMissing, getCurrentDirectory)
+import System.FilePath ((</>))
 
-import Clod.Core (runClod)
-import Clod.Types (runClodM)
+import Clod.Core (runClodApp)
+import Clod.Types (ClodConfig(..))
 
 -- | Command line options for Clod
 data Options = Options
@@ -58,11 +60,35 @@ optionsParser = Options
 main :: IO ()
 main = do
   options <- execParser opts
-  result <- runClodM $ runClod 
+  
+  -- Create a minimal configuration for the effects system
+  currentDir <- getCurrentDirectory
+  let stagingDirPath = if null (optStagingDir options) 
+                    then currentDir </> ".clod" </> "staging"
+                    else optStagingDir options
+  
+  -- Create staging directory if it doesn't exist
+  createDirectoryIfMissing True stagingDirPath
+  
+  -- Create a basic config
+  let config = ClodConfig {
+        projectPath = currentDir,
+        stagingDir = stagingDirPath,
+        configDir = currentDir </> ".clod",
+        lastRunFile = currentDir </> ".clod" </> "last-run-marker",
+        timestamp = "",  -- Will be set internally
+        currentStaging = stagingDirPath,
+        testMode = optTestMode options,
+        ignorePatterns = []  -- Will be populated
+      }
+  
+  -- Run with effects system
+  result <- runClodApp config 
               (optStagingDir options)
               (optAllFiles options)
               (optModified options)
               (optTestMode options)
+  
   case result of
     Left err -> do
       putStrLn $ "Error: " ++ show err

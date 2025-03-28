@@ -7,6 +7,8 @@ Clod is a utility for preparing and uploading files to Claude AI's Project Knowl
 
 See [HUMAN.md](HUMAN.md) for a complete workflow guide to using `clod` with Claude AI.
 
+For information about the type-safe effects system and capability-based security model, see [EFFECTS.md](EFFECTS.md).
+
 ## Features
 
 - Track modified files since last run
@@ -16,6 +18,8 @@ See [HUMAN.md](HUMAN.md) for a complete workflow guide to using `clod` with Clau
 - Create optimized filenames for Claude's UI
 - Generate a path manifest for mapping optimized names back to original paths
 - Color-coded, user-friendly terminal interface
+- Capability-based security for file operations
+- Type-safe effects system to enhance code safety
 
 ## Installation
 
