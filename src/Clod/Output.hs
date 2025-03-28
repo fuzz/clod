@@ -114,16 +114,26 @@ promptYesNo prompt defaultYes = do
 showNextSteps :: ClodConfig  -- ^ Program configuration
               -> FilePath    -- ^ Path to the staging directory
               -> ClodM ()
-showNextSteps config _ = unless (testMode config) $ do
-  liftIO $ putStrLn ""
-  liftIO $ putStrLn "Next steps:"
-  liftIO $ putStrLn "1. Navigate to Project Knowledge in your Claude Project (Pro or Team account required)"
-  liftIO $ putStrLn "2. Drag files from the staging folder to Project Knowledge"
-  liftIO $ putStrLn "3. Don't forget _path_manifest.json which maps optimized names back to original paths"
-  liftIO $ putStrLn "4. Paste the contents of project-instructions.md into the Project Instructions section"
-  liftIO $ putStrLn "5. IMPORTANT: You must manually delete previous versions of these files from Project Knowledge"
-  liftIO $ putStrLn "   before starting a new conversation to ensure Claude uses the most recent files"
-  liftIO $ putStrLn "6. Start a new conversation to see changes"
-  liftIO $ putStrLn ""
-  liftIO $ putStrLn $ "Note: The staging directory is temporary"
-  liftIO $ putStrLn $ "      and will be cleaned up on your next run of clod (or system reboot)."
+showNextSteps config _ = unless (testMode config) $ 
+  mapM_ (liftIO . putStrLn) $ [""] ++ steps ++ [""] ++ notes
+  where
+    -- Numbered steps for Claude integration
+    steps = zipWith formatStep [1..] 
+      [ "Navigate to Project Knowledge in your Claude Project (Pro or Team account required)"
+      , "Drag files from the staging folder to Project Knowledge"
+      , "Don't forget _path_manifest.json which maps optimized names back to original paths"
+      , "Paste the contents of project-instructions.md into the Project Instructions section"
+      , "IMPORTANT: You must manually delete previous versions of these files from Project Knowledge\n   before starting a new conversation to ensure Claude uses the most recent files"
+      , "Start a new conversation to see changes"
+      ]
+      
+    -- Notes about staging directory
+    notes = 
+      [ "Note: The staging directory is temporary"
+      , "      and will be cleaned up on your next run of clod (or system reboot)."
+      ]
+      
+    -- Helper function to format numbered steps
+    formatStep :: Int -> String -> String
+    formatStep 1 text = "Next steps:\n1. " ++ text
+    formatStep n text = show n ++ ". " ++ text

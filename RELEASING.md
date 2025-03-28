@@ -60,10 +60,14 @@ Before releasing, ensure you have:
    ```
 
 10. **Upload to Hackage**
-   ```
-   cabal upload --publish dist-newstyle/sdist/clod-X.Y.Z.tar.gz
-   cabal upload --publish --documentation dist-newstyle/...
-   ```
+    ```
+    # Option 1: Use the release script
+    ./bin/release-to-hackage.sh
+    
+    # Option 2: Upload manually
+    cabal upload --publish dist-newstyle/sdist/clod-X.Y.Z.tar.gz
+    cabal upload --documentation --publish dist-newstyle/clod-X.Y.Z-docs.tar.gz
+    ```
 
 11. **Prepare for Next Development Cycle**
    - Update version in `clod.cabal` to next development version (X.Y.Z-dev)

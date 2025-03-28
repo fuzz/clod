@@ -18,6 +18,7 @@ import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (callProcess)
 import Control.Exception (try, SomeException)
+import qualified Data.List as L
 
 import Clod.Git
 import Clod.Types
@@ -58,7 +59,8 @@ spec = do
             writeFile (tmpDir </> "untracked.txt") "untracked content"
             
             -- Get untracked files via ClodM monad
-            untrackedEither <- runClodM $ getGitNewFiles tmpDir
+            untrackedEither <- runClodM $ getUntrackedFiles tmpDir
             case untrackedEither of
               Left err -> expectationFailure $ "Failed to get untracked files: " ++ show err
-              Right untracked -> untracked `shouldContain` ["untracked.txt"]
+              -- The full path is returned, so check that the file name is part of the path
+              Right untracked -> any (\p -> "untracked.txt" `L.isSuffixOf` p) untracked `shouldBe` True

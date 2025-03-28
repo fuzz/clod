@@ -1,6 +1,6 @@
 # Project Instructions
 *These instructions should be pasted into the Project Instructions section of your Claude Project.*
-*If you're a human reader trying to understand these instructions, please refer to the README.md file for more detailed explanations*
+*If you're a human reader trying to understand these instructions, please refer to the HUMAN.md file for more detailed explanations*
 
 ## Overview
 

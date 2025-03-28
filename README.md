@@ -3,7 +3,7 @@
 [![Hackage](https://img.shields.io/hackage/v/clod.svg)](https://hackage.haskell.org/package/clod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Clod is a utility for preparing and uploading files to Claude AI's Project Knowledge feature. It tracks file changes, respects `.gitignore` and `.clodignore` patterns, and optimizes filenames for Claude's UI.
+Clod is a utility for preparing and uploading files to Claude AI's Project Knowledge feature. It tracks file changes, respects `.gitignore` and `.clodignore` patterns, and optimizes filenames for Claude's UI. By efficiently handling file selection and staging, it can significantly reduce AI development costs by 50% or more.
 
 See [HUMAN.md](HUMAN.md) for a complete workflow guide to using `clod` with Claude AI.
 
@@ -12,6 +12,7 @@ See [HUMAN.md](HUMAN.md) for a complete workflow guide to using `clod` with Clau
 - Track modified files since last run
 - Respect `.gitignore` and `.clodignore` patterns
 - Handle binary vs. text files automatically
+- Use system temporary directories for staging files
 - Create optimized filenames for Claude's UI
 - Generate a path manifest for mapping optimized names back to original paths
 - Color-coded, user-friendly terminal interface
@@ -35,8 +36,17 @@ cabal install
 ### Prerequisites
 
 - GHC (Glasgow Haskell Compiler) 9.0 or newer
-- Git (required for repository operations)
-- macOS (primary platform, other platforms supported with limitations)
+- libgit2 (required for Git operations)
+  - On macOS: `brew install libgit2`
+  - On Linux: `apt-get install libgit2-dev` or equivalent for your distribution
+  - On Windows: Install from source or use package manager
+
+**Note:** While clod is designed to be cross-platform, it has primarily been tested on macOS. The tool uses the `open` command to display the staging directory, which is natively available on macOS. Users on other platforms may need to:
+
+* Create an `open` command or alias that opens a file browser for a given directory path
+* Use the displayed staging directory path to manually open the files
+
+Pull requests for improved cross-platform support are welcome.
 
 ## Usage
 
@@ -49,16 +59,16 @@ clod
 # Process all files (respecting .gitignore and .clodignore)
 clod --all
 
-# Specify a custom staging directory
-clod --staging-dir /path/to/staging
+# Run in test mode with an optional test directory
+clod --test
 ```
 
 ### Command-Line Options
 
 - `--all`: Process all files, not just modified ones
 - `--modified`: Process only modified files (default)
-- `--staging-dir DIR`: Specify a custom staging directory
 - `--test`: Run in test mode (no prompts, useful for CI)
+- `--staging-dir DIR`: Specify a directory for test mode (only used with --test)
 - `--help`: Show help information
 - `--version`: Show version information
 
@@ -66,7 +76,7 @@ clod --staging-dir /path/to/staging
 
 On first run, Clod will:
 
-1. Ask for a staging directory (defaults to `~/Claude`)
+1. Create a system temporary directory for staging files
 2. Create a default `.clodignore` file if one doesn't exist
 3. Prompt you to choose which files to process:
    - All files
@@ -78,12 +88,26 @@ On first run, Clod will:
 After running Clod:
 
 1. Navigate to Project Knowledge in your Claude Project (Pro or Team account required)
-2. Drag files from the staging folder to Project Knowledge
+2. Drag files from the opened staging folder to Project Knowledge
 3. Include the `_path_manifest.json` file which maps optimized names back to original paths
 4. Paste the contents of `project-instructions.md` into the Project Instructions section
 5. **Important**: You must manually delete previous versions of these files from Project Knowledge before starting a new conversation to ensure Claude uses the most recent files
+6. Note that the staging directory is temporary and will be cleaned up on your next run of clod (or system reboot)
 
 ## Configuration
+
+### Environment Variables
+
+You can customize Clod's behavior using these environment variables:
+
+- `CLOD_DIR` - Override the default `.clod` directory name
+- `CLODIGNORE` - Override the default `.clodignore` filename
+
+Example:
+```bash
+# Use custom locations 
+CLOD_DIR=.config/clod CLODIGNORE=.config/clod/ignore clod
+```
 
 ### .clodignore
 
@@ -128,12 +152,21 @@ yarn.lock
 
 - `app/`: Application entry point
 - `src/`: Source code modules
+  - `Clod/Config.hs`: Environment and configuration handling
   - `Clod/Core.hs`: Main functionality
-  - `Clod/FileSystem.hs`: File operations
-  - `Clod/Git.hs`: Git integration
+  - `Clod/FileSystem.hs`: File operations facade
+    - `Clod/FileSystem/Detection.hs`: File type detection
+    - `Clod/FileSystem/Operations.hs`: Basic file operations
+    - `Clod/FileSystem/Processing.hs`: File processing and manifest generation
+    - `Clod/FileSystem/Transformations.hs`: Special file format transformations
+  - `Clod/Git.hs`: Git integration facade
+    - `Clod/Git/Repository.hs`: Repository operations
+    - `Clod/Git/Status.hs`: Status checking operations
+    - `Clod/Git/Internal.hs`: Internal file processing functions
+    - `Clod/Git/LibGit.hs`: libgit2 integration using hlibgit2
   - `Clod/IgnorePatterns.hs`: Pattern matching
   - `Clod/Output.hs`: User interface
-  - `Clod/Types.hs`: Core types
+  - `Clod/Types.hs`: Core types and monad stack
 - `test/`: Test suite
 - `.clod/`: Configuration and state (created during execution)
 

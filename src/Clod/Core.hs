@@ -56,59 +56,76 @@ import Data.Maybe (isJust)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import System.Directory
+import System.Environment (getExecutablePath)
 import System.FilePath
 import System.IO (hFlush, stdout)
 import System.IO.Temp (createTempDirectory, getCanonicalTemporaryDirectory)
-import System.Process (callProcess, readProcess)
+import System.Process (callProcess)
+import Data.List (isSuffixOf)
+import Data.Version (showVersion)
 
 import Clod.Types
 import Clod.Output
 import Clod.Git
 import Clod.IgnorePatterns
+import Clod.Config (clodIgnoreFile, clodConfigDir)
+import qualified Paths_clod as Meta
 
 -- | Path to store the last temporary directory location
 lastTempDirFile :: ClodConfig -> FilePath
 lastTempDirFile config = configDir config </> "last-temp-dir"
 
--- | Default content for .clodignore file
-defaultClodIgnoreContent :: String
-defaultClodIgnoreContent = unlines
-  [ "# Default .clodignore file for Claude uploader"
-  , "# Add patterns to ignore files when uploading to Claude"
-  , ""
-  , "# Binary and media files"
-  , "*.dll"
-  , "*.dylib"
-  , "*.exe"
-  , "*.gif"
-  , "*.ico"
-  , "*.jar"
-  , "*.jpg"
-  , "*.jpeg"
-  , "*.mp3"
-  , "*.mp4"
-  , "*.png"
-  , "*.so"
-  , "*.svg"
-  , "*.tar.gz"
-  , "*.zip"
-  , ""
-  , "# Build directories"
-  , ".clod"
-  , ".git"
-  , "build"
-  , "dist"
-  , "node_modules"
-  , "out"
-  , "target"
-  , ""
-  , "# Large files and lock files"
-  , "*.log"
-  , "Cargo.lock"
-  , "package-lock.json"
-  , "pnpm-lock.yaml"
-  , "yarn.lock"
-  ]
+-- | Load default content for .clodignore file from resources
+loadDefaultClodIgnoreContent :: IO String
+loadDefaultClodIgnoreContent = do
+  -- Try to find the resource file in various locations
+  execPath <- getExecutablePath
+  let execDir = takeDirectory execPath
+      
+      -- Potential locations for the resource file
+      possiblePaths = [
+          "resources/default_clodignore",                     -- Current working directory
+          execDir </> "resources/default_clodignore",         -- Executable directory
+          execDir </> "../resources/default_clodignore",      -- One level up from executable
+          execDir </> "../share/clod/default_clodignore",     -- Typical Linux package install location
+          "/usr/local/share/clod/default_clodignore",         -- Standard location for system-wide resources
+          "/usr/share/clod/default_clodignore"                -- Alternative location
+        ]
+  
+  -- Try each path until we find one that exists
+  findExistingFile possiblePaths
+  
+  where
+    findExistingFile :: [FilePath] -> IO String
+    findExistingFile [] = return defaultFallbackContent  -- Fallback if no file is found
+    findExistingFile (p:ps) = do
+      exists <- doesFileExist p
+      if exists
+        then readFile p
+        else findExistingFile ps
+        
+    -- Minimal fallback content in case the resource file is not found
+    defaultFallbackContent = unlines [
+        "# Default .clodignore file for Claude uploader",
+        "# Add patterns to ignore files when uploading to Claude",
+        "",
+        "# Build directories",
+        ".clod",
+        ".git",
+        "build",
+        "dist",
+        "node_modules",
+        "",
+        "# Binary and media files",
+        "*.exe",
+        "*.dll",
+        "*.so",
+        "*.dylib",
+        "*.zip",
+        "*.tar.gz",
+        "*.jpg",
+        "*.png"
+      ]
 
 -- | Main entry point for the Clod application
 --
@@ -117,33 +134,32 @@ defaultClodIgnoreContent = unlines
 -- 
 -- 1. Verifies requirements (git installed, macOS or compatible platform)
 -- 2. Finds the git repository root
--- 3. Initializes configuration (creating directories as needed)
+-- 3. Initializes configuration with temporary directory support
 -- 4. Sets up or reads .clodignore and .gitignore patterns
 -- 5. Processes files based on command options
 -- 6. Generates the path manifest
 -- 7. Shows next steps for integrating with Claude
 --
 -- @
--- -- Process only modified files with default staging directory
+-- -- Process only modified files
 -- runClodM $ runClod "" False True False
 --
--- -- Process all files with custom staging directory
--- runClodM $ runClod "/path/to/staging" True False False
+-- -- Process all files
+-- runClodM $ runClod "" True False False
 --
--- -- Run in test mode
+-- -- Run in test mode (with possible test directory override)
 -- runClodM $ runClod "" False False True
 -- @
-runClod :: FilePath  -- ^ Custom staging directory (empty for default)
+runClod :: FilePath  -- ^ Test mode staging directory (only used in test mode)
         -> Bool      -- ^ Whether to process all files
         -> Bool      -- ^ Whether to process only modified files
         -> Bool      -- ^ Whether to run in test mode
         -> ClodM ()
 runClod stagingDirArg allFiles modifiedFiles testModeArg = do
-  -- Print version information
-  liftIO $ putStrLn "clod version 1.0.0 (Haskell)"
+  -- Print version information from cabal file using auto-generated Paths_clod module
+  liftIO $ putStrLn $ "clod version " ++ showVersion Meta.version ++ " (Haskell)"
   
-  -- Check platform and dependencies
-  platform <- checkPlatform
+  -- Check dependencies
   ensureGitInstalled
   
   -- Change to git repository root
@@ -169,17 +185,9 @@ runClod stagingDirArg allFiles modifiedFiles testModeArg = do
   
   -- Process files and finalize  
   (fileCount, skippedCount) <- processAppropriateFiles config' manifestPath allFiles modifiedFiles
-  finalizeManifest manifestPath config' fileCount skippedCount platform
+  finalizeManifest manifestPath config' fileCount skippedCount ""
   
   where
-    -- Check platform compatibility
-    checkPlatform :: ClodM String
-    checkPlatform = do
-      platform <- liftIO $ readProcess "uname" ["-s"] ""
-      when (platform /= "Darwin\n") $ do
-        printWarning $ "clod is primarily designed for macOS. Some features may not work on " ++ platform
-        printWarning "Claude's filesystem access is currently only available on macOS and Windows desktop applications."
-      return platform
       
     -- Ensure git is installed
     ensureGitInstalled :: ClodM ()
@@ -190,25 +198,38 @@ runClod stagingDirArg allFiles modifiedFiles testModeArg = do
     -- Setup and load ignore patterns
     setupIgnorePatterns :: FilePath -> ClodConfig -> ClodM ClodConfig
     setupIgnorePatterns rootPath config = do
-      let clodIgnorePath = rootPath </> ".clodignore"
+      ignoreFileName <- liftIO clodIgnoreFile
+      let clodIgnorePath = rootPath </> ignoreFileName
       
       -- Create .clodignore if it doesn't exist
       clodIgnoreExists <- liftIO $ doesFileExist clodIgnorePath
       unless clodIgnoreExists $ do
-        liftIO $ putStrLn "Creating default .clodignore file..."
-        liftIO $ writeFile clodIgnorePath defaultClodIgnoreContent
+        liftIO $ putStrLn $ "Creating default " ++ ignoreFileName ++ " file..."
+        defaultContent <- liftIO loadDefaultClodIgnoreContent
+        liftIO $ writeFile clodIgnorePath defaultContent
       
       -- Read patterns
       clodPatterns <- readClodIgnore rootPath
       unless (null clodPatterns) $
         liftIO $ putStrLn $ "Found .clodignore with " ++ show (length clodPatterns) ++ " patterns"
-        
-      gitPatterns <- readGitIgnore rootPath
-      unless (null gitPatterns) $
-        liftIO $ putStrLn $ "Found .gitignore with " ++ show (length gitPatterns) ++ " patterns"
       
-      -- Combine patterns and return updated config
-      return $ config { ignorePatterns = clodPatterns ++ gitPatterns }
+      -- Read root .gitignore
+      rootGitPatterns <- readGitIgnore rootPath
+      unless (null rootGitPatterns) $
+        liftIO $ putStrLn $ "Found .gitignore with " ++ show (length rootGitPatterns) ++ " patterns"
+      
+      -- Read nested .gitignore files from subdirectories
+      nestedGitPatterns <- readNestedGitIgnores rootPath
+      let (inclusion, negation) = categorizePatterns nestedGitPatterns
+      unless (null nestedGitPatterns) $
+        liftIO $ putStrLn $ "Found " ++ show (length nestedGitPatterns) ++ " patterns in nested .gitignore files"
+        ++ " (" ++ show (length inclusion) ++ " inclusions, " ++ show (length negation) ++ " negations)"
+      
+      -- Combine patterns (order matters - later patterns take precedence)
+      let allPatterns = clodPatterns ++ rootGitPatterns ++ nestedGitPatterns
+      
+      -- Return updated config
+      return $ config { ignorePatterns = allPatterns }
       
     -- Process appropriate files based on options and state
     processAppropriateFiles :: ClodConfig -> FilePath -> Bool -> Bool -> ClodM (Int, Int)
@@ -232,7 +253,7 @@ runClod stagingDirArg allFiles modifiedFiles testModeArg = do
           
     -- Finalize manifest and show results
     finalizeManifest :: FilePath -> ClodConfig -> Int -> Int -> String -> ClodM ()
-    finalizeManifest manifestPath config fileCount skippedCount platform = do
+    finalizeManifest manifestPath config fileCount skippedCount _ = do
       -- Close the path manifest JSON
       liftIO $ appendFile manifestPath "\n}"
       
@@ -248,9 +269,9 @@ runClod stagingDirArg allFiles modifiedFiles testModeArg = do
         else do
           -- Open the staging directory (skip in test mode)
           unless (testMode config) $ do
-            liftIO $ case platform of
-              "Darwin\n" -> callProcess "open" [currentStaging config]
-              _          -> putStrLn $ "Staging directory: " ++ currentStaging config
+            -- This uses 'open' command which is available on macOS
+            -- Other platforms may need to configure alternatives
+            liftIO $ callProcess "open" [currentStaging config]
           
           liftIO $ putStrLn $ "Success! " ++ show fileCount ++ 
                               " files prepared for upload. Skipped: " ++ show skippedCount
@@ -303,6 +324,15 @@ createTempStagingDir config = do
   return stagingPath
 
 -- | Initialize configuration for the application with temporary directory support
+--
+-- This function initializes the configuration for Clod by:
+-- 
+-- 1. Creating a timestamped configuration
+-- 2. Setting up the .clod directory for configuration files
+-- 3. Cleaning up any previous temporary directories
+-- 4. Creating a new temporary staging directory for the current run
+--
+-- In test mode, it can use a specified directory instead of a temporary one.
 initializeTempConfig :: FilePath -> FilePath -> Bool -> ClodM ClodConfig
 initializeTempConfig rootPath stagingDirArg testModeArg = do
   -- Initialize configuration with temporary directory support
@@ -311,9 +341,9 @@ initializeTempConfig rootPath stagingDirArg testModeArg = do
   now <- liftIO getCurrentTime
   let timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" now
   
-  -- Config files - store in the git repo under .clod
-  let configDir = rootPath </> ".clod"
-      lastRunFile = configDir </> "last-run-marker"
+  -- Config files - store in the git repo under configured directory
+  configDir <- liftIO $ clodConfigDir rootPath
+  let lastRunFile = configDir </> "last-run-marker"
   
   -- Create config directory if it doesn't exist
   liftIO $ createDirectoryIfMissing True configDir
@@ -357,10 +387,12 @@ initializeConfig :: FilePath -> FilePath -> Bool -> ClodM ClodConfig
 initializeConfig rootPath stagingDirArg testModeArg =
   initializeTempConfig rootPath stagingDirArg testModeArg
 
--- | Create the staging directory structure
+-- | Return the staging directory path
 -- 
--- This function is kept for backward compatibility with tests and other modules
--- but returns the stagingDir directly since we're now using temporary directories
+-- This function is kept for backward compatibility with tests and other modules.
+-- Unlike the previous implementation that would create a directory structure,
+-- this now simply returns the path to the temporary staging directory that was
+-- already created during initialization.
 createStagingDir :: ClodConfig -> ClodM FilePath
 createStagingDir config = return (stagingDir config)
 
