@@ -51,7 +51,8 @@ extra-source-files:
   LICENSE,
   resources/default_clodignore,
   bin/generate-man-pages.sh,
-  bin/install-man-pages.sh
+  bin/cld,
+  Formula/clod.rb.template
   
 extra-doc-files:
   CHANGELOG.md
@@ -139,6 +140,8 @@ executable clod
                     , TypeApplications
                     , RecordWildCards
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  
+
 
 test-suite clod-test
   type: exitcode-stdio-1.0

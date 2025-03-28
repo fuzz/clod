@@ -39,18 +39,15 @@ cabal install
 
 For detailed installation instructions, including how to install man pages, see [INSTALLING.md](INSTALLING.md).
 
-After installing, run the provided script to install the man pages to your user directory:
-
+Man pages are automatically installed when using package managers like Homebrew:
 ```bash
-# Clone the repository 
-git clone https://github.com/fuzz/clod.git
-cd clod
-
-# Install the man pages
-./bin/install-man-pages.sh
+# On macOS
+brew install fuzz/tap/clod
 ```
 
-This will make the documentation accessible via `man clod`.
+When installing from Hackage, the man pages are included in the package.
+
+When you install clod with `cabal install`, both the main `clod` program and the `cld` wrapper are installed automatically. The wrapper automatically opens the staging directory in your file browser after running clod.
 
 ### Prerequisites
 
@@ -60,10 +57,12 @@ This will make the documentation accessible via `man clod`.
   - On Linux: `apt-get install libgit2-dev` or equivalent for your distribution
   - On Windows: Install from source or use package manager
 
-**Note:** While clod is designed to be cross-platform, it has primarily been tested on macOS. The tool uses the `open` command to display the staging directory, which is natively available on macOS. Users on other platforms may need to:
+**Cross-Platform Support:** Clod works on macOS, Linux, and Windows. A wrapper script (`clod-open`) is included for opening the staging directory automatically in the appropriate file browser for each platform. Additionally, the `--print-path` option makes it easy to use clod with any command that accepts a directory path.
 
-* Create an `open` command or alias that opens a file browser for a given directory path
-* Use the displayed staging directory path to manually open the files
+Supported file browsers:
+* macOS: `open`
+* Linux: `xdg-open`, `gio`, `gnome-open`, or `kde-open`
+* Windows: `explorer.exe`
 
 Pull requests for improved cross-platform support are welcome.
 
@@ -80,16 +79,39 @@ clod --all
 
 # Run in test mode with an optional test directory
 clod --test
+
+# Use the wrapper to process files and automatically open the staging directory
+cld
 ```
 
 ### Command-Line Options
 
-- `--all`: Process all files, not just modified ones
-- `--modified`: Process only modified files (default)
-- `--test`: Run in test mode (no prompts, useful for CI)
-- `--staging-dir DIR`: Specify a directory for test mode (only used with --test)
+- `--all`, `-a`: Process all files, not just modified ones
+- `--modified`, `-m`: Process only modified files (default)
+- `--test`, `-t`: Run in test mode (no prompts, useful for CI)
+- `--staging-dir DIR`, `-d DIR`: Specify a directory for test mode (only used with --test)
+- `--verbose`, `-v`: Enable verbose output
 - `--help`: Show help information
 - `--version`: Show version information
+
+### Wrapper Executable: `cld`
+
+Clod comes with a wrapper executable that runs clod and automatically opens the staging directory:
+
+```bash
+# Process files and open the directory in your system's file browser
+cld [all regular clod options]
+
+# Process files without opening the directory
+cld --no-open [all regular clod options]
+```
+
+The wrapper automatically detects your platform and uses the appropriate command to open the staging directory:
+- macOS: `open`
+- Linux: `xdg-open`, `gio`, `gnome-open`, or `kde-open`
+- Windows: `explorer.exe`
+
+When you install clod with `cabal install`, both the main program and the wrapper executable are installed automatically.
 
 ### First Run
 

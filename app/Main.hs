@@ -23,11 +23,11 @@ import Clod.Types (ClodConfig(..))
 
 -- | Command line options for Clod
 data Options = Options
-  { optStagingDir :: String   -- ^ Directory where files will be staged (test mode only)
-  , optAllFiles   :: Bool     -- ^ Import all files
-  , optModified   :: Bool     -- ^ Import only modified files
-  , optTestMode   :: Bool     -- ^ Run in test mode
-  , optVerbose    :: Bool     -- ^ Enable verbose output
+  { optStagingDir  :: String   -- ^ Directory where files will be staged (test mode only)
+  , optAllFiles    :: Bool     -- ^ Import all files
+  , optModified    :: Bool     -- ^ Import only modified files
+  , optTestMode    :: Bool     -- ^ Run in test mode
+  , optVerbose     :: Bool     -- ^ Enable verbose output
   } deriving (Show)
 
 -- | Parser for command line options
@@ -77,34 +77,35 @@ main = do
                     then configDir </> "staging"
                     else optStagingDir options
   
-  -- Create staging directory if it doesn't exist
-  createDirectoryIfMissing True stagingDirPath
-  createDirectoryIfMissing True configDir
-  
-  -- Create a basic config
-  let config = ClodConfig {
-        projectPath = currentDir,
-        stagingDir = stagingDirPath,
-        configDir = configDir,
-        lastRunFile = configDir </> "last-run-marker",
-        timestamp = "",  -- Will be set internally
-        currentStaging = stagingDirPath,
-        testMode = optTestMode options,
-        ignorePatterns = []  -- Will be populated
-      }
-  
-  -- Run with effects system
-  result <- runClodApp config 
-              (optStagingDir options)
-              (optAllFiles options)
-              (optModified options)
-              (optTestMode options)
-  
-  case result of
-    Left err -> do
-      putStrLn $ "Error: " ++ show err
-      exitFailure
-    Right _ -> return ()
+  do
+      -- Create staging directory if it doesn't exist
+      createDirectoryIfMissing True stagingDirPath
+      createDirectoryIfMissing True configDir
+      
+      -- Create a basic config
+      let config = ClodConfig {
+            projectPath = currentDir,
+            stagingDir = stagingDirPath,
+            configDir = configDir,
+            lastRunFile = configDir </> "last-run-marker",
+            timestamp = "",  -- Will be set internally
+            currentStaging = stagingDirPath,
+            testMode = optTestMode options,
+            ignorePatterns = []  -- Will be populated
+          }
+      
+      -- Run with effects system
+      result <- runClodApp config 
+                  (optStagingDir options)
+                  (optAllFiles options)
+                  (optModified options)
+                  (optTestMode options)
+      
+      case result of
+        Left err -> do
+          putStrLn $ "Error: " ++ show err
+          exitFailure
+        Right _ -> return ()
   where
     opts = info (optionsParser <**> helper)
       ( fullDesc

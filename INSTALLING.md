@@ -14,53 +14,30 @@ Clod includes comprehensive documentation as man pages:
 - `clod(7)`: Project instructions and safeguards
 - `clod(8)`: Complete workflow guide for using clod with Claude AI
 
-### Automatic Installation
+### Installation
 
-After installing clod, you can easily install the man pages:
+When installing clod through a package manager or Hackage, the man pages are automatically installed to the system's standard man page location:
 
-```bash
-# Clone the repository if you haven't already
-git clone https://github.com/fuzz/clod.git
-cd clod
+- **Homebrew**: Man pages are installed to `/opt/homebrew/share/man/` (or equivalent)
+- **Hackage/Cabal**: Man pages are included in the standard package installation
 
-# Generate and install man pages
-./bin/install-man-pages.sh
-```
+No additional configuration is required to use these man pages - they're automatically accessible through the `man` command.
 
-The script will:
-1. Generate the man pages
-2. Install them to `~/.config/clod/man` (using XDG config directory specification)
-3. Detect your shell and provide instructions for adding this location to your `MANPATH` 
-4. Explain how to view the man pages
+## Using the Wrapper
 
-### Manual Installation
-
-If you prefer, you can install the man pages manually:
+Clod includes a wrapper executable (`cld`) that runs clod and automatically opens the staging directory in your file browser. When you install clod with `cabal install`, both the main program and the wrapper are installed automatically.
 
 ```bash
-# Generate the man pages
-cd path/to/clod/repo
-./bin/generate-man-pages.sh
+# Use the wrapper to run clod and automatically open the staging directory
+cld [options]
 
-# Create directories
-mkdir -p ~/.config/clod/man/man1
-mkdir -p ~/.config/clod/man/man7
-mkdir -p ~/.config/clod/man/man8
-
-# Copy the man pages
-cp man/clod.1 ~/.config/clod/man/man1/
-cp man/clod.7 ~/.config/clod/man/man7/
-cp man/clod.8 ~/.config/clod/man/man8/
-
-# Add to your shell configuration (choose based on your shell)
-echo 'export MANPATH=$MANPATH:~/.config/clod/man' >> ~/.bashrc  # For bash
-echo 'export MANPATH=$MANPATH:~/.config/clod/man' >> ~/.zshrc   # For zsh
-echo 'set -x MANPATH $MANPATH ~/.config/clod/man' >> ~/.config/fish/config.fish  # For fish
+# Run the wrapper without opening the staging directory
+cld --no-open [options]
 ```
 
 ## Viewing Man Pages
 
-After installation and updating your `MANPATH`, you can view the man pages with:
+After installation, you can view the man pages with:
 
 ```bash
 man 1 clod  # Command reference
@@ -72,12 +49,6 @@ Or simply:
 
 ```bash
 man clod  # Shows the main command reference (section 1)
-```
-
-If you haven't updated your `MANPATH`, you can still view the man pages using the full path:
-
-```bash
-man -M ~/.config/clod/man 1 clod
 ```
 
 ## Prerequisites

@@ -31,12 +31,12 @@ cabal build --disable-documentation
 # 6. Create tag
 echo "=== Creating Git tag ==="
 echo "Do you want to create git tag v$VERSION? [y/N]"
-read response
+read -r response
 if [[ "$response" =~ ^[Yy] ]]; then
   git tag -a "v$VERSION" -m "Release version $VERSION"
   
   echo "Do you want to push the tag to origin? [y/N]"
-  read push_response
+  read -r push_response
   if [[ "$push_response" =~ ^[Yy] ]]; then
     git push origin "v$VERSION"
   fi

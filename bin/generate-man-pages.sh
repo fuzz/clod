@@ -114,14 +114,14 @@ This man page contains guidance on how to structure project instructions for Cla
 and implement safeguards when using clod with Claude AI's Project Knowledge feature.
 EOF
 
-# Append project-instructions.md content
-echo "# PROJECT INSTRUCTIONS" >> "$PROJECT_ROOT/man/clod.7.md"
-cat "$PROJECT_ROOT/project-instructions.md" >> "$PROJECT_ROOT/man/clod.7.md"
-
-# Append guardrails.md content
-echo "" >> "$PROJECT_ROOT/man/clod.7.md"
-echo "# SAFEGUARDS" >> "$PROJECT_ROOT/man/clod.7.md"
-cat "$PROJECT_ROOT/guardrails.md" >> "$PROJECT_ROOT/man/clod.7.md"
+# Append project-instructions.md and guardrails.md content
+{
+  echo "# PROJECT INSTRUCTIONS"
+  cat "$PROJECT_ROOT/project-instructions.md"
+  echo ""
+  echo "# SAFEGUARDS"
+  cat "$PROJECT_ROOT/guardrails.md"
+} >> "$PROJECT_ROOT/man/clod.7.md"
 
 # Generate man page from combined markdown
 pandoc -s -t man "$PROJECT_ROOT/man/clod.7.md" -o "$PROJECT_ROOT/man/clod.7"

@@ -131,3 +131,6 @@ effectsBasedMain stagingDirArg = do
   
   -- Update the last run marker to track when clod was last run
   embed $ System.IO.writeFile (lastRunFile config) ""
+  
+  -- Print staging directory for easier integration with other tools
+  logInfo $ "Files staged in: " ++ stagingDir config

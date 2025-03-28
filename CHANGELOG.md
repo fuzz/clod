@@ -20,3 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Path-restricted file operations to prevent unauthorized access
 - Nested .gitignore file support
 - Pattern caching for performance improvements
+- Comprehensive man pages (clod.1, clod.7, clod.8) installed to standard system locations
+- Shell script wrapper (`cld`) with cross-platform file browser integration
+- Homebrew formula template for macOS distribution

@@ -1,0 +1,102 @@
+#!/bin/bash
+# Wrapper script for clod that automatically opens the staging directory
+
+# Exit on error
+set -e
+
+# Get clod's path - try to find it in several common locations
+find_clod() {
+  # Check if in PATH
+  which clod 2>/dev/null && return
+
+  # Common installation directories
+  for dir in "/usr/local/bin" "/usr/bin" "$HOME/.cabal/bin" "$HOME/.local/bin"; do
+    if [ -x "$dir/clod" ]; then
+      echo "$dir/clod"
+      return
+    fi
+  done
+
+  # If we can't find it, try the current directory 
+  if [ -x "./dist-newstyle/build/aarch64-osx/ghc-9.4.8/clod-0.1.0/x/clod/build/clod/clod" ]; then
+    echo "./dist-newstyle/build/aarch64-osx/ghc-9.4.8/clod-0.1.0/x/clod/build/clod/clod"
+    return
+  fi
+
+  # Not found
+  echo "Error: Could not find clod binary. Please make sure it's installed and in your PATH." >&2
+  exit 1
+}
+
+# Use all passed arguments, but remove --open if present
+ARGS=()
+OPEN=true
+for arg in "$@"; do
+  if [ "$arg" == "--no-open" ]; then
+    OPEN=false
+    continue
+  else
+    ARGS+=("$arg")
+  fi
+done
+
+# Find the clod binary
+CLOD_PATH=$(find_clod)
+
+# Run clod with arguments and capture the output
+CLOD_OUTPUT=$($CLOD_PATH "${ARGS[@]}")
+CLOD_EXIT=$?
+
+# Determine staging directory - Extract path from "Files staged in: " message
+STAGING_PATH=$(echo "$CLOD_OUTPUT" | grep "Files staged in:" | sed 's/Files staged in: //')
+
+# If we couldn't find a staging path in the output, display an error
+if [ -z "$STAGING_PATH" ]; then
+  echo "Error: Could not determine staging directory path." >&2
+  echo "The command was executed, but automatic file browser opening is not available." >&2
+  OPEN=false
+fi
+
+# If the command was successful and --open wasn't disabled, open the staging directory
+if [ $CLOD_EXIT -eq 0 ] && [ "$OPEN" = true ]; then
+  # Check if we need to create the directory
+  if [ ! -d "$STAGING_PATH" ]; then
+    mkdir -p "$STAGING_PATH"
+  fi
+
+  # Detect platform and use appropriate open command
+  case "$(uname -s)" in
+    Darwin)
+      # macOS
+      open "$STAGING_PATH"
+      ;;
+    Linux)
+      # Linux
+      if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$STAGING_PATH" &
+      elif command -v gio >/dev/null 2>&1; then
+        gio open "$STAGING_PATH" &
+      elif command -v gnome-open >/dev/null 2>&1; then
+        gnome-open "$STAGING_PATH" &
+      elif command -v kde-open >/dev/null 2>&1; then
+        kde-open "$STAGING_PATH" &
+      else
+        echo "Warning: Could not detect a file browser. Files are in: $STAGING_PATH" >&2
+      fi
+      ;;
+    CYGWIN*|MINGW*|MSYS*)
+      # Windows
+      explorer.exe "$(cygpath -w "$STAGING_PATH")" &
+      ;;
+    *)
+      # Unknown OS
+      echo "Warning: Unknown operating system. Files are in: $STAGING_PATH" >&2
+      ;;
+  esac
+fi
+
+# Print the clod output
+echo "$CLOD_OUTPUT"
+
+# Exit with the same code as clod
+exit $CLOD_EXIT
