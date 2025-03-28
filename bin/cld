@@ -47,14 +47,9 @@ CLOD_PATH=$(find_clod)
 CLOD_OUTPUT=$($CLOD_PATH "${ARGS[@]}")
 CLOD_EXIT=$?
 
-# Get the clean path - handle both new format (just path) and old format (with "Files staged in:")
-if echo "$CLOD_OUTPUT" | grep -q "Files staged in:"; then
-  # Old format with prefix
-  STAGING_PATH=$(echo "$CLOD_OUTPUT" | grep "Files staged in:" | sed 's/Files staged in: //')
-else
-  # New format with just the path (cleans any extra whitespace/newlines)
-  STAGING_PATH=$(echo "$CLOD_OUTPUT" | tr -d '\r\n')
-fi
+# The output is just the path to the staging directory (Unix-style clean output)
+# Clean any extra whitespace or newlines
+STAGING_PATH=$(echo "$CLOD_OUTPUT" | tr -d '\r\n')
 
 # If we couldn't find a staging path in the output, display an error
 if [ -z "$STAGING_PATH" ] || [ ! -d "$STAGING_PATH" ]; then
