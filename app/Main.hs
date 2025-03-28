@@ -16,7 +16,6 @@ import Options.Applicative
 import System.Exit (exitFailure)
 import System.Directory (createDirectoryIfMissing, getCurrentDirectory, getTemporaryDirectory)
 import System.FilePath ((</>))
-import System.Environment (lookupEnv)
 import Data.Time (getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Hashable (hash)
