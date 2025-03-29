@@ -27,7 +27,6 @@ import Control.Monad.IO.Class (liftIO)
 import System.Directory (doesDirectoryExist, doesFileExist, getDirectoryContents, removeFile, 
                         copyFile, canonicalizePath)
 import System.FilePath ((</>))
-import Data.List (isPrefixOf)
 import qualified Data.ByteString as BS
 
 import Clod.Types (ClodM, FileReadCap(..), FileWriteCap(..), ClodError(..), isPathAllowed)

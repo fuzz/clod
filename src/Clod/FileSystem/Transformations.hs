@@ -29,7 +29,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString as BS
 import Data.Char (isAlphaNum)
-import Control.Monad.IO.Class (liftIO)
 
 import Clod.Types (ClodM, FileReadCap, FileWriteCap)
 import Clod.FileSystem.Operations (safeReadFile, safeWriteFile)

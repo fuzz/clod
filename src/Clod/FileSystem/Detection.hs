@@ -30,7 +30,7 @@ import System.FilePath ((</>))
 import qualified Data.ByteString as BS
 import Data.Char (toLower)
 
-import Clod.Types (ClodM, liftIO, FileReadCap(..), ClodError(..), isPathAllowed)
+import Clod.Types (ClodM, FileReadCap(..), ClodError(..), isPathAllowed)
 
 -- | Check if a file is a text file (not binary)
 --

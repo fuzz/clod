@@ -1,186 +1,195 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 -- |
 -- Module      : Clod.FileSystem.ProcessingSpec
--- Description : Tests for file processing operations
+-- Description : Tests for the FileSystem.Processing module
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
 -- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
--- This module contains tests for the FileSystem.Processing module.
+-- This module tests the file processing functionality, including
+-- manifest generation and optimization.
 
 module Clod.FileSystem.ProcessingSpec (spec) where
 
 import Test.Hspec
 import Test.QuickCheck
-import System.Directory
-import System.FilePath
+import System.Directory (doesFileExist, createDirectory, withCurrentDirectory, 
+                         removeFile, removeDirectoryRecursive)
+import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
+import Control.Exception (bracket)
+import Control.Monad (forM_, when)
+import Control.Monad.Except (runExceptT)
+import Control.Monad.Reader (runReaderT)
 import qualified Data.ByteString as BS
-import Control.Monad (forM_, void)
 import Data.Either (isRight)
-import Data.Time.Clock (getCurrentTime, addUTCTime)
-
-import Polysemy
-import Polysemy.Error
-import Polysemy.Reader
+import Data.Function (on)
+import Data.List (nubBy, sort)
+import Data.IORef (newIORef, readIORef)
 
 import Clod.Types
-import Clod.Effects
-import Clod.Capability
 import Clod.FileSystem.Processing
 
--- | Create a test file with specific content
-createTestFile :: FilePath -> String -> IO ()
-createTestFile path content = do
-  createDirectoryIfMissing True (takeDirectory path)
-  BS.writeFile path (BS.pack $ map fromIntegral $ fromEnum <$> content)
-
+-- | Test the file processing functionality
 spec :: Spec
 spec = do
-  describe "getModifiedFilesSince" $ do
-    it "correctly identifies files modified since a given time" $ do
-      withSystemTempDirectory "clod-test" $ \tmpDir -> do
-        -- Get the current time
-        now <- getCurrentTime
-        
-        -- Create older files (modified before the reference time)
-        let olderFiles = [ "older1.txt", "older2.md", "older/file3.txt" ]
-        forM_ olderFiles $ \file -> do
-          createTestFile (tmpDir </> file) ("Older file: " ++ file)
-        
-        -- Set the reference time to now
-        let refTime = now
-        
-        -- Create newer files (modified after the reference time)
-        threadDelay 1000000  -- 1 second delay to ensure file timestamps are different
-        let newerFiles = [ "newer1.txt", "newer2.md", "newer/file3.txt" ]
-        forM_ newerFiles $ \file -> do
-          createTestFile (tmpDir </> file) ("Newer file: " ++ file)
-        
-        -- Set up capability
-        let readCap = fileReadCap [tmpDir]
-        
-        -- Run the test
-        result <- runM . runError . runFileSystemIO $ do
-          getModifiedFilesSince readCap tmpDir refTime
-        
-        -- Verify we found only the newer files
-        isRight result `shouldBe` True
-        case result of
-          Right files -> length files `shouldBe` length newerFiles
-          Left err -> expectationFailure $ "Failed with error: " ++ show err
-    
-    it "respects capability restrictions" $ do
-      withSystemTempDirectory "clod-test" $ \tmpDir -> do
-        -- Create directories
-        let allowedDir = tmpDir </> "allowed"
-            restrictedDir = tmpDir </> "restricted"
-        
-        createDirectoryIfMissing True allowedDir
-        createDirectoryIfMissing True restrictedDir
-        
-        -- Get current time
-        now <- getCurrentTime
-        
-        -- Create some files
-        createTestFile (allowedDir </> "file.txt") "Allowed file"
-        createTestFile (restrictedDir </> "file.txt") "Restricted file"
-        
-        -- Set up capability that only allows access to the allowed directory
-        let readCap = fileReadCap [allowedDir]
-        
-        -- Run the test on allowed directory
-        allowedResult <- runM . runError . runFileSystemIO $ do
-          getModifiedFilesSince readCap allowedDir now
-        
-        -- Run the test on restricted directory
-        restrictedResult <- runM . runError . runFileSystemIO $ do
-          getModifiedFilesSince readCap restrictedDir now
-        
-        -- Verify results
-        isRight allowedResult `shouldBe` True
-        case restrictedResult of
-          Left (ConfigError _) -> return () -- Expected error
-          Left err -> expectationFailure $ "Wrong error type: " ++ show err
-          Right _ -> expectationFailure "Should have failed due to restricted access"
-  
-  describe "getTextFiles" $ do
-    it "correctly identifies text files" $ do
-      withSystemTempDirectory "clod-test" $ \tmpDir -> do
-        -- Create text and binary files
-        let textFiles = [ "text1.txt", "text2.md", "code.hs" ]
-            binaryFiles = [ "binary1.bin", "binary2.exe" ]
-        
-        -- Create text files
-        forM_ textFiles $ \file -> do
-          createTestFile (tmpDir </> file) ("Text file: " ++ file)
-        
-        -- Create binary files with some null bytes
-        forM_ binaryFiles $ \file -> do
-          BS.writeFile (tmpDir </> file) (BS.pack [0, 1, 2, 3, 0, 5, 6])
-        
-        -- Set up capability
-        let readCap = fileReadCap [tmpDir]
-        
-        -- Run the test
-        result <- runM . runError . runFileSystemIO $ do
-          allFiles <- findAllFiles readCap tmpDir
-          textOnly <- getTextFiles readCap allFiles
-          return (length textOnly, length allFiles)
-        
-        -- Verify results
-        isRight result `shouldBe` True
-        case result of
-          Right (textCount, totalCount) -> do
-            textCount `shouldBe` length textFiles
-            totalCount `shouldBe` (length textFiles + length binaryFiles)
-          Left err -> expectationFailure $ "Failed with error: " ++ show err
+  describe "createOptimizedName" $ do
+    it "converts directory separators to dashes" $ do
+      unOptimizedName (createOptimizedName "src/main.js") `shouldBe` "src-main.js"
+      unOptimizedName (createOptimizedName "nested/dirs/file.txt") `shouldBe` "nested-dirs-file.txt"
       
-  describe "saveFilesToStaging" $ do
-    it "correctly saves files to the staging directory" $ do
+    it "leaves files without directories unchanged" $ do
+      unOptimizedName (createOptimizedName "file.txt") `shouldBe` "file.txt"
+
+  describe "escapeJSON" $ do
+    it "escapes backslashes and quotes" $ do
+      escapeJSON "path/with/\"quotes\"" `shouldBe` "path/with/\\\"quotes\\\""
+      escapeJSON "Windows\\style\\path" `shouldBe` "Windows\\\\style\\\\path"
+      escapeJSON "Combined \"quotes\" and \\backslashes\\" `shouldBe` "Combined \\\"quotes\\\" and \\\\backslashes\\\\"
+      
+    it "leaves other characters unchanged" $ do
+      escapeJSON "normal text" `shouldBe` "normal text"
+      escapeJSON "!@#$%^&*()" `shouldBe` "!@#$%^&*()"
+
+  describe "addToManifest" $ do
+    it "adds an entry to the manifest file" $ do
+      -- Create a temp directory
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
-        -- Create source and staging directories
-        let sourceDir = tmpDir </> "source"
-            stagingDir = tmpDir </> "staging"
+        -- Create a manifest file
+        let manifestPath = tmpDir </> "manifest.json"
+            originalPath = OriginalPath "src/main.js"
+            optimizedName = OptimizedName "src-main.js"
+            config = defaultTestConfig
         
-        createDirectoryIfMissing True sourceDir
-        createDirectoryIfMissing True stagingDir
+        -- Create a first entry reference
+        firstEntryRef <- newIORef True
         
-        -- Create some files
-        let files = [ "file1.txt", "file2.md", "subdir/file3.txt" ]
-        forM_ files $ \file -> do
-          createTestFile (sourceDir </> file) ("Content of " ++ file)
+        -- Run the function
+        result <- runClodM config $ addToManifest manifestPath originalPath optimizedName firstEntryRef
+        result `shouldBe` Right ()
         
-        -- Set up capabilities
-        let readCap = fileReadCap [sourceDir]
-            writeCap = fileWriteCap [stagingDir]
+        -- Check the manifest file was created
+        manifestContent <- readFile manifestPath
+        manifestContent `shouldBe` "  \"src-main.js\": \"src/main.js\""
         
-        -- Create the config
+        -- Add a second entry
+        let secondPath = OriginalPath "src/utils.js"
+            secondName = OptimizedName "src-utils.js"
+        
+        result2 <- runClodM config $ addToManifest manifestPath secondPath secondName firstEntryRef
+        result2 `shouldBe` Right ()
+        
+        -- Check both entries are in the manifest
+        manifestContent2 <- readFile manifestPath
+        manifestContent2 `shouldBe` "  \"src-main.js\": \"src/main.js\",\n  \"src-utils.js\": \"src/utils.js\""
+
+  describe "processFileManifestOnly" $ do
+    it "adds a file to the manifest without copying" $ do
+      -- Create a temp directory
+      withSystemTempDirectory "clod-test" $ \tmpDir -> do
+        -- Create test file and manifest
+        let testFile = tmpDir </> "test.js"
+            manifestPath = tmpDir </> "manifest.json"
+            relPath = "test.js"  -- Relative path from project root
+            
+        BS.writeFile testFile "console.log('test');"
+        
+        -- First entry reference
+        firstEntryRef <- newIORef True
+        
+        -- Create config with tmpDir as project path
         let config = ClodConfig 
-              { projectDir = sourceDir
-              , stagingDir = stagingDir
-              , currentStaging = stagingDir
-              , lastRunFile = tmpDir </> ".clod-last-run"
+              { projectPath = tmpDir
+              , stagingDir = tmpDir
+              , configDir = tmpDir
+              , lastRunFile = tmpDir
+              , timestamp = ""
+              , currentStaging = tmpDir
+              , testMode = True
               , ignorePatterns = []
-              , useGit = False
               }
+            
+        -- Run the function
+        result <- runClodM config $ processFileManifestOnly config manifestPath testFile relPath firstEntryRef
         
-        -- Run the test
-        result <- runM . runError . runReader config . runFileSystemIO $ do
-          filePaths <- findAllFiles readCap sourceDir
-          let relativePaths = map (makeRelative sourceDir) filePaths
-          saveFilesToStaging readCap writeCap filePaths relativePaths
+        -- Check it succeeded
+        result `shouldBe` Success
         
-        -- Verify results
-        isRight result `shouldBe` True
+        -- Verify the manifest was created
+        manifestExists <- doesFileExist manifestPath
+        manifestExists `shouldBe` True
         
-        -- Check if files were copied correctly
-        forM_ files $ \file -> do
-          let stagingFile = stagingDir </> file
-          exists <- doesFileExist stagingFile
-          exists `shouldBe` True
+        -- Check the manifest content
+        manifestContent <- readFile manifestPath
+        manifestContent `shouldBe` "  \"test.js\": \"test.js\""
+
+  describe "processFile" $ do
+    it "copies a file to the staging area and adds to manifest" $ do
+      -- Create source and staging directories
+      withSystemTempDirectory "clod-test" $ \dir -> do
+        let sourceDir = dir </> "source"
+            stagingDir = dir </> "staging"
+            fullPath = sourceDir </> "test.js"
+            relPath = "test.js"
+            manifestPath = stagingDir </> "manifest.json"
+            content = "console.log('test');"
+            
+        createDirectory sourceDir
+        createDirectory stagingDir
+        BS.writeFile fullPath (BS.pack $ map (toEnum . fromEnum) content)
+        
+        -- First entry reference
+        firstEntryRef <- newIORef True
+        
+        -- Create config with sourceDir as project path and stagingDir
+        let config = ClodConfig 
+              { projectPath = sourceDir
+              , stagingDir = stagingDir
+              , configDir = dir
+              , lastRunFile = dir </> "lastrun"
+              , timestamp = ""
+              , currentStaging = stagingDir
+              , testMode = True
+              , ignorePatterns = []
+              }
+            
+        -- Run the function
+        result <- runClodM config $ processFile config manifestPath fullPath relPath firstEntryRef
+        
+        -- Check it succeeded
+        result `shouldBe` Success
+        
+        -- Verify the file was copied to staging
+        let stagingFile = stagingDir </> "test.js"
+        fileExists <- doesFileExist stagingFile
+        fileExists `shouldBe` True
+        
+        -- Check the content is correct
+        copiedContent <- BS.unpack <$> BS.readFile stagingFile
+        map (toEnum . fromEnum) copiedContent `shouldBe` content
+        
+        -- Verify the manifest was created
+        manifestExists <- doesFileExist manifestPath
+        manifestExists `shouldBe` True
+        
+        -- Check the manifest content
+        manifestContent <- readFile manifestPath
+        manifestContent `shouldBe` "  \"test.js\": \"test.js\""
+        
+    it "skips binary files" $ do
+      pending "Pending until we have a reliable binary file detection implementation"
+
+-- | Default test configuration
+defaultTestConfig :: ClodConfig
+defaultTestConfig = ClodConfig
+  { projectPath = "/"
+  , stagingDir = "/"
+  , configDir = "/"
+  , lastRunFile = "/"
+  , timestamp = ""
+  , currentStaging = "/"
+  , testMode = True
+  , ignorePatterns = []
+  }

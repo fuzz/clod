@@ -1,262 +1,217 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 -- |
 -- Module      : Clod.FileSystem.TransformationsSpec
--- Description : Tests for file transformation operations
+-- Description : Tests for the FileSystem.Transformations module
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
 -- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
--- This module contains tests for the FileSystem.Transformations module.
+-- This module tests the file transformations functionality.
 
 module Clod.FileSystem.TransformationsSpec (spec) where
 
 import Test.Hspec
 import Test.QuickCheck
-import System.Directory
-import System.FilePath
+import System.Directory (doesFileExist, createDirectory, withCurrentDirectory, 
+                         removeFile, removeDirectoryRecursive)
+import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
+import Control.Exception (bracket)
+import Control.Monad (forM_, when)
+import Control.Monad.Except (runExceptT)
+import Control.Monad.Reader (runReaderT)
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import Control.Monad (forM_, void)
 import Data.Either (isRight)
-
-import Polysemy
-import Polysemy.Error
-import Polysemy.Reader
+import Data.Function (on)
+import Data.List (nubBy, sort)
 
 import Clod.Types
-import Clod.Effects
-import Clod.Capability
 import Clod.FileSystem.Transformations
 
--- | Create a test file with specific content
-createTestFile :: FilePath -> String -> IO ()
-createTestFile path content = do
-  createDirectoryIfMissing True (takeDirectory path)
-  BS.writeFile path (BS.pack $ map fromIntegral $ fromEnum <$> content)
-
--- | Property: flattenPath should never contain directory separators after transformation
-prop_flattenPathNoSeparators :: String -> Property
-prop_flattenPathNoSeparators s =
-  not (null s) ==> not ('/' `elem` flattenPath s || '\\' `elem` flattenPath s)
-
--- | Property: flattenPath preserves the file extension
-prop_flattenPathPreservesExtension :: String -> String -> Property
-prop_flattenPathPreservesExtension name ext =
-  not (null name) && not (null ext) && not ('.' `elem` ext) ==>
-    takeExtension (flattenPath (name ++ "." ++ ext)) == "." ++ ext
-
+-- | Test the file transformations
 spec :: Spec
 spec = do
-  describe "flattenPath" $ do
-    it "removes path separators" $ property prop_flattenPathNoSeparators
-    
-    it "preserves file extensions" $ property prop_flattenPathPreservesExtension
-    
-    it "handles complex paths" $ do
-      flattenPath "path/to/some/file.txt" `shouldNotContain` "/"
-      flattenPath "path\\to\\some\\file.txt" `shouldNotContain` "\\"
-      
-    it "handles paths with multiple extensions" $ do
-      flattenPath "file.tar.gz" `shouldEndWith` ".tar.gz"
-      
-    it "handles paths with dots in directory names" $ do
-      let result = flattenPath "some.dir/file.txt"
-      result `shouldNotContain` "/"
-      result `shouldEndWith` ".txt"
-  
-  describe "sanitizeFilename" $ do
-    it "removes special characters" $ do
-      sanitizeFilename "file:with?invalid*chars" `shouldBe` "filewithinvalidchars"
-      
-    it "preserves alphanumeric characters" $ do
-      sanitizeFilename "abcXYZ123" `shouldBe` "abcXYZ123"
-      
-    it "preserves extensions" $ do
-      sanitizeFilename "file.with.dots.txt" `shouldEndWith` ".txt"
-      
-    it "handles unicode characters" $ do
-      sanitizeFilename "filename_with_é_and_ü.txt" `shouldNotContain` "é"
-      sanitizeFilename "filename_with_é_and_ü.txt" `shouldNotContain` "ü"
-      sanitizeFilename "filename_with_é_and_ü.txt" `shouldEndWith` ".txt"
-      
-    it "handles empty strings" $ do
-      sanitizeFilename "" `shouldBe` "unnamed"
-  
   describe "transformFilename" $ do
-    it "handles regular filenames correctly" $ do
-      transformFilename "example.txt" "example.txt" `shouldBe` "example.txt"
-      transformFilename "file.png" "file.png" `shouldBe` "file.png"
-      transformFilename "code.js" "code.js" `shouldBe` "code.js"
-      
-    it "transforms SVG files to XML correctly" $ do
+    it "transforms SVG files to XML with special suffix" $ do
       transformFilename "logo.svg" "logo.svg" `shouldBe` "logo-svg.xml"
-      transformFilename "icon.svg" "icon.svg" `shouldBe` "icon-svg.xml"
-      transformFilename "image.svg" "image.svg" `shouldBe` "image-svg.xml"
       
-    it "handles path components in SVG filenames" $ do
-      transformFilename "assets_logo.svg" "assets/logo.svg" `shouldBe` "assets_logo-svg.xml"
-      transformFilename "components_icons_menu.svg" "components/icons/menu.svg" `shouldBe` "components_icons_menu-svg.xml"
+    it "leaves non-SVG files unchanged" $ do
+      transformFilename "main.js" "main.js" `shouldBe` "main.js"
+      transformFilename "index.html" "index.html" `shouldBe` "index.html"
       
-    it "properly sanitizes SVG transformations" $ do
-      transformFilename "logo!.svg" "logo!.svg" `shouldBe` "logo-svg.xml"
-      transformFilename "icon$.svg" "icon$.svg" `shouldBe` "icon-svg.xml"
-      transformFilename "image#.svg" "image#.svg" `shouldBe` "image-svg.xml"
+    it "sanitizes filenames with special characters" $ do
+      transformFilename "file with spaces.txt" "file with spaces.txt" `shouldBe` "filewithtxt"
+      transformFilename "#weird$chars%.js" "#weird$chars%.js" `shouldBe` "weirdchars.js"
+      transformFilename "$$$.svg" "$$$.svg" `shouldBe` "-svg.xml"
       
-    it "maintains sanitization for non-SVG files" $ do
-      transformFilename "file!name.txt" "file!name.txt" `shouldBe` "filename.txt"
-      transformFilename "bad*chars.png" "bad*chars.png" `shouldBe` "badchars.png"
-      transformFilename "illegal:filename.js" "illegal:filename.js" `shouldBe` "illegalfilename.js"
+    it "returns a default name for empty filenames" $ do
+      transformFilename "" "" `shouldBe` "unnamed"
+      
+  describe "flattenPath" $ do
+    it "replaces directory separators with underscores" $ do
+      flattenPath "dir/subdir/file.txt" `shouldBe` "dir_subdir_file.txt"
+      flattenPath "some\\windows\\path.txt" `shouldBe` "some_windows_path.txt"
+      
+    it "leaves filenames without separators unchanged" $ do
+      flattenPath "file.txt" `shouldBe` "file.txt"
+      
+  describe "sanitizeFilename" $ do
+    it "removes invalid characters from filenames" $ do
+      sanitizeFilename "hello world.txt" `shouldBe` "helloworld.txt"
+      sanitizeFilename "test!@#$%^&*().txt" `shouldBe` "test.txt"
+      sanitizeFilename "*special*.json" `shouldBe` "special.json"
+      
+    it "preserves valid characters" $ do
+      sanitizeFilename "valid-name_123.js" `shouldBe` "valid-name_123.js"
+      sanitizeFilename "a.b.c.d.e.f" `shouldBe` "a.b.c.d.e.f"
+      
+    it "returns 'unnamed' for empty strings" $ do
+      sanitizeFilename "" `shouldBe` "unnamed"
+      sanitizeFilename "#@$%^" `shouldBe` "unnamed"
 
   describe "transformFileContent" $ do
-    it "transforms file content correctly" $ do
+    it "transforms file content using the provided function" $ do
+      -- Create a temp directory
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
         -- Create a test file
-        let srcFile = tmpDir </> "source.txt"
-            destFile = tmpDir </> "destination.txt"
-            content = "Line 1\nLine 2\nLine 3"
+        let srcPath = tmpDir </> "source.txt"
+            destPath = tmpDir </> "dest.txt"
+            content = "hello world"
+            transformFn = T.toUpper . TE.decodeUtf8
             
-        createTestFile srcFile content
+        BS.writeFile srcPath (TE.encodeUtf8 (T.pack content))
         
-        -- Define a simple transformation
-        let transform = T.unlines . map (T.append "TRANSFORMED: ") . T.lines . TE.decodeUtf8
-        
-        -- Set up capabilities
+        -- Create capabilities
         let readCap = fileReadCap [tmpDir]
             writeCap = fileWriteCap [tmpDir]
+            config = defaultTestConfig
         
-        -- Run the test
-        result <- runM . runError . runFileSystemIO $ do
-          transformFileContent readCap writeCap transform srcFile destFile
-          safeFileExists readCap destFile
+        -- Run the function
+        result <- runClodM config $ 
+          transformFileContent readCap writeCap transformFn srcPath destPath
         
-        -- Verify results
-        isRight result `shouldBe` True
+        -- Verify the destination file has the transformed content
+        result `shouldBe` Right ()
+        destContent <- TE.decodeUtf8 <$> BS.readFile destPath
+        destContent `shouldBe` "HELLO WORLD"
         
-        -- Check the content of the transformed file
-        destContent <- BS.readFile destFile
-        let destText = TE.decodeUtf8 destContent
-        T.unpack destText `shouldBe` "TRANSFORMED: Line 1\nTRANSFORMED: Line 2\nTRANSFORMED: Line 3\n"
-    
-    it "transforms SVG content correctly" $ do
+    it "fails when source is outside read capability" $ do
+      -- Create a temp directory structure
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
-        -- Create a test SVG file
-        let srcFile = tmpDir </> "icon.svg"
-            destFile = tmpDir </> "icon-svg.xml"
-            svgContent = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\">\n" ++
-                         "  <circle cx=\"12\" cy=\"12\" r=\"10\" fill=\"blue\" />\n" ++
-                         "</svg>"
+        withSystemTempDirectory "clod-test-outside" $ \outsideDir -> do
+          -- Create source file in the outside directory
+          let srcPath = outsideDir </> "source.txt"
+              destPath = tmpDir </> "dest.txt"
+              content = "hello world"
+              transformFn = T.toUpper . TE.decodeUtf8
+              
+          BS.writeFile srcPath (TE.encodeUtf8 (T.pack content))
+          
+          -- Create read capability that only includes the temp dir
+          let readCap = fileReadCap [tmpDir]
+              writeCap = fileWriteCap [tmpDir]
+              config = defaultTestConfig
+          
+          -- Run the function
+          result <- runClodM config $ 
+            transformFileContent readCap writeCap transformFn srcPath destPath
+          
+          -- Verify the operation failed
+          case result of
+            Left (CapabilityError _) -> return ()
+            _ -> expectationFailure "Expected CapabilityError but got different result"
             
-        createTestFile srcFile svgContent
-        
-        -- Identity transformation (since SVG is already XML)
-        let transform = TE.decodeUtf8
-        
-        -- Set up capabilities
-        let readCap = fileReadCap [tmpDir]
-            writeCap = fileWriteCap [tmpDir]
-        
-        -- Run the test
-        result <- runM . runError . runFileSystemIO $ do
-          transformFileContent readCap writeCap transform srcFile destFile
-          safeFileExists readCap destFile
-        
-        -- Verify results
-        isRight result `shouldBe` True
-        
-        -- Check the content - should be unchanged
-        destContent <- BS.readFile destFile
-        TE.decodeUtf8 destContent `shouldBe` T.pack svgContent
-    
-    it "respects capability restrictions" $ do
+          -- Verify the destination file wasn't created
+          destExists <- doesFileExist destPath
+          destExists `shouldBe` False
+          
+  describe "SVG to XML transformation" $ do
+    it "preserves SVG content with XML extension" $ do
+      -- Create a temp directory structure
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
-        -- Create directories
-        let srcDir = tmpDir </> "source"
-            destDir = tmpDir </> "destination"
-            restrictedDir = tmpDir </> "restricted"
+        -- Create source and destination directories
+        let srcDir = tmpDir </> "src"
+            destDir = tmpDir </> "dest"
+            svgPath = srcDir </> "icon.svg"
+            xmlPath = destDir </> "icon-svg.xml"
+            svgContent = "<svg xmlns='http://www.w3.org/2000/svg'><circle cx='50' cy='50' r='40'/></svg>"
             
-        forM_ [srcDir, destDir, restrictedDir] $ createDirectoryIfMissing True
+        createDirectory srcDir
+        createDirectory destDir
+        BS.writeFile svgPath (TE.encodeUtf8 (T.pack svgContent))
         
-        -- Create a test file
-        let srcFile = srcDir </> "file.txt"
-            destFile = destDir </> "file.txt"
-            restrictedFile = restrictedDir </> "file.txt"
-            content = "Test content"
-            
-        createTestFile srcFile content
-        
-        -- Define a simple transformation
-        let transform = T.append "TRANSFORMED: " . TE.decodeUtf8
-        
-        -- Set up capabilities that don't include restricted dir
+        -- Create capabilities
         let readCap = fileReadCap [srcDir, destDir]
             writeCap = fileWriteCap [destDir]
-        
-        -- Run the test for valid transformation
-        validResult <- runM . runError . runFileSystemIO $ do
-          transformFileContent readCap writeCap transform srcFile destFile
-          safeFileExists readCap destFile
-        
-        -- Run the test for transformation to restricted location
-        restrictedResult <- runM . runError . runFileSystemIO $ do
-          transformFileContent readCap writeCap transform srcFile restrictedFile
-        
-        -- Verify results
-        isRight validResult `shouldBe` True
-        case restrictedResult of
-          Left (ConfigError _) -> return () -- Expected error
-          Left err -> expectationFailure $ "Wrong error type: " ++ show err
-          Right _ -> expectationFailure "Should have failed due to restricted destination"
-          
-  describe "SVG processing integration" $ do
-    it "handles SVG files as part of an end-to-end workflow" $ do
-      withSystemTempDirectory "clod-test" $ \tmpDir -> do
-        -- Create a directory structure similar to a project
-        let assetsDir = tmpDir </> "assets"
-            stagingDir = tmpDir </> "staging"
-            svgFile = assetsDir </> "logo.svg"
-            xmlOutputFile = stagingDir </> "assets_logo-svg.xml"
-            svgContent = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\">\n" ++
-                         "  <rect width=\"100\" height=\"100\" fill=\"red\" />\n" ++
-                         "  <text x=\"10\" y=\"50\" font-family=\"sans-serif\" font-size=\"20\" fill=\"white\">LOGO</text>\n" ++
-                         "</svg>"
+            transformFn = id -- Identity function for this test
+            config = defaultTestConfig
             
-        -- Create directories and test file
-        createDirectoryIfMissing True assetsDir
-        createDirectoryIfMissing True stagingDir
-        createTestFile svgFile svgContent
+        -- Run the transformation
+        result <- runClodM config $ 
+          transformFileContent readCap writeCap transformFn svgPath xmlPath
+          
+        -- Verify the XML file was created with the same content
+        xmlContent <- TE.decodeUtf8 <$> BS.readFile xmlPath
+        T.unpack xmlContent `shouldBe` svgContent
+
+  describe "End-to-end transformation" $ do
+    it "works with complex transformations" $ do
+      -- Create a temp directory
+      withSystemTempDirectory "clod-test" $ \tmpDir -> do
+        -- Create test files
+        let jsPath = tmpDir </> "script.js"
+            htmlPath = tmpDir </> "page.html"
+            jsContent = "console.log('Hello, world!');"
+            htmlContent = "<html><body><h1>Test</h1></body></html>"
+            
+        BS.writeFile jsPath (TE.encodeUtf8 (T.pack jsContent))
+        BS.writeFile htmlPath (TE.encodeUtf8 (T.pack htmlContent))
         
-        -- Set up capabilities
+        -- Create capabilities
         let readCap = fileReadCap [tmpDir]
             writeCap = fileWriteCap [tmpDir]
+            config = defaultTestConfig
             
-        -- Process the SVG file
-        let transform = TE.decodeUtf8  -- Identity transform for SVG->XML
+        -- Define a complex transformation function that adds comments
+        let transform :: BS.ByteString -> T.Text
+            transform bs = 
+              let text = TE.decodeUtf8 bs
+                  isJs = T.isSuffixOf ".js" (T.pack jsPath)
+                  isHtml = T.isSuffixOf ".html" (T.pack htmlPath)
+                  prefix = if isJs 
+                           then "// Transformed by Clod\n" 
+                           else if isHtml
+                                then "<!-- Transformed by Clod -->\n"
+                                else "/* Transformed by Clod */\n"
+              in prefix <> text
+              
+        -- Run transformations
+        let jsDest = tmpDir </> "script.transformed.js"
+            htmlDest = tmpDir </> "page.transformed.html"
+            
+        _ <- runClodM config $ transformFileContent readCap writeCap transform jsPath jsDest
+        _ <- runClodM config $ transformFileContent readCap writeCap transform htmlPath htmlDest
         
-        -- First, get the flattened filename for the SVG
-        let originalPath = "assets/logo.svg"
-            flattenedPath = flattenPath originalPath
-            transformedFilename = transformFilename flattenedPath originalPath
-            finalPath = stagingDir </> transformedFilename
-            
-        -- Run the test
-        result <- runM . runError . runFileSystemIO $ do
-          transformFileContent readCap writeCap transform svgFile finalPath
-          safeFileExists readCap finalPath
-          
         -- Verify results
-        isRight result `shouldBe` True
+        jsResult <- TE.decodeUtf8 <$> BS.readFile jsDest
+        htmlResult <- TE.decodeUtf8 <$> BS.readFile htmlDest
         
-        -- Check that the file was created with the right name
-        fileExists <- doesFileExist xmlOutputFile
-        fileExists `shouldBe` True
-        
-        -- Verify content was preserved
-        content <- BS.readFile xmlOutputFile
-        TE.decodeUtf8 content `shouldBe` T.pack svgContent
+        jsResult `shouldBe` "// Transformed by Clod\n" <> T.pack jsContent
+        htmlResult `shouldBe` "<!-- Transformed by Clod -->\n" <> T.pack htmlContent
+
+-- | Default test configuration
+defaultTestConfig :: ClodConfig
+defaultTestConfig = ClodConfig
+  { projectPath = "/"
+  , stagingDir = "/"
+  , configDir = "/"
+  , lastRunFile = "/"
+  , timestamp = ""
+  , currentStaging = "/"
+  , testMode = True
+  , ignorePatterns = []
+  }
