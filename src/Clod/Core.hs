@@ -41,9 +41,6 @@ import System.FilePath ((</>), splitDirectories)
 import System.IO (writeFile)
 import Data.Version (showVersion)
 import Control.Monad (when)
-import Control.Monad.Reader (ask)
-import Control.Monad.Except (throwError)
-import Control.Monad.IO.Class (liftIO)
 
 import Clod.Types
 import Clod.IgnorePatterns (matchesIgnorePattern)

@@ -27,5 +27,3 @@
 module Clod.Effects 
   (
   ) where
-
-import Clod.Types

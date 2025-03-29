@@ -35,5 +35,3 @@
 module Clod.Capability 
   (
   ) where
-
-import Clod.Types
