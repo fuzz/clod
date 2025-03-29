@@ -7,8 +7,6 @@ Clod is a utility for preparing and uploading files to Claude AI's Project Knowl
 
 See [HUMAN.md](HUMAN.md) for a complete workflow guide to using `clod` with Claude AI.
 
-For information about the type-safe effects system and capability-based security model, see [EFFECTS.md](EFFECTS.md).
-
 ## Features
 
 - Track modified files since last run
@@ -19,7 +17,7 @@ For information about the type-safe effects system and capability-based security
 - Generate a path manifest for mapping optimized names back to original paths
 - Color-coded, user-friendly terminal interface
 - Capability-based security for file operations
-- Type-safe effects system to enhance code safety
+- Simple, well-structured monad stack for reliable behavior
 
 ## Installation
 
@@ -191,6 +189,17 @@ package-lock.json
 pnpm-lock.yaml
 yarn.lock
 ```
+
+## Architecture
+
+Clod uses a clean, pragmatic architecture with a focus on reliability and maintainability:
+
+- **Traditional Monad Stack**: Uses a ReaderT/ExceptT/IO monad stack for excellent type inference and readable error messages
+- **Capability-Based Security**: Runtime checking of file access permissions based on explicitly allowed directories
+- **Modular Design**: Clear separation of concerns between different subsystems
+- **Safety First**: Designed to prevent accidental access to unauthorized files
+
+The architecture prioritizes pragmatic results over theoretical purity, focusing on delivering a reliable, easy-to-understand system that "just works."
 
 ## Project Structure
 
