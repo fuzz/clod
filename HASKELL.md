@@ -152,6 +152,16 @@ This document contains learning points about working with Haskell from Claude Co
   - Document the GADT constructors with Haddock comments before each constructor
   - For better documentation, create helper functions that re-export the generated functions with documentation
   - Example: `_readFileDoc :: Member FileSystem r => FilePath -> Sem r BS.ByteString; _readFileDoc = readFile`
+  - For generated functions, add documentation in the `makeSem` call:
+    ```haskell
+    -- | Generate effect functions with Template Haskell
+    -- Functions:
+    -- 
+    -- * 'readFile' :: Member FileSystem r => FilePath -> Sem r BS.ByteString
+    -- * 'writeFile' :: Member FileSystem r => FilePath -> BS.ByteString -> Sem r ()
+    makeSem ''FileSystem
+    ```
+  - Don't add separate type signatures for TH-generated functions, as it will cause "duplicate type signature" errors
 
 - **Qualification for Re-exported Functions**: When re-exporting functions from other modules:
   - Import the original module qualified (e.g., `import qualified Polysemy.Error as PE`)
@@ -159,6 +169,10 @@ This document contains learning points about working with Haskell from Claude Co
   - This avoids ambiguous references when the function is used elsewhere
 
 - **Pattern Synonyms**: Always document pattern synonyms with Haddock comments, as they are part of your public API
+
+- **Module Re-exports**: For functions re-exported from other modules, either:
+  - Keep documentation in sync between the original and re-exported locations, or
+  - Use `-- | @since x.y.z` to indicate version provenance and avoid duplicating documentation
 
 ## Working with Effect Systems
 

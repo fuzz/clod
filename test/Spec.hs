@@ -23,6 +23,14 @@ import qualified Clod.ConfigSpec
 import qualified Clod.MainSpec
 import qualified Clod.FileSystem.DetectionSpec
 import qualified Clod.CapabilitySpec
+import qualified Clod.AdvancedCapabilitySpec
+import qualified Clod.EffectsSpec
+import qualified Clod.TypesSpec
+import qualified Clod.FileSystem.OperationsSpec
+import qualified Clod.FileSystem.ProcessingSpec
+import qualified Clod.FileSystem.TransformationsSpec
+import qualified Clod.Git.InternalSpec
+import qualified Clod.Git.LibGitSpec
 
 main :: IO ()
 main = hspec $ do
@@ -35,3 +43,11 @@ main = hspec $ do
   describe "Clod.Config" Clod.ConfigSpec.spec
   describe "Clod.Main" Clod.MainSpec.spec
   describe "Clod.Capability" Clod.CapabilitySpec.spec
+  describe "Clod.AdvancedCapability" Clod.AdvancedCapabilitySpec.spec
+  describe "Clod.Effects" Clod.EffectsSpec.spec
+  describe "Clod.Types" Clod.TypesSpec.spec
+  describe "Clod.FileSystem.Operations" Clod.FileSystem.OperationsSpec.spec
+  describe "Clod.FileSystem.Processing" Clod.FileSystem.ProcessingSpec.spec
+  describe "Clod.FileSystem.Transformations" Clod.FileSystem.TransformationsSpec.spec
+  describe "Clod.Git.Internal" Clod.Git.InternalSpec.spec
+  describe "Clod.Git.LibGit" Clod.Git.LibGitSpec.spec

@@ -89,6 +89,31 @@ spec = do
     it "handles empty strings" $ do
       sanitizeFilename "" `shouldBe` "unnamed"
   
+  describe "transformFilename" $ do
+    it "handles regular filenames correctly" $ do
+      transformFilename "example.txt" "example.txt" `shouldBe` "example.txt"
+      transformFilename "file.png" "file.png" `shouldBe` "file.png"
+      transformFilename "code.js" "code.js" `shouldBe` "code.js"
+      
+    it "transforms SVG files to XML correctly" $ do
+      transformFilename "logo.svg" "logo.svg" `shouldBe` "logo-svg.xml"
+      transformFilename "icon.svg" "icon.svg" `shouldBe` "icon-svg.xml"
+      transformFilename "image.svg" "image.svg" `shouldBe` "image-svg.xml"
+      
+    it "handles path components in SVG filenames" $ do
+      transformFilename "assets_logo.svg" "assets/logo.svg" `shouldBe` "assets_logo-svg.xml"
+      transformFilename "components_icons_menu.svg" "components/icons/menu.svg" `shouldBe` "components_icons_menu-svg.xml"
+      
+    it "properly sanitizes SVG transformations" $ do
+      transformFilename "logo!.svg" "logo!.svg" `shouldBe` "logo-svg.xml"
+      transformFilename "icon$.svg" "icon$.svg" `shouldBe` "icon-svg.xml"
+      transformFilename "image#.svg" "image#.svg" `shouldBe` "image-svg.xml"
+      
+    it "maintains sanitization for non-SVG files" $ do
+      transformFilename "file!name.txt" "file!name.txt" `shouldBe` "filename.txt"
+      transformFilename "bad*chars.png" "bad*chars.png" `shouldBe` "badchars.png"
+      transformFilename "illegal:filename.js" "illegal:filename.js" `shouldBe` "illegalfilename.js"
+
   describe "transformFileContent" $ do
     it "transforms file content correctly" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
@@ -118,6 +143,36 @@ spec = do
         destContent <- BS.readFile destFile
         let destText = TE.decodeUtf8 destContent
         T.unpack destText `shouldBe` "TRANSFORMED: Line 1\nTRANSFORMED: Line 2\nTRANSFORMED: Line 3\n"
+    
+    it "transforms SVG content correctly" $ do
+      withSystemTempDirectory "clod-test" $ \tmpDir -> do
+        -- Create a test SVG file
+        let srcFile = tmpDir </> "icon.svg"
+            destFile = tmpDir </> "icon-svg.xml"
+            svgContent = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\">\n" ++
+                         "  <circle cx=\"12\" cy=\"12\" r=\"10\" fill=\"blue\" />\n" ++
+                         "</svg>"
+            
+        createTestFile srcFile svgContent
+        
+        -- Identity transformation (since SVG is already XML)
+        let transform = TE.decodeUtf8
+        
+        -- Set up capabilities
+        let readCap = fileReadCap [tmpDir]
+            writeCap = fileWriteCap [tmpDir]
+        
+        -- Run the test
+        result <- runM . runError . runFileSystemIO $ do
+          transformFileContent readCap writeCap transform srcFile destFile
+          safeFileExists readCap destFile
+        
+        -- Verify results
+        isRight result `shouldBe` True
+        
+        -- Check the content - should be unchanged
+        destContent <- BS.readFile destFile
+        TE.decodeUtf8 destContent `shouldBe` T.pack svgContent
     
     it "respects capability restrictions" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
@@ -158,3 +213,50 @@ spec = do
           Left (ConfigError _) -> return () -- Expected error
           Left err -> expectationFailure $ "Wrong error type: " ++ show err
           Right _ -> expectationFailure "Should have failed due to restricted destination"
+          
+  describe "SVG processing integration" $ do
+    it "handles SVG files as part of an end-to-end workflow" $ do
+      withSystemTempDirectory "clod-test" $ \tmpDir -> do
+        -- Create a directory structure similar to a project
+        let assetsDir = tmpDir </> "assets"
+            stagingDir = tmpDir </> "staging"
+            svgFile = assetsDir </> "logo.svg"
+            xmlOutputFile = stagingDir </> "assets_logo-svg.xml"
+            svgContent = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\">\n" ++
+                         "  <rect width=\"100\" height=\"100\" fill=\"red\" />\n" ++
+                         "  <text x=\"10\" y=\"50\" font-family=\"sans-serif\" font-size=\"20\" fill=\"white\">LOGO</text>\n" ++
+                         "</svg>"
+            
+        -- Create directories and test file
+        createDirectoryIfMissing True assetsDir
+        createDirectoryIfMissing True stagingDir
+        createTestFile svgFile svgContent
+        
+        -- Set up capabilities
+        let readCap = fileReadCap [tmpDir]
+            writeCap = fileWriteCap [tmpDir]
+            
+        -- Process the SVG file
+        let transform = TE.decodeUtf8  -- Identity transform for SVG->XML
+        
+        -- First, get the flattened filename for the SVG
+        let originalPath = "assets/logo.svg"
+            flattenedPath = flattenPath originalPath
+            transformedFilename = transformFilename flattenedPath originalPath
+            finalPath = stagingDir </> transformedFilename
+            
+        -- Run the test
+        result <- runM . runError . runFileSystemIO $ do
+          transformFileContent readCap writeCap transform svgFile finalPath
+          safeFileExists readCap finalPath
+          
+        -- Verify results
+        isRight result `shouldBe` True
+        
+        -- Check that the file was created with the right name
+        fileExists <- doesFileExist xmlOutputFile
+        fileExists `shouldBe` True
+        
+        -- Verify content was preserved
+        content <- BS.readFile xmlOutputFile
+        TE.decodeUtf8 content `shouldBe` T.pack svgContent

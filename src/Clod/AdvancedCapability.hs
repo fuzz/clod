@@ -105,9 +105,13 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 data Permission = Read | Write | Execute | All
 
 -- | Type-level aliases for permissions
+-- | Read permission for read-only file access
 type ReadPerm = 'Read
+-- | Write permission for write-only file access
 type WritePerm = 'Write
+-- | Execute permission for executable files
 type ExecutePerm = 'Execute
+-- | Full access permission (read, write, execute)
 type AllPerm = 'All
 
 -- | A path with type-level permission information

@@ -45,6 +45,7 @@ module Clod.Types
   , liftIO
   , ask
   , asks
+  -- | Run a reader monad transformer with the given environment
   , runReaderT
   
     -- * Newtypes for type safety

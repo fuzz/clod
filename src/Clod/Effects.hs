@@ -162,7 +162,16 @@ data FileSystem m a where
   IsTextFile :: FilePath -> FileSystem m Bool
 
 -- | Generate effect functions with Template Haskell
+-- Functions:
+-- 
+-- * 'readFile' :: Member FileSystem r => FilePath -> Sem r BS.ByteString
+-- * 'writeFile' :: Member FileSystem r => FilePath -> BS.ByteString -> Sem r ()
+-- * 'copyFile' :: Member FileSystem r => FilePath -> FilePath -> Sem r ()
+-- * 'fileExists' :: Member FileSystem r => FilePath -> Sem r Bool
+-- * 'isTextFile' :: Member FileSystem r => FilePath -> Sem r Bool
 makeSem ''FileSystem
+
+-- Note: The functions below are used only for documentation purposes
 
 -- | Read a file from the file system
 -- Re-exported from FileSystem effect
@@ -196,8 +205,14 @@ data Git m a where
   -- | Get list of untracked files in a Git repository
   GetUntrackedFiles :: FilePath -> Git m [FilePath]
 
--- Generate Git effect functions
+-- | Generate Git effect functions
+-- Functions:
+-- 
+-- * 'getModifiedFiles' :: Member Git r => FilePath -> Sem r [FilePath]
+-- * 'getUntrackedFiles' :: Member Git r => FilePath -> Sem r [FilePath]
 makeSem ''Git
+
+-- Note: The functions below are used only for documentation purposes
 
 -- | Get modified files from a Git repository
 -- Re-exported from Git effect
@@ -220,8 +235,16 @@ data Console m a where
   -- | Output message to stdout (for piping to other programs)
   LogOutput :: String -> Console m ()
 
--- Generate Console effect functions
+-- | Generate Console effect functions
+-- Functions:
+--
+-- * 'logInfo' :: Member Console r => String -> Sem r ()
+-- * 'logWarning' :: Member Console r => String -> Sem r ()
+-- * 'logError' :: Member Console r => String -> Sem r ()
+-- * 'logOutput' :: Member Console r => String -> Sem r ()
 makeSem ''Console
+
+-- Note: The functions below are used only for documentation purposes
 
 -- | Log informational message to console
 -- Re-exported from Console effect
