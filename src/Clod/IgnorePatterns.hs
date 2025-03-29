@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      : Clod.IgnorePatterns
@@ -67,6 +69,28 @@ import System.FilePath (splitDirectories, takeExtension, takeFileName, takeDirec
 
 import Clod.Types (ClodM, IgnorePattern(..))
 import Clod.Config (clodIgnoreFile)
+
+-- | Pattern synonyms for common ignore pattern structures
+pattern FileExtension :: String -> String
+pattern FileExtension ext <- ('*':'.':ext@(_:_)) where
+  FileExtension ext = '*':'.':ext
+
+pattern DirectoryWildcard :: String -> String
+pattern DirectoryWildcard rest <- ('*':'*':'/':rest) where
+  DirectoryWildcard rest = '*':'*':'/':rest
+
+pattern MultiLevelWildcard :: String -> String
+pattern MultiLevelWildcard rest <- ('*':'*':rest) where
+  MultiLevelWildcard rest = '*':'*':rest
+
+pattern SingleLevelWildcard :: String -> String
+pattern SingleLevelWildcard rest <- ('*':rest) where
+  SingleLevelWildcard rest = '*':rest
+
+-- Leading slash pattern for paths
+pattern CharClassStart :: String -> String
+pattern CharClassStart rest <- ('[':rest) where
+  CharClassStart rest = '[':rest
 
 -- | Types of ignore patterns
 data PatternType 
@@ -195,9 +219,9 @@ readNestedGitIgnores rootPath = do
     
     -- Make a pattern relative to its containing directory
     makeRelativeToDir :: FilePath -> IgnorePattern -> IgnorePattern
-    makeRelativeToDir dir (IgnorePattern pattern) =
-      let isNegation = "!" `L.isPrefixOf` pattern
-          actualPattern = if isNegation then drop 1 pattern else pattern
+    makeRelativeToDir dir (IgnorePattern p) =
+      let isNegation = "!" `L.isPrefixOf` p
+          actualPattern = if isNegation then drop 1 p else p
           isAbsolute = "/" `L.isPrefixOf` actualPattern
           adjusted = if isAbsolute 
                      then actualPattern  -- Already absolute
@@ -249,51 +273,51 @@ matchesIgnorePattern patterns filePath =
     
     -- Match a single pattern against a path
     matchesPattern :: FilePath -> IgnorePattern -> Bool
-    matchesPattern path (IgnorePattern pattern) =
-      let (_, matcher) = getCachedMatcher cache pattern
+    matchesPattern path (IgnorePattern p) =
+      let (_, matcher) = getCachedMatcher cache p
       in matcher path
 
 -- | Get or create a cached pattern matcher
 getCachedMatcher :: PatternCache -> String -> (PatternCache, FilePath -> Bool)
-getCachedMatcher cache pattern = 
-  case Map.lookup pattern cache of
+getCachedMatcher cache ptn = 
+  case Map.lookup ptn cache of
     Just matcher -> (cache, matcher)
     Nothing -> 
-      let matcher = makePatternMatcher pattern
-          newCache = Map.insert pattern matcher cache
+      let matcher = makePatternMatcher ptn
+          newCache = Map.insert ptn matcher cache
       in (newCache, matcher)
 
 -- | Convert a pattern string into a function that matches paths against that pattern
 makePatternMatcher :: String -> (FilePath -> Bool)
-makePatternMatcher pattern
+makePatternMatcher ptn
   -- Skip empty patterns
-  | null pattern = const False
+  | null ptn = const False
   
   -- Normalize the pattern to remove trailing slashes for consistency
-  | "/" `L.isSuffixOf` pattern = makePatternMatcher $ init pattern
+  | "/" `L.isSuffixOf` ptn = makePatternMatcher $ init ptn
   
   -- Handle leading slash (anchored to root)
-  | "/" `L.isPrefixOf` pattern =
-      let patternWithoutSlash = drop 1 pattern
+  | "/" `L.isPrefixOf` ptn =
+      let patternWithoutSlash = drop 1 ptn
       in matchFromRoot patternWithoutSlash
       
   -- File extension pattern: *.ext
-  | "*." `L.isPrefixOf` pattern = matchExtension pattern
+  | "*." `L.isPrefixOf` ptn = matchExtension ptn
       
   -- Directory pattern inside path (contains slash)
-  | '/' `elem` pattern = 
-      if '*' `elem` pattern || '?' `elem` pattern || containsCharClass pattern
+  | '/' `elem` ptn = 
+      if '*' `elem` ptn || '?' `elem` ptn || containsCharClass ptn
         -- For wildcard patterns, use glob matching
-        then simpleGlobMatch pattern
+        then simpleGlobMatch ptn
         -- For non-wildcard paths, use component matching
-        else matchPathComponents pattern
+        else matchPathComponents ptn
       
   -- Pattern with character class like [a-z]file.txt
-  | containsCharClass pattern = 
-      simpleGlobMatch pattern
+  | containsCharClass ptn = 
+      simpleGlobMatch ptn
       
   -- Simple filename or pattern with no slashes
-  | otherwise = matchSimpleName pattern
+  | otherwise = matchSimpleName ptn
 
 -- | Check if a pattern contains a character class ([...])
 containsCharClass :: String -> Bool
@@ -303,9 +327,9 @@ containsCharClass (_:rest) = containsCharClass rest
 
 -- | Match file extension patterns like "*.js"
 matchExtension :: String -> (FilePath -> Bool)
-matchExtension pattern = \path ->
-  let ext = drop 2 pattern  -- Skip "*."
-      dirPattern = takeDirectory pattern
+matchExtension ptn = \path ->
+  let ext = drop 2 ptn  -- Skip "*."
+      dirPattern = takeDirectory ptn
       dirParts = if dirPattern /= "." then splitDirectories dirPattern else []
       fileExt = takeExtension path
       -- Get extension without the dot, safely
@@ -320,30 +344,30 @@ matchExtension pattern = \path ->
 
 -- | Match path component patterns like "src/components"
 matchPathComponents :: String -> (FilePath -> Bool)
-matchPathComponents pattern = \path ->
-  let patternComponents = splitDirectories pattern
+matchPathComponents ptn = \path ->
+  let patternComponents = splitDirectories ptn
       pathComponents = splitDirectories path
       -- Check for direct prefix match
-      directMatch = pattern `L.isPrefixOf` path || 
-                   ("/" ++ pattern) `L.isPrefixOf` ("/" ++ path)
+      directMatch = ptn `L.isPrefixOf` path || 
+                   ("/" ++ ptn) `L.isPrefixOf` ("/" ++ path)
       -- Check for match at any level in the path
       multiComponentMatch = any (L.isPrefixOf patternComponents) (tails pathComponents)
   in directMatch || multiComponentMatch
 
 -- | Match simple name patterns like "README.md" or "node_modules"
 matchSimpleName :: String -> (FilePath -> Bool)
-matchSimpleName pattern = \path ->
+matchSimpleName ptn = \path ->
   let fileName = takeFileName path
       pathComponents = splitDirectories path
       -- Check for exact filename match
-      exactMatch = pattern == fileName
+      exactMatch = ptn == fileName
       -- Check for directory name match anywhere in path
-      dirMatch = pattern `elem` pathComponents
+      dirMatch = ptn `elem` pathComponents
       -- Special case for trailing wildcards "dir/**"
-      hasTrailingWildcard = "/**" `L.isSuffixOf` pattern
+      hasTrailingWildcard = "/**" `L.isSuffixOf` ptn
       folderPattern = if hasTrailingWildcard
-                      then take (length pattern - 3) pattern
-                      else pattern
+                      then take (length ptn - 3) ptn
+                      else ptn
       -- Component matching for wildcards
       folderMatchWithWildcard = hasTrailingWildcard && 
                               (folderPattern `elem` pathComponents) &&
@@ -358,13 +382,13 @@ tails xs@(_:xs') = xs : tails xs'
 
 -- | Match a pattern that should start from the root
 matchFromRoot :: String -> (FilePath -> Bool)
-matchFromRoot pattern = \path ->
-  let patternComponents = splitDirectories pattern
+matchFromRoot ptn = \path ->
+  let patternComponents = splitDirectories ptn
       pathComponents = splitDirectories path
       -- Handle wildcards or character classes in the pattern
       containsSpecial = any containsSpecialChars patternComponents
   in if containsSpecial
-     then simpleGlobMatch pattern path
+     then simpleGlobMatch ptn path
      else L.isPrefixOf patternComponents pathComponents
   where
     containsSpecialChars s = '*' `elem` s || '?' `elem` s || containsCharClass s
@@ -394,17 +418,8 @@ matchFromRoot pattern = \path ->
 -- simpleGlobMatch "*.txt" "file.md"  -- Returns False
 -- @
 simpleGlobMatch :: String -> FilePath -> Bool
-simpleGlobMatch pattern = 
-  -- Convert the pattern to a function that matches filepaths against that pattern
-  let matcher = compilePattern pattern
-  in matcher
+simpleGlobMatch ptn = \filepath -> matchGlob ptn filepath
   where
-    -- Compile a string pattern into a function that matches filepaths
-    compilePattern :: String -> (FilePath -> Bool)
-    compilePattern p = 
-      -- Build a function that takes a filepath as input and returns whether it matches
-      \filepath -> matchGlob p filepath
-    
     -- The core matching algorithm
     matchGlob :: String -> String -> Bool
     matchGlob pat path = case (pat, path) of
@@ -413,33 +428,33 @@ simpleGlobMatch pattern =
       ([], _)  -> False
       
       -- Pattern with characters left but no path to match
-      (('*':ps), []) -> matchGlob ps []
+      ((SingleLevelWildcard ps), []) -> matchGlob ps []
       (_, [])        -> False
       
       -- File extension special case: *.ext
-      (('*':'.':ext), _) | not (null ext) ->
+      ((FileExtension ext), _) ->
         let fileExt = takeExtension path
         in not (null fileExt) && map toLower (drop 1 fileExt) == map toLower ext
         
       -- Directory wildcard: **/
-      (('*':'*':'/':ps), (_:_)) ->
+      ((DirectoryWildcard ps), (_:_)) ->
         let restPath = dropWhile (/= '/') path
-        in matchGlob ('*':'*':'/':ps) (drop 1 restPath) || 
+        in matchGlob (DirectoryWildcard ps) (drop 1 restPath) || 
            matchGlob ps path || 
            matchGlob ps (drop 1 restPath)
            
       -- Multi-level wildcard: **
-      (('*':'*':ps), (c:cs)) ->
-        matchGlob ps (c:cs) || matchGlob ('*':'*':ps) cs
+      ((MultiLevelWildcard ps), (c:cs)) ->
+        matchGlob ps (c:cs) || matchGlob (MultiLevelWildcard ps) cs
         
       -- Single-level wildcard: *
-      (('*':ps), (c:cs)) ->
+      ((SingleLevelWildcard ps), (c:cs)) ->
         if c == '/' 
-          then matchGlob ('*':ps) cs  -- Skip the slash
+          then matchGlob (SingleLevelWildcard ps) cs  -- Skip the slash
           else if ps == [] && ('/' `elem` cs)  
               then False  -- Don't let * cross directory boundaries for patterns like "src/*.js"
               else if cs == [] || not ('/' `elem` cs)
-                  then matchGlob ps (c:cs) || matchGlob ('*':ps) cs
+                  then matchGlob ps (c:cs) || matchGlob (SingleLevelWildcard ps) cs
                   else False  -- Don't match across directory boundaries for *.js pattern
                   
       -- Single character wildcard: ?
@@ -447,7 +462,7 @@ simpleGlobMatch pattern =
         matchGlob ps cs
       
       -- Beginning of character class: [
-      (('[':cs), (c:path')) ->
+      ((CharClassStart cs), (c:path')) ->
         let (classSpec, rest) = span (/= ']') cs
             negated = not (null classSpec) && head classSpec == '!'
             actualClass = if negated then tail classSpec else classSpec
@@ -462,12 +477,21 @@ simpleGlobMatch pattern =
       ((p:ps), (c:cs)) ->
         p == c && matchGlob ps cs
 
+-- | Character class patterns for `[...]` expressions
+data CharClassPattern = SingleChar Char
+                      | CharRange Char Char
+                      deriving (Show, Eq)
+
+-- | Parse character class patterns from a string
+parseCharClass :: String -> [CharClassPattern]
+parseCharClass [] = []
+parseCharClass (a:'-':b:rest) = CharRange a b : parseCharClass rest
+parseCharClass (x:xs) = SingleChar x : parseCharClass xs
+
 -- | Match a character against a character class pattern ([a-z], [0-9], etc.)
 matchCharacterClass :: String -> Char -> Bool
-matchCharacterClass [] _ = False
-matchCharacterClass (a:'-':b:rest) c
-  | a <= c && c <= b = True
-  | otherwise = matchCharacterClass rest c
-matchCharacterClass (x:xs) c
-  | x == c = True
-  | otherwise = matchCharacterClass xs c
+matchCharacterClass spec c = any (matchesPattern c) (parseCharClass spec)
+  where
+    matchesPattern :: Char -> CharClassPattern -> Bool
+    matchesPattern ch (SingleChar x) = ch == x
+    matchesPattern ch (CharRange start end) = start <= ch && ch <= end

@@ -100,6 +100,8 @@ library
                , hlibgit2 >= 0.18.0.14 && < 0.19
                , polysemy >= 1.7 && < 1.8
                , polysemy-plugin >= 0.4 && < 0.5
+               , deepseq >= 1.4 && < 1.5
+               , lens >= 5.0 && < 5.3
   default-language: Haskell2010
   default-extensions: OverloadedStrings
                     , TypeOperators
@@ -130,6 +132,8 @@ executable clod
                , optparse-applicative >= 0.16 && < 0.18
                , polysemy >= 1.7 && < 1.8
                , polysemy-plugin >= 0.4 && < 0.5
+               , deepseq >= 1.4 && < 1.5
+               , lens >= 5.0 && < 5.3
   default-language: Haskell2010
   default-extensions: OverloadedStrings
                     , TypeOperators
@@ -173,6 +177,8 @@ test-suite clod-test
                , containers >= 0.6 && < 0.7
                , optparse-applicative >= 0.16 && < 0.18
                , random >= 1.2 && < 1.4
+               , deepseq >= 1.4 && < 1.5
+               , lens >= 5.0 && < 5.3
   default-language: Haskell2010
   default-extensions: OverloadedStrings
                     , TypeOperators
@@ -196,6 +202,8 @@ executable effects-example
                , process >= 1.6 && < 1.7
                , polysemy >= 1.7 && < 1.8
                , polysemy-plugin >= 0.4 && < 0.5
+               , deepseq >= 1.4 && < 1.5
+               , lens >= 5.0 && < 5.3
   default-language: Haskell2010
   default-extensions: OverloadedStrings
                     , TypeOperators

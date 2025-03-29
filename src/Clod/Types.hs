@@ -1,6 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 -- |
 -- Module      : Clod.Types
@@ -48,18 +57,23 @@ import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ReaderT, ask, asks, runReaderT)
 import Data.String (IsString(..))
+import GHC.Generics (Generic)
+import Data.Typeable (Typeable)
 
 -- | Newtype for ignore patterns to prevent mixing with other string types
 newtype IgnorePattern = IgnorePattern { unIgnorePattern :: String }
-  deriving (Show, Eq, IsString)
+  deriving (Show, Eq, Ord) via String
+  deriving (IsString, Semigroup, Monoid) via String
 
 -- | Newtype for optimized filename used in Claude's UI
 newtype OptimizedName = OptimizedName { unOptimizedName :: String }
-  deriving (Show, Eq, IsString)
+  deriving (Show, Eq, Ord) via String
+  deriving (IsString, Semigroup, Monoid) via String
 
 -- | Newtype for original filepath in the repository
 newtype OriginalPath = OriginalPath { unOriginalPath :: String }
-  deriving (Show, Eq, IsString)
+  deriving (Show, Eq, Ord) via String
+  deriving (IsString, Semigroup, Monoid) via String
 
 -- | Configuration for the clod program
 data ClodConfig = ClodConfig
@@ -71,7 +85,8 @@ data ClodConfig = ClodConfig
   , currentStaging :: !FilePath      -- ^ Path to the current staging directory
   , testMode       :: !Bool          -- ^ Whether we're running in test mode
   , ignorePatterns :: ![IgnorePattern] -- ^ Patterns from .gitignore and .clodignore
-  }
+  } deriving stock (Show, Eq, Generic)
+    deriving anyclass (Typeable)
 
 -- | Result of processing a file
 -- 
@@ -80,7 +95,8 @@ data ClodConfig = ClodConfig
 data FileResult 
   = Success              -- ^ File was successfully processed
   | Skipped !String      -- ^ File was skipped with the given reason
-  deriving (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (Typeable)
 
 -- | Errors that can occur during Clod operation
 --
@@ -91,7 +107,10 @@ data ClodError
   | FileSystemError !FilePath !IOError -- ^ Error related to filesystem operations
   | ConfigError !String                -- ^ Error related to configuration (e.g., invalid settings)
   | PatternError !String               -- ^ Error related to pattern matching (e.g., invalid pattern)
-  deriving (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (Typeable)
+
+-- Standard error constraint: Member (Error ClodError) r
 
 -- | The Clod transformer monad
 --

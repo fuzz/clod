@@ -115,3 +115,46 @@ This document contains learning points about working with Haskell from Claude Co
   mutation/uncertainty boundaries means that humans in the loop can focus on
   the uncertainty at those boundaries while you take care of the purely
   functional work more-or-less unattended.
+
+## Advanced Type System Features
+
+- **Constraint kinds**: When creating type aliases that represent constraints (like `type ErrorHandler r = Member (Error e) r`), always add the `ConstraintKinds` language extension.
+- **Phantom types**: When working with phantom types like `TypedPath a`, use `Data.Coerce.coerce` for type conversions rather than complex pattern matching with GADT equality proofs.
+- **Language extension coordination**: Advanced features require multiple extensions to work together properly:
+  - Pattern synonyms need `PatternSynonyms` and often `ViewPatterns`
+  - Type families need `TypeFamilies` and usually `UndecidableInstances`
+  - GADTs need both `GADTs` and `DataKinds` for kind signatures
+  - Deriving mechanisms need appropriate extensions (`DeriveGeneric`, `DerivingVia`, etc.)
+- **Effect systems**: When using algebraic effects:
+  - Every function using capability-based operations needs explicit effect constraints
+  - Include `Member (Embed IO) r` in any function that calls into IO directly
+  - Use `Members '[...]` syntax for multiple effect constraints
+- **Pattern synonyms**: Make pattern synonyms bidirectional when possible, providing both pattern and expression components for better usability and type inference.
+- **Clean code practices**: Regularly remove unused imports, declarations, and type class instances as they create maintenance burden and compilation warnings.
+- **Kleisli composition**: While elegant for monadic pipelines, sometimes direct do-notation is clearer, especially for complex error handling logic.
+- **Type safety**: Prefer explicit types over type inference for public API functions to improve documentation and stability.
+
+## Haddock Documentation
+
+- **Template Haskell Generated Functions**: When using `makeSem` and similar TH functions that generate code:
+  - Document the GADT constructors with Haddock comments before each constructor
+  - For better documentation, create helper functions that re-export the generated functions with documentation
+  - Example: `_readFileDoc :: Member FileSystem r => FilePath -> Sem r BS.ByteString; _readFileDoc = readFile`
+
+- **Qualification for Re-exported Functions**: When re-exporting functions from other modules:
+  - Import the original module qualified (e.g., `import qualified Polysemy.Error as PE`)
+  - Define local versions with proper documentation: `throw = PE.throw`
+  - This avoids ambiguous references when the function is used elsewhere
+
+- **Pattern Synonyms**: Always document pattern synonyms with Haddock comments, as they are part of your public API
+
+## Working with Effect Systems
+
+- **Import Qualification Strategy**: When using effect libraries like Polysemy:
+  - Always qualify imports that define effect interpreters to avoid naming conflicts
+  - Use consistent qualification prefixes across modules (e.g., `PE` for Polysemy.Error)
+  - Be especially careful with functions like `throw`, `catch`, and `runError` that might appear in multiple modules
+
+- **Consistent Error Handling**: When throwing errors in capability systems:
+  - Define a unified approach to error construction across modules
+  - Use qualified imports to avoid ambiguity in error-throwing functions
