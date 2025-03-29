@@ -1,11 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 
 -- |
@@ -17,7 +13,7 @@
 -- Stability   : experimental
 --
 -- This module provides the core functionality for the Clod application,
--- implemented using an algebraic effects system with capability-based security.
+-- implemented using a traditional monad stack with capability-based security.
 --
 -- Clod (Claude Loader) is a utility for preparing and uploading files to
 -- Claude AI's Project Knowledge feature. It tracks file changes, respects
@@ -31,19 +27,13 @@
 -- * Optimize filenames for Claude's UI
 -- * Generate a path manifest for mapping optimized names back to original paths
 -- * Capability-based security for file operations
---
--- === Effects System 
---
--- The core implementation uses an algebraic effects system (via polysemy) to provide
--- explicit tracking of side effects and capability-based security. This ensures that
--- operations can only access files within explicitly permitted directories.
 
 module Clod.Core
-  ( -- * Main application entry point using effects
+  ( -- * Main application entry point
     runClodApp
     
     -- * File processing with capabilities
-  , processFileWithEffects
+  , processFile
   ) where
 
 import System.Directory (createDirectoryIfMissing)
@@ -51,75 +41,63 @@ import System.FilePath ((</>), splitDirectories)
 import System.IO (writeFile)
 import Data.Version (showVersion)
 import Control.Monad (when)
+import Control.Monad.Reader (ask)
+import Control.Monad.Except (throwError)
+import Control.Monad.IO.Class (liftIO)
 
-import Polysemy
-import qualified Polysemy.Error as PE
-import Polysemy.Error (Error)
-import Polysemy.Reader hiding (ask)
-import qualified Polysemy.Reader as PR
-
-import qualified Clod.Types as T
-import Clod.Types (ClodConfig(..))
+import Clod.Types
 import Clod.IgnorePatterns (matchesIgnorePattern)
-import Clod.Effects hiding (writeFile)
-import Clod.Capability
+import Clod.FileSystem.Detection (safeFileExists, safeIsTextFile)
+import Clod.FileSystem.Operations (safeCopyFile)
 import qualified Paths_clod as Meta
 
-
 -- | Check if a file should be ignored based on ignore patterns
-checkIgnorePatterns :: Members '[Reader T.ClodConfig] r 
-                    => FilePath -> FilePath -> Sem r (Either String T.FileResult)
+checkIgnorePatterns :: FilePath -> FilePath -> ClodM (Either String FileResult)
 checkIgnorePatterns _ relPath = do
-  patterns <- T.ignorePatterns <$> PR.ask
+  patterns <- ignorePatterns <$> ask
   if not (null patterns) && matchesIgnorePattern patterns relPath
     then pure $ Left "matched .clodignore pattern"
-    else pure $ Right T.Success
+    else pure $ Right Success
 
 -- | Check if a file exists
-checkFileExists :: Members '[FileSystem, Error T.ClodError, Embed IO] r 
-                => FileReadCap -> FilePath -> FilePath -> Sem r (Either String T.FileResult)
+checkFileExists :: FileReadCap -> FilePath -> FilePath -> ClodM (Either String FileResult)
 checkFileExists readCap fullPath _ = do
   exists <- safeFileExists readCap fullPath
   if exists
-    then pure $ Right T.Success
+    then pure $ Right Success
     else pure $ Left "file does not exist"
 
 -- | Check if a file is text
-checkIsTextFile :: Members '[FileSystem, Error T.ClodError, Embed IO] r 
-                => FileReadCap -> FilePath -> FilePath -> Sem r (Either String T.FileResult)
+checkIsTextFile :: FileReadCap -> FilePath -> FilePath -> ClodM (Either String FileResult)
 checkIsTextFile readCap fullPath _ = do
   isText <- safeIsTextFile readCap fullPath
   if isText
-    then pure $ Right T.Success
+    then pure $ Right Success
     else pure $ Left "binary file"
 
 -- | Copy a file to the staging directory
-copyToStaging :: Members '[FileSystem, Error T.ClodError, Console, Reader T.ClodConfig, Embed IO] r 
-              => FileReadCap -> FileWriteCap -> FilePath -> FilePath 
-              -> Sem r (Either String T.FileResult)
+copyToStaging :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM (Either String FileResult)
 copyToStaging readCap writeCap fullPath relPath = do
-  stagingPath <- T.currentStaging <$> PR.ask
+  stagingPath <- currentStaging <$> ask
   let finalOptimizedName = createOptimizedName relPath
       destPath = stagingPath </> unOptimizedName finalOptimizedName
   
   -- Copy file with optimized name using capability
   safeCopyFile readCap writeCap fullPath destPath
   
-  logInfo $ "Copied: " ++ relPath ++ " → " ++ unOptimizedName finalOptimizedName
-  pure $ Right T.Success
+  liftIO $ putStrLn $ "Copied: " ++ relPath ++ " → " ++ unOptimizedName finalOptimizedName
+  pure $ Right Success
   where
     -- Simplified version of createOptimizedName for demonstration
-    createOptimizedName :: FilePath -> T.OptimizedName
-    createOptimizedName path = T.OptimizedName $ last (splitDirectories path)
+    createOptimizedName :: FilePath -> OptimizedName
+    createOptimizedName path = OptimizedName $ last (splitDirectories path)
     
-    unOptimizedName :: T.OptimizedName -> String
-    unOptimizedName (T.OptimizedName name) = name
+    unOptimizedName :: OptimizedName -> String
+    unOptimizedName (OptimizedName name) = name
 
-
--- | Process a file using the effects system with elegant Kleisli composition
-processFileWithEffects :: Members '[FileSystem, Error T.ClodError, Console, Reader T.ClodConfig, Embed IO] r
-                       => FileReadCap -> FileWriteCap -> FilePath -> FilePath -> Sem r T.FileResult
-processFileWithEffects readCap writeCap fullPath relPath = do
+-- | Process a file using capability-based security
+processFile :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM FileResult
+processFile readCap writeCap fullPath relPath = do
   let steps = [ checkIgnorePatterns fullPath relPath
               , checkFileExists readCap fullPath relPath
               , checkIsTextFile readCap fullPath relPath
@@ -127,7 +105,7 @@ processFileWithEffects readCap writeCap fullPath relPath = do
               ]
 
       -- Process steps sequentially, stopping on first error
-      processSteps [] = pure $ Right T.Success
+      processSteps [] = pure $ Right Success
       processSteps (step:remaining) = do
         result <- step
         case result of
@@ -137,40 +115,37 @@ processFileWithEffects readCap writeCap fullPath relPath = do
   -- Run the processing pipeline and convert result
   result <- processSteps steps
   pure $ case result of
-    Left reason -> T.Skipped reason
-    Right _ -> T.Success
+    Left reason -> Skipped reason
+    Right _ -> Success
     
--- | Run a computation with the Clod effects system
-runClodApp :: T.ClodConfig -> FilePath -> Bool -> Bool -> Bool -> IO (Either T.ClodError ())
-runClodApp config stagingDirArg verbose _ _ = do
-  -- Run with polysemy effects
-  runM . runReader config . PE.runError . runConsoleIO . runGitIO . runFileSystemIO $ do
-    when verbose $ do
-      -- Print version information only in verbose mode
-      logInfo $ "clod version " ++ showVersion Meta.version ++ " (Haskell)"
+-- | Run the main Clod application
+runClodApp :: ClodConfig -> FilePath -> Bool -> Bool -> Bool -> IO (Either ClodError ())
+runClodApp config stagingDirArg verbose _ _ = runClodM config $ do
+  when verbose $ do
+    -- Print version information only in verbose mode
+    liftIO $ putStrLn $ "clod version " ++ showVersion Meta.version ++ " (Haskell)"
+  
+  -- Execute main logic with capabilities
+  mainLogic stagingDirArg verbose
     
-    -- Execute main logic with capabilities
-    effectsBasedMain stagingDirArg verbose
-    
--- | Main function using effects system
-effectsBasedMain :: Members '[FileSystem, Git, Console, Error T.ClodError, Reader T.ClodConfig, Embed IO] r
-                 => FilePath -> Bool -> Sem r ()
-effectsBasedMain stagingDirArg verbose = do
-  T.ClodConfig{configDir, stagingDir, projectPath, lastRunFile} <- PR.ask
+-- | Main application logic
+mainLogic :: FilePath -> Bool -> ClodM ()
+mainLogic stagingDirArg verbose = do
+  ClodConfig{configDir, stagingDir, projectPath, lastRunFile} <- ask
   
   -- Create directories
-  embed $ createDirectoryIfMissing True configDir
-  embed $ createDirectoryIfMissing True stagingDir
+  liftIO $ createDirectoryIfMissing True configDir
+  liftIO $ createDirectoryIfMissing True stagingDir
   
   -- Only show additional info in verbose mode
   when verbose $ do
-    logInfo $ "Running with capabilities, safely restricting operations to: " ++ projectPath
-    logInfo $ "Safe staging directory: " ++ stagingDirArg
-    logInfo "AI safety guardrails active with capability-based security"
+    liftIO $ putStrLn $ "Running with capabilities, safely restricting operations to: " ++ projectPath
+    liftIO $ putStrLn $ "Safe staging directory: " ++ stagingDirArg
+    liftIO $ putStrLn "AI safety guardrails active with capability-based security"
   
   -- Update the last run marker to track when clod was last run
-  embed $ System.IO.writeFile lastRunFile ""
+  liftIO $ System.IO.writeFile lastRunFile ""
   
   -- Output ONLY the staging directory path to stdout for piping to other tools
   -- This follows Unix principles - single line of output for easy piping
-  logOutput stagingDir
+  liftIO $ putStrLn stagingDir
