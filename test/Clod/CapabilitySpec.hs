@@ -1,7 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 -- |
 -- Module      : Clod.CapabilitySpec
@@ -25,15 +22,9 @@ import Data.Either (isRight, isLeft)
 import qualified System.IO
 import System.Process (callProcess)
 
-import Polysemy
-import Polysemy.Error
-import Clod.Types (ClodError(..))
-import Clod.Effects
-import Clod.Capability
-
--- | Helper function to run EmbedIO effect
-runEmbedIO :: Member (Embed IO) r => Sem r a -> Sem r a
-runEmbedIO = id
+import Clod.Types
+import Clod.FileSystem.Operations (safeReadFile, safeWriteFile)
+import Clod.Git (safeGetModifiedFiles)
 
 -- | Test specification for capability-based security
 spec :: Spec
@@ -55,10 +46,10 @@ fileReadCapSpec = describe "File read capabilities" $ do
       
       -- Create capability that allows access to the subDir
       let readCap = fileReadCap [subDir]
+          config = defaultTestConfig
       
       -- Test file access
-      result <- runM . runError @ClodError . runEmbedIO . runFileSystemIO $ do
-        safeReadFile readCap (subDir </> "test.txt")
+      result <- runClodM config $ safeReadFile readCap (subDir </> "test.txt")
       
       -- Should succeed
       result `shouldSatisfy` isRight
@@ -77,10 +68,10 @@ fileReadCapSpec = describe "File read capabilities" $ do
       
       -- Create capability that only allows access to allowedDir
       let readCap = fileReadCap [allowedDir]
+          config = defaultTestConfig
       
       -- Try to access forbidden file
-      result <- runM . runError @ClodError . runEmbedIO . runFileSystemIO $ do
-        safeReadFile readCap (forbiddenDir </> "forbidden.txt")
+      result <- runClodM config $ safeReadFile readCap (forbiddenDir </> "forbidden.txt")
       
       -- Should fail with permission error
       result `shouldSatisfy` isLeft
@@ -99,10 +90,10 @@ fileWriteCapSpec = describe "File write capabilities" $ do
       
       -- Create write capability
       let writeCap = fileWriteCap [writeDir]
+          config = defaultTestConfig
       
       -- Try to write to permitted directory
-      result <- runM . runError @ClodError . runEmbedIO . runFileSystemIO $ do
-        safeWriteFile writeCap (writeDir </> "new.txt") "new content"
+      result <- runClodM config $ safeWriteFile writeCap (writeDir </> "new.txt") "new content"
       
       -- Should succeed
       result `shouldSatisfy` isRight
@@ -122,10 +113,10 @@ fileWriteCapSpec = describe "File write capabilities" $ do
       
       -- Create write capability that only allows certain directories
       let writeCap = fileWriteCap [writeDir]
+          config = defaultTestConfig
       
       -- Try to write to forbidden directory
-      result <- runM . runError @ClodError . runEmbedIO . runFileSystemIO $ do
-        safeWriteFile writeCap (noWriteDir </> "forbidden.txt") "forbidden content"
+      result <- runClodM config $ safeWriteFile writeCap (noWriteDir </> "forbidden.txt") "forbidden content"
       
       -- Should fail with permission error
       result `shouldSatisfy` isLeft
@@ -154,10 +145,10 @@ gitCapSpec = describe "Git capabilities" $ do
       
       -- Create capability
       let gitCapability = gitCap [repoDir]
+          config = defaultTestConfig
       
       -- Check repo access
-      result <- runM . runError @ClodError . runEmbedIO . runGitIO $ do
-        safeGetModifiedFiles gitCapability repoDir
+      result <- runClodM config $ safeGetModifiedFiles gitCapability repoDir
       
       -- Should succeed
       result `shouldSatisfy` isRight
@@ -193,10 +184,10 @@ gitCapSpec = describe "Git capabilities" $ do
       
       -- Create restricted capability
       let gitCapability = gitCap [allowedRepo]
+          config = defaultTestConfig
       
       -- Try to access forbidden repo
-      result <- runM . runError @ClodError . runEmbedIO . runGitIO $ do
-        safeGetModifiedFiles gitCapability forbiddenRepo
+      result <- runClodM config $ safeGetModifiedFiles gitCapability forbiddenRepo
       
       -- Should fail with permission error
       result `shouldSatisfy` isLeft
@@ -218,6 +209,7 @@ capabilityEscapePreventionSpec = describe "Capability escape prevention" $ do
       
       -- Create a limited capability
       let readCap = fileReadCap [allowedDir]
+          config = defaultTestConfig
       
       -- Try path traversal attack using ../
       let traversalPath = allowedDir </> ".." </> "secret" </> "secret.txt"
@@ -227,9 +219,8 @@ capabilityEscapePreventionSpec = describe "Capability escape prevention" $ do
       canonicalSecretPath <- canonicalizePath (secretDir </> "secret.txt")
       canonicalTraversalPath `shouldBe` canonicalSecretPath
       
-      -- But capability should prevent access (now with runEmbedIO for the new IO-based checks)
-      result <- runM . runError @ClodError . runEmbedIO . runFileSystemIO $ do
-        safeReadFile readCap traversalPath
+      -- But capability should prevent access
+      result <- runClodM config $ safeReadFile readCap traversalPath
       
       -- Should fail with permission error
       result `shouldSatisfy` isLeft
@@ -260,10 +251,23 @@ capabilityEscapePreventionSpec = describe "Capability escape prevention" $ do
           
           -- Create a limited capability
           let readCap = fileReadCap [allowedDir]
+              config = defaultTestConfig
           
           -- Try to access via symlink
-          result <- runM . runError @ClodError . runEmbedIO . runFileSystemIO $ do
-            safeReadFile readCap linkPath
+          result <- runClodM config $ safeReadFile readCap linkPath
           
           -- Should fail with permission error since the target is outside
           result `shouldSatisfy` isLeft
+
+-- | Default test configuration
+defaultTestConfig :: ClodConfig
+defaultTestConfig = ClodConfig
+  { projectPath = "/"
+  , stagingDir = "/"
+  , configDir = "/"
+  , lastRunFile = "/"
+  , timestamp = ""
+  , currentStaging = "/"
+  , testMode = True
+  , ignorePatterns = []
+  }

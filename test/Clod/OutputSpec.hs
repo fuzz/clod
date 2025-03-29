@@ -1,7 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 -- |
 -- Module      : Clod.OutputSpec
@@ -19,20 +16,16 @@ import Test.Hspec
 import System.Directory
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
-import System.IO (openTempFile, hClose)
+import System.IO (openTempFile, hClose, withFile, Handle, hPutStrLn, IOMode(WriteMode))
 import Data.Either (isRight)
 import qualified System.IO
 import qualified Data.ByteString.Char8 as BC
-
-import Polysemy
-import Polysemy.Error
-import Polysemy.Reader
-import System.Random (randomIO)
-
-import Clod.Types (ClodConfig(..), ClodError(..))
-import Clod.Effects
 import qualified Data.ByteString as BS
 import qualified Data.List as L
+import Control.Monad.IO.Class (liftIO)
+import System.Random (randomIO)
+
+import Clod.Types
 
 -- | Mock implementations of the functions we want to test
 -- Since the actual implementation might be in various files, we create test versions
@@ -56,21 +49,19 @@ sanitizeRelativePath path =
   in map replaceSeparator path'
 
 -- | Formats file output with either verbose or summary information
-formatFileOutput :: Bool -> [String] -> Sem (Console ': FileSystem ': Reader ClodConfig ': Error ClodError ': Embed IO ': r) ()
-formatFileOutput verbose paths = do
+formatFileOutput :: Handle -> Bool -> [String] -> ClodM ()
+formatFileOutput handle verbose paths = do
   if verbose
-    then mapM_ logInfo paths
-    else logInfo $ show (length paths) ++ " files"
+    then mapM_ (liftIO . hPutStrLn handle) paths
+    else liftIO $ hPutStrLn handle $ show (length paths) ++ " files"
 
 -- | Writes a manifest mapping optimized paths to original paths
-writePathManifest :: [String] -> Sem (FileSystem ': Reader ClodConfig ': Error ClodError ': Embed IO ': r) ()
-writePathManifest paths = do
-  config <- ask
-  let manifestPath = currentStaging config </> "path-manifest.json"
+writePathManifest :: FilePath -> [String] -> ClodM ()
+writePathManifest manifestPath paths = do
   let content = "{\n" ++ 
-               concatMap (\p -> "  \"" ++ sanitizeRelativePath p ++ "\": \"" ++ p ++ "\",\n") paths ++
-               "  \"_manifest\": \"path-mapping\"\n}"
-  Clod.Effects.writeFile manifestPath (BS.pack $ map (fromIntegral . fromEnum) content)
+              concatMap (\p -> "  \"" ++ sanitizeRelativePath p ++ "\": \"" ++ p ++ "\",\n") paths ++
+              "  \"_manifest\": \"path-mapping\"\n}"
+  liftIO $ writeFile manifestPath content
 
 -- | Test specification for Output module
 spec :: Spec
@@ -138,10 +129,9 @@ outputFormattingSpec = describe "Output formatting" $ do
       outputFile <- createTempFile tmpDir
       
       -- Redirect stdout to capture output
-      System.IO.withFile outputFile System.IO.WriteMode $ \handle -> do
-        -- Run with effects system to format output
-        result <- runM . runError @ClodError . runReader config . runFileSystemIO . runConsoleWithHandle handle $ do
-          formatFileOutput True paths
+      withFile outputFile WriteMode $ \handle -> do
+        -- Run to format output
+        result <- runClodM config $ formatFileOutput handle True paths
           
         -- Check result
         result `shouldSatisfy` isRight
@@ -174,10 +164,9 @@ outputFormattingSpec = describe "Output formatting" $ do
       outputFile <- createTempFile tmpDir
       
       -- Redirect stdout to capture output
-      System.IO.withFile outputFile System.IO.WriteMode $ \handle -> do
-        -- Run with effects system to format output
-        result <- runM . runError @ClodError . runReader config . runFileSystemIO . runConsoleWithHandle handle $ do
-          formatFileOutput False paths
+      withFile outputFile WriteMode $ \handle -> do
+        -- Run to format output
+        result <- runClodM config $ formatFileOutput handle False paths
           
         -- Check result
         result `shouldSatisfy` isRight
@@ -226,16 +215,16 @@ pathManifestSpec = describe "Path manifest generation" $ do
       mapM_ (flip System.IO.writeFile "test content") originalPaths
       
       -- Generate actual path mapping
-      result <- runM . runError @ClodError . runReader config . runFileSystemIO $ do
-        writePathManifest relativePaths
+      let manifestPath = (tmpDir </> "staging" </> "path-manifest.json")
+      result <- runClodM config $ writePathManifest manifestPath relativePaths
         
       -- Check if manifest file was created
       result `shouldSatisfy` isRight
-      manifestExists <- doesFileExist (tmpDir </> "staging" </> "path-manifest.json")
+      manifestExists <- doesFileExist manifestPath
       manifestExists `shouldBe` True
       
       -- Verify manifest content is correct
-      content <- System.IO.readFile (tmpDir </> "staging" </> "path-manifest.json")
+      content <- System.IO.readFile manifestPath
       content `shouldContain` "src_index.js"
       content `shouldContain` "src/index.js"
       content `shouldContain` "src_components_Button.jsx"
@@ -250,12 +239,3 @@ createTempFile tmpDir = do
   (path, handle) <- openTempFile tmpDir ("output-test-" ++ uniqueId)
   hClose handle  -- Close the handle immediately so we can use the file
   return path
-
--- Helper function to run console with a specific handle
-runConsoleWithHandle :: Member (Embed IO) r => System.IO.Handle -> Sem (Console ': r) a -> Sem r a
-runConsoleWithHandle h = interpret $ \cmd -> 
-  case cmd of
-    LogInfo msg -> embed $ System.IO.hPutStrLn h msg
-    LogWarning msg -> embed $ System.IO.hPutStrLn h $ "Warning: " ++ msg
-    LogError msg -> embed $ System.IO.hPutStrLn h $ "Error: " ++ msg 
-    LogOutput msg -> embed $ System.IO.hPutStrLn h msg
