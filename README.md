@@ -7,6 +7,8 @@ Clod is a utility for preparing and uploading files to Claude AI's Project Knowl
 
 See [HUMAN.md](HUMAN.md) for a complete workflow guide to using `clod` with Claude AI.
 
+For information about the capability-based security model, see [CAPABILITIES.md](CAPABILITIES.md).
+
 ## Features
 
 - Track modified files since last run
