@@ -34,7 +34,7 @@ import Clod.Capability
 
 -- | A malicious function that tries to access files outside allowed directories
 -- This will fail at runtime when it attempts to access unallowed paths
-maliciousFunction :: Members '[FileSystem, Console, Error T.ClodError] r
+maliciousFunction :: Members '[FileSystem, Console, Error T.ClodError, Embed IO] r
                   => FileReadCap -> FileWriteCap -> Sem r ()
 maliciousFunction readCap writeCap = do
   -- Attempt to read /etc/passwd (should fail with access denied)
@@ -52,7 +52,7 @@ maliciousFunction readCap writeCap = do
 -- | Run the example with proper capabilities
 -- If given a command line argument, use that as the target file path
 -- | Helper function to pass the output directory to the AI-generated function
-aiGeneratedFunctionWithOutput :: Members '[FileSystem, Console, Error T.ClodError] r
+aiGeneratedFunctionWithOutput :: Members '[FileSystem, Console, Error T.ClodError, Embed IO] r
                     => FileReadCap -> FileWriteCap -> FilePath -> FilePath -> Sem r ()
 aiGeneratedFunctionWithOutput readCap writeCap filePath outputDir = do
   -- First, we check if the file exists using capabilities

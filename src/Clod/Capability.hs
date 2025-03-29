@@ -75,8 +75,10 @@ module Clod.Capability
 
 import Polysemy
 import Polysemy.Error
+import qualified Polysemy.Embed as E
 import Data.List (isPrefixOf)
 import qualified Data.ByteString as BS
+import System.Directory (canonicalizePath)
 import Prelude hiding (readFile, writeFile)
 
 import Clod.Effects
@@ -104,78 +106,103 @@ gitCap :: [FilePath] -> GitCap
 gitCap = GitCap
 
 -- | Check if a path is within allowed directories
-isPathAllowed :: [FilePath] -> FilePath -> Bool
-isPathAllowed allowedDirs path = any (\dir -> dir `isPrefixOf` path) allowedDirs
+-- This improved version handles path traversal attacks by comparing canonical paths
+isPathAllowed :: [FilePath] -> FilePath -> IO Bool
+isPathAllowed allowedDirs path = do
+  -- Get canonical paths to resolve any `.`, `..`, or symlinks
+  canonicalPath <- canonicalizePath path
+  -- Check if the canonical path is within any of the allowed directories
+  checks <- mapM (\dir -> do
+                    canonicalDir <- canonicalizePath dir
+                    -- A path is allowed if:
+                    -- 1. It equals an allowed directory exactly, or
+                    -- 2. It's a proper subdirectory (dir is a prefix and has a path separator)
+                    let isAllowed = canonicalDir == canonicalPath || 
+                                   (canonicalDir `isPrefixOf` canonicalPath && 
+                                    length canonicalPath > length canonicalDir &&
+                                    isPathSeparator (canonicalPath !! length canonicalDir))
+                    return isAllowed) allowedDirs
+  return (or checks)
+  where
+    isPathSeparator c = c == '/' || c == '\\'
 
 -- | Safe file reading that checks capabilities
-safeReadFile :: Members '[FileSystem, Error T.ClodError] r 
+safeReadFile :: Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
              => FileReadCap 
              -> FilePath 
              -> Sem r BS.ByteString
-safeReadFile cap path = 
-  if isPathAllowed (allowedReadDirs cap) path
+safeReadFile cap path = do
+  allowed <- E.embed $ isPathAllowed (allowedReadDirs cap) path
+  if allowed
     then readFile path
     else throw $ T.ConfigError $ "Access denied: Cannot read file outside allowed directories: " ++ path
 
 -- | Safe file existence check that checks capabilities
-safeFileExists :: Members '[FileSystem, Error T.ClodError] r 
+safeFileExists :: Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
                => FileReadCap 
                -> FilePath 
                -> Sem r Bool
-safeFileExists cap path = 
-  if isPathAllowed (allowedReadDirs cap) path
+safeFileExists cap path = do
+  allowed <- E.embed $ isPathAllowed (allowedReadDirs cap) path
+  if allowed
     then fileExists path
     else throw $ T.ConfigError $ "Access denied: Cannot check existence of file outside allowed directories: " ++ path
 
 -- | Safe file type check that checks capabilities
-safeIsTextFile :: Members '[FileSystem, Error T.ClodError] r 
+safeIsTextFile :: Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
                => FileReadCap 
                -> FilePath 
                -> Sem r Bool
-safeIsTextFile cap path = 
-  if isPathAllowed (allowedReadDirs cap) path
+safeIsTextFile cap path = do
+  allowed <- E.embed $ isPathAllowed (allowedReadDirs cap) path
+  if allowed
     then isTextFile path
     else throw $ T.ConfigError $ "Access denied: Cannot check file type outside allowed directories: " ++ path
 
 -- | Safe file writing that checks capabilities
-safeWriteFile :: Members '[FileSystem, Error T.ClodError] r 
+safeWriteFile :: Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
               => FileWriteCap 
               -> FilePath 
               -> BS.ByteString 
               -> Sem r ()
-safeWriteFile cap path content = 
-  if isPathAllowed (allowedWriteDirs cap) path
+safeWriteFile cap path content = do
+  allowed <- E.embed $ isPathAllowed (allowedWriteDirs cap) path
+  if allowed
     then writeFile path content
     else throw $ T.ConfigError $ "Access denied: Cannot write file outside allowed directories: " ++ path
 
 -- | Safe file copying that checks capabilities for both read and write
-safeCopyFile :: Members '[FileSystem, Error T.ClodError] r 
+safeCopyFile :: Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
              => FileReadCap
              -> FileWriteCap
              -> FilePath 
              -> FilePath 
              -> Sem r ()
-safeCopyFile readCap writeCap src dest = 
-  if isPathAllowed (allowedReadDirs readCap) src && isPathAllowed (allowedWriteDirs writeCap) dest
+safeCopyFile readCap writeCap src dest = do
+  srcAllowed <- E.embed $ isPathAllowed (allowedReadDirs readCap) src
+  destAllowed <- E.embed $ isPathAllowed (allowedWriteDirs writeCap) dest
+  if srcAllowed && destAllowed
     then copyFile src dest
     else throw $ T.ConfigError $ "Access denied: Cannot copy file - path restrictions violated"
 
 -- | Safe git modified files checking with capabilities
-safeGetModifiedFiles :: Members '[Git, Error T.ClodError] r 
+safeGetModifiedFiles :: Members '[Git, Error T.ClodError, E.Embed IO] r 
                      => GitCap 
                      -> FilePath 
                      -> Sem r [FilePath]
-safeGetModifiedFiles cap repoPath = 
-  if isPathAllowed (allowedRepos cap) repoPath
+safeGetModifiedFiles cap repoPath = do
+  allowed <- E.embed $ isPathAllowed (allowedRepos cap) repoPath
+  if allowed
     then getModifiedFiles repoPath
     else throw $ T.ConfigError $ "Access denied: Cannot access Git repository: " ++ repoPath
 
 -- | Safe git untracked files checking with capabilities
-safeGetUntrackedFiles :: Members '[Git, Error T.ClodError] r 
+safeGetUntrackedFiles :: Members '[Git, Error T.ClodError, E.Embed IO] r 
                       => GitCap 
                       -> FilePath 
                       -> Sem r [FilePath]
-safeGetUntrackedFiles cap repoPath = 
-  if isPathAllowed (allowedRepos cap) repoPath
+safeGetUntrackedFiles cap repoPath = do
+  allowed <- E.embed $ isPathAllowed (allowedRepos cap) repoPath
+  if allowed
     then getUntrackedFiles repoPath
     else throw $ T.ConfigError $ "Access denied: Cannot access Git repository: " ++ repoPath

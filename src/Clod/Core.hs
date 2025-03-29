@@ -61,7 +61,7 @@ import Clod.Capability
 import qualified Paths_clod as Meta
 
 -- | Process a file using the effects system
-processFileWithEffects :: Members '[FileSystem, Error T.ClodError, Console, Reader T.ClodConfig] r
+processFileWithEffects :: Members '[FileSystem, Error T.ClodError, Console, Reader T.ClodConfig, Embed IO] r
                        => FileReadCap -> FileWriteCap -> FilePath -> FilePath -> Sem r T.FileResult
 processFileWithEffects readCap writeCap fullPath relPath = do
   config <- PR.ask

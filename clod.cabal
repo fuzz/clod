@@ -151,6 +151,11 @@ test-suite clod-test
                , Clod.FileSystemSpec
                , Clod.GitSpec 
                , Clod.CoreSpec
+               , Clod.ConfigSpec
+               , Clod.OutputSpec
+               , Clod.MainSpec
+               , Clod.FileSystem.DetectionSpec
+               , Clod.CapabilitySpec
   build-depends: base >= 4.7 && < 5
                , clod
                , directory >= 1.3 && < 1.4
@@ -165,6 +170,9 @@ test-suite clod-test
                , polysemy >= 1.7 && < 1.8
                , polysemy-plugin >= 0.4 && < 0.5
                , bytestring >= 0.10 && < 0.12
+               , containers >= 0.6 && < 0.7
+               , optparse-applicative >= 0.16 && < 0.18
+               , random >= 1.2 && < 1.4
   default-language: Haskell2010
   default-extensions: OverloadedStrings
                     , TypeOperators
