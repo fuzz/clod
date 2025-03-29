@@ -16,15 +16,12 @@ module Clod.IgnorePatternsSpec (spec) where
 import Test.Hspec
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
+import Control.Monad.IO.Class ()
 
 import Clod.IgnorePatterns
-import qualified Clod.Types as T
-import Clod.Types (IgnorePattern(..))
+import Clod.Types (IgnorePattern(..), ClodConfig(..), runClodM, fileReadCap)
 import qualified Data.ByteString.Char8 as BC
-import Polysemy
-import Polysemy.Error
-import Clod.Effects
-import Clod.Capability
+import Clod.FileSystem.Operations (safeReadFile)
 import qualified System.IO
 
 -- | Test specification for ignore patterns
@@ -154,18 +151,19 @@ spec = do
       simpleGlobMatch "file[!0-9].txt" "filea.txt" `shouldBe` True
       simpleGlobMatch "file[!0-9].txt" "file5.txt" `shouldBe` False
 
-  describe "readClodIgnore and readGitIgnore with effects" $ do
-    it "correctly reads .clodignore file using effects" $ do
+  describe "readClodIgnore and readGitIgnore with ClodM" $ do
+    it "correctly reads .clodignore file using ClodM" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
         -- Create a temporary .clodignore file
         let clodIgnorePath = tmpDir </> ".clodignore"
         System.IO.writeFile clodIgnorePath "# Comment line\n*.tmp\n*.log\nsrc/temp\n"
         
-        -- Create a file capability for the test directory
-        let readCap = fileReadCap [tmpDir]
+        -- Create a config and file capability for the test directory
+        let config = defaultConfig tmpDir
+            readCap = fileReadCap [tmpDir]
         
-        -- Run with effects system using file capability
-        result <- runM . runError @T.ClodError . runFileSystemIO $ do
+        -- Run with ClodM monad
+        result <- runClodM config $ do
           -- Read the file directly using capability
           content <- safeReadFile readCap clodIgnorePath
           -- Parse the patterns ourselves
@@ -183,17 +181,18 @@ spec = do
             patternStrs `shouldContain` ["src/temp"]
             length patterns `shouldBe` 3  -- Should not include comment
     
-    it "correctly reads .gitignore file using effects" $ do
+    it "correctly reads .gitignore file using ClodM" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
         -- Create a temporary .gitignore file
         let gitIgnorePath = tmpDir </> ".gitignore"
         System.IO.writeFile gitIgnorePath "# Node dependencies\n/node_modules\n*.log\ndist/\n"
         
-        -- Create a file capability for the test directory
-        let readCap = fileReadCap [tmpDir]
+        -- Create a config and file capability for the test directory
+        let config = defaultConfig tmpDir
+            readCap = fileReadCap [tmpDir]
         
-        -- Run with effects system using file capability
-        result <- runM . runError @T.ClodError . runFileSystemIO $ do
+        -- Run with ClodM monad
+        result <- runClodM config $ do
           -- Read the file directly using capability
           content <- safeReadFile readCap gitIgnorePath
           -- Parse the patterns ourselves
@@ -216,3 +215,16 @@ isValidPattern :: String -> Bool
 isValidPattern "" = False
 isValidPattern ('#':_) = False
 isValidPattern _ = True
+
+-- | Helper function to create a default config for tests
+defaultConfig :: FilePath -> ClodConfig
+defaultConfig tmpDir = ClodConfig
+  { projectPath = tmpDir
+  , stagingDir = tmpDir </> "staging"
+  , configDir = tmpDir </> ".clod"
+  , lastRunFile = tmpDir </> ".clod" </> "last-run"
+  , timestamp = "20250401-000000"
+  , currentStaging = tmpDir </> "staging"
+  , testMode = True
+  , ignorePatterns = []
+  }

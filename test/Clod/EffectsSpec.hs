@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      : Clod.EffectsSpec
@@ -14,8 +15,8 @@
 module Clod.EffectsSpec (spec) where
 
 import Test.Hspec
-import Control.Monad.Except (runExceptT, catchError)
-import Control.Monad.Reader (runReaderT)
+import Control.Monad.Except ()
+import Control.Monad.Reader ()
 
 import Clod.Types
 
@@ -63,7 +64,7 @@ spec = do
             }
       
       -- Create a monad that throws an error but doesn't catch it
-      let action = throwError (ConfigError "test error")
+      let action = throwError (ConfigError "test error") :: ClodM ()
       
       -- Run the action and check the result
       result <- runClodM config action

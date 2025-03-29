@@ -34,6 +34,8 @@ spec = do
   configDirNameSpec
   clodIgnoreFileSpec
   clodConfigDirSpec
+  fileTypesSpec
+  binarySignaturesSpec
 
 -- | Tests for configDirName function
 configDirNameSpec :: Spec
@@ -116,3 +118,40 @@ clodConfigDirSpec = describe "clodConfigDir" $ do
     
     -- Should append config dir to the path
     configDir `shouldBe` "project/.clod"
+    
+-- | Tests for file types configuration loading
+fileTypesSpec :: Spec
+fileTypesSpec = describe "File types configuration" $ do
+  it "loads file types configuration from Dhall" $ do
+    -- Load the configuration
+    fileTypes <- loadFileTypes
+    
+    -- Check that the basic structure is populated
+    length (textExtensions fileTypes) `shouldSatisfy` (> 5)
+    length (binaryExtensions fileTypes) `shouldSatisfy` (> 5)
+    length (textSpecialCases fileTypes) `shouldSatisfy` (> 2)
+    length (binarySpecialCases fileTypes) `shouldSatisfy` (> 1)
+    
+    -- Verify some specific entries
+    textExtensions fileTypes `shouldContain` [".txt"]
+    textExtensions fileTypes `shouldContain` [".hs"]
+    binaryExtensions fileTypes `shouldContain` [".png"]
+    binaryExtensions fileTypes `shouldContain` [".exe"]
+    textSpecialCases fileTypes `shouldContain` ["Makefile"]
+    binarySpecialCases fileTypes `shouldContain` [".min.js"]
+
+-- | Tests for binary signatures configuration loading
+binarySignaturesSpec :: Spec
+binarySignaturesSpec = describe "Binary signatures configuration" $ do
+  it "loads binary signatures from Dhall" $ do
+    -- Load the configuration
+    sigs <- loadBinarySignatures
+    
+    -- Check that signatures are populated
+    length (signatures sigs) `shouldSatisfy` (> 5)
+    
+    -- Verify some specific entries
+    let sigNames = map name (signatures sigs)
+    sigNames `shouldContain` ["JPEG"]
+    sigNames `shouldContain` ["PNG"]
+    sigNames `shouldContain` ["PDF"]

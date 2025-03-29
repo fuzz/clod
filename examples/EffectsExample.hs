@@ -1,76 +1,68 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module      : EffectsExample
--- Description : Example of using the effects system with AI-generated code
+-- Description : Example of using the ClodM monad stack with AI-generated code
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
 -- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
--- This module provides an example of how to use the effects system with AI-generated code.
+-- This module provides an example of how to use the ClodM monad stack with AI-generated code.
 -- It demonstrates how capabilities can restrict what files the code can access.
 
 module Main where
 
-import Polysemy
-import Polysemy.Error
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (getArgs)
 import System.FilePath ((</>), takeFileName, takeDirectory)
 import qualified Data.ByteString.Char8 as BC
+import Control.Monad.IO.Class (liftIO)
 
-import qualified Clod.Types as T
-import Clod.Effects
-import Clod.Capability
+import Clod.Types 
+  ( ClodConfig(..), ClodM, runClodM
+  , FileReadCap(..), FileWriteCap(..), fileReadCap, fileWriteCap )
+import Clod.FileSystem.Detection (safeIsTextFile, safeFileExists)
+import Clod.FileSystem.Operations (safeReadFile, safeWriteFile)
 
 -- | Example of AI-generated code with capability-based security
 -- This module demonstrates how the capability-based security system works
 
 -- | A malicious function that tries to access files outside allowed directories
 -- This will fail at runtime when it attempts to access unallowed paths
-maliciousFunction :: Members '[FileSystem, Console, Error T.ClodError, Embed IO] r
-                  => FileReadCap -> FileWriteCap -> Sem r ()
+maliciousFunction :: FileReadCap -> FileWriteCap -> ClodM ()
 maliciousFunction readCap writeCap = do
   -- Attempt to read /etc/passwd (should fail with access denied)
-  logInfo "Attempting to access sensitive file..."
+  liftIO $ putStrLn "Attempting to access sensitive file..."
   content <- safeReadFile readCap "/etc/passwd"
   
   -- This code would never execute due to the capability check
-  logInfo $ "Successfully read sensitive data: " ++ show (BC.take 50 content)
+  liftIO $ putStrLn $ "Successfully read sensitive data: " ++ show (BC.take 50 content)
   
   -- Attempt to write to /etc/passwd (should fail with access denied)
   safeWriteFile writeCap "/etc/passwd" "HACKED"
   
-  logInfo "Hack successful"  -- This would never execute
+  liftIO $ putStrLn "Hack successful"  -- This would never execute
 
--- | Run the example with proper capabilities
--- If given a command line argument, use that as the target file path
 -- | Helper function to pass the output directory to the AI-generated function
-aiGeneratedFunctionWithOutput :: Members '[FileSystem, Console, Error T.ClodError, Embed IO] r
-                    => FileReadCap -> FileWriteCap -> FilePath -> FilePath -> Sem r ()
+aiGeneratedFunctionWithOutput :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM ()
 aiGeneratedFunctionWithOutput readCap writeCap filePath outputDir = do
   -- First, we check if the file exists using capabilities
   fileExists' <- safeFileExists readCap filePath
   
   if not fileExists'
-    then logError $ "File does not exist: " ++ filePath
+    then liftIO $ putStrLn $ "File does not exist: " ++ filePath
     else do
       -- Check if it's a text file using capabilities
       isText <- safeIsTextFile readCap filePath
       if not isText
-        then logWarning $ "File is binary, skipping content transformation: " ++ filePath
+        then liftIO $ putStrLn $ "File is binary, skipping content transformation: " ++ filePath
         else do
           -- Read the file content using capabilities
           content <- safeReadFile readCap filePath
           
           -- Log the content length
-          logInfo $ "Read file with " ++ show (BC.length content) ++ " bytes"
+          liftIO $ putStrLn $ "Read file with " ++ show (BC.length content) ++ " bytes"
           
           -- Perform some transformation (this is pure code)
           let transformed = BC.map toUpper content
@@ -78,10 +70,10 @@ aiGeneratedFunctionWithOutput readCap writeCap filePath outputDir = do
           -- Write to output file using capabilities
           let outputName = takeFileName filePath ++ ".transformed"
               fullOutputPath = outputDir </> outputName
-          logInfo $ "Writing transformed content to: " ++ fullOutputPath
+          liftIO $ putStrLn $ "Writing transformed content to: " ++ fullOutputPath
           safeWriteFile writeCap fullOutputPath transformed
           
-          logInfo "Transformation complete!"
+          liftIO $ putStrLn "Transformation complete!"
   where
     toUpper c | c >= 'a' && c <= 'z' = toEnum $ fromEnum c - 32
               | otherwise = c
@@ -109,10 +101,22 @@ main = do
   let readCap = fileReadCap [currentDir]
       writeCap = fileWriteCap [outputDir]
       
+  -- Create a default config for the ClodM monad
+  let config = ClodConfig
+        { projectPath = currentDir
+        , stagingDir = outputDir
+        , configDir = currentDir </> ".clod"
+        , lastRunFile = currentDir </> ".clod" </> "last-run"
+        , timestamp = "20250401-000000"
+        , currentStaging = outputDir
+        , testMode = True
+        , ignorePatterns = []
+        }
+      
   putStrLn "=== Running Safe AI-Generated Function ==="
   
   -- Run the safe function
-  result1 <- runM . runError @T.ClodError . runConsoleIO . runFileSystemIO $
+  result1 <- runClodM config $
     aiGeneratedFunctionWithOutput readCap writeCap targetFile outputDir
   
   case result1 of
@@ -122,7 +126,7 @@ main = do
   putStrLn "\n=== Running Malicious Function (should fail) ==="
   
   -- Run the malicious function
-  result2 <- runM . runError @T.ClodError . runConsoleIO . runFileSystemIO $
+  result2 <- runClodM config $
     maliciousFunction readCap writeCap
   
   case result2 of

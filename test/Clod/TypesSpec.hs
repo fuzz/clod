@@ -16,16 +16,13 @@
 module Clod.TypesSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
-import Control.Exception (evaluate)
-import qualified Data.Text as T
+import Test.QuickCheck hiding (Success)
+import Control.Exception ()
+import Data.Text ()
 import System.FilePath
-import System.IO.Temp (withSystemTempDirectory)
-import Control.Monad.Reader
-import Control.Monad.Except
-import Polysemy
-import Polysemy.Reader
-import Polysemy.Error
+import System.IO.Temp ()
+import Control.Monad.Reader ()
+import Control.Monad.Except ()
 
 import Clod.Types
 
@@ -35,7 +32,7 @@ prop_optimizedNameRoundTrip s = unOptimizedName (OptimizedName s) == s
 
 -- | Property: OriginalPath should preserve its structure through the newtype
 prop_originalPathRoundTrip :: FilePath -> Bool 
-prop_originalPathRoundTrip p = getOriginalPath (OriginalPath p) == p
+prop_originalPathRoundTrip p = unOriginalPath (OriginalPath p) == p
 
 spec :: Spec
 spec = do
@@ -52,51 +49,42 @@ spec = do
       
     it "can create an original path" $ do
       let path = OriginalPath "/path/to/file.txt"
-      getOriginalPath path `shouldBe` "/path/to/file.txt"
+      unOriginalPath path `shouldBe` "/path/to/file.txt"
   
   describe "ClodError" $ do
     it "can be created and displayed" $ do
       show (ConfigError "test error") `shouldBe` "ConfigError \"test error\""
       show (GitError "git error") `shouldBe` "GitError \"git error\""
-      show (FileSystemError "fs error") `shouldBe` "FileSystemError \"fs error\""
+      show (FileSystemError "file.txt" (userError "fs error")) `shouldBe` "FileSystemError \"file.txt\" user error (fs error)"
   
   describe "FileResult" $ do
     it "can be created and displayed" $ do
-      show Success `shouldBe` "Success"
+      show (Success) `shouldBe` "Success"
       show (Skipped "reason") `shouldBe` "Skipped \"reason\""
   
-  describe "Effects vs Monad Transformers" $ do
-    it "transforms ClodM to the effects system" $ do
+  describe "ClodM Monad Stack" $ do
+    it "handles reader operations correctly" $ do
       let mtlComputation = do
             config <- ask
-            return (projectDir config) :: ClodM String
-            
-          effectsComputation = do
-            config <- ask @ClodConfig
-            return (projectDir config) :: Sem '[Reader ClodConfig] String
+            return (projectPath config) :: ClodM String
             
       mtlResult <- runExceptT $ runReaderT mtlComputation (defaultConfig "test-dir")
       mtlResult `shouldBe` Right "test-dir"
       
-      let effectsResult = run $ runReader (defaultConfig "test-dir") effectsComputation
-      effectsResult `shouldBe` "test-dir"
-      
-    it "handles errors consistently between systems" $ do
+    it "handles errors correctly" $ do
       let mtlError = throwError (ConfigError "test error") :: ClodM String
-          effectsError = throw (ConfigError "test error") :: Member (Error ClodError) r => Sem r String
           
       mtlResult <- runExceptT $ runReaderT mtlError (defaultConfig "test")
       mtlResult `shouldBe` Left (ConfigError "test error")
-      
-      let effectsResult = run $ runError effectsError :: Either ClodError String
-      effectsResult `shouldBe` Left (ConfigError "test error")
   
   where
     defaultConfig dir = ClodConfig 
-      { projectDir = dir
+      { projectPath = dir
       , stagingDir = dir </> "staging"
-      , currentStaging = dir </> "staging"
+      , configDir = dir </> "config"
       , lastRunFile = dir </> ".clod-last-run"
+      , timestamp = "20250401-120000"
+      , currentStaging = dir </> "staging"
+      , testMode = True
       , ignorePatterns = []
-      , useGit = False
       }

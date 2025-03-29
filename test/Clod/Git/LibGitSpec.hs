@@ -16,15 +16,16 @@
 module Clod.Git.LibGitSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
+import Test.QuickCheck ()
 import System.Directory
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
-import qualified Data.ByteString as BS
-import Control.Monad (forM_, void)
-import Data.Either (isRight)
+import Data.ByteString ()
+import Control.Monad (forM_)
+import Data.Either ()
 import System.Process (callProcess)
 import Control.Exception (try, SomeException)
+import Data.List (sort)
 
 import Clod.Git.LibGit
 
@@ -84,8 +85,10 @@ spec = do
           Left (e :: SomeException) -> 
             pendingWith $ "Test skipped: libgit2 may not be available: " ++ show e
           Right files -> do
-            -- The files should contain our modified files
-            files `shouldContain` modifiedFiles
+            -- Sort both lists to ensure consistent comparison
+            let sortedResult = sort files
+                sortedExpected = sort modifiedFiles
+            sortedResult `shouldBe` sortedExpected
   
   describe "directGetUntrackedFiles" $ do
     it "correctly identifies untracked files using libgit2" $ do
@@ -133,8 +136,8 @@ spec = do
           Left (e :: SomeException) -> 
             pendingWith $ "Test skipped: libgit2 may not be available: " ++ show e
           Right (modified, untracked) -> do
-            -- The modified files should contain our modified file
-            modified `shouldContain` [modifiedFile]
-            
-            -- The untracked files should contain our untracked file
-            untracked `shouldContain` [untrackedFile]
+            -- Sort for consistent comparison
+            let sortedModified = sort modified
+                sortedUntracked = sort untracked
+            sortedModified `shouldBe` sort [modifiedFile]
+            sortedUntracked `shouldBe` sort [untrackedFile]

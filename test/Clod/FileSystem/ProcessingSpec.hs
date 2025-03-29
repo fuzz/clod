@@ -14,20 +14,19 @@
 module Clod.FileSystem.ProcessingSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
-import System.Directory (doesFileExist, createDirectory, withCurrentDirectory, 
-                         removeFile, removeDirectoryRecursive)
+import Test.QuickCheck ()
+import System.Directory (doesFileExist, createDirectory)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
-import Control.Exception (bracket)
-import Control.Monad (forM_, when)
-import Control.Monad.Except (runExceptT)
-import Control.Monad.Reader (runReaderT)
+import Control.Exception ()
+import Control.Monad ()
+import Control.Monad.Except ()
+import Control.Monad.Reader ()
 import qualified Data.ByteString as BS
-import Data.Either (isRight)
-import Data.Function (on)
-import Data.List (nubBy, sort)
-import Data.IORef (newIORef, readIORef)
+import Data.Either ()
+import Data.Function ()
+import Data.List ()
+import Data.IORef (newIORef)
 
 import Clod.Types
 import Clod.FileSystem.Processing
@@ -115,7 +114,9 @@ spec = do
         result <- runClodM config $ processFileManifestOnly config manifestPath testFile relPath firstEntryRef
         
         -- Check it succeeded
-        result `shouldBe` Success
+        case result of
+          Left err -> expectationFailure $ "Error processing file: " ++ show err
+          Right fileResult -> fileResult `shouldBe` Success
         
         -- Verify the manifest was created
         manifestExists <- doesFileExist manifestPath
@@ -159,7 +160,9 @@ spec = do
         result <- runClodM config $ processFile config manifestPath fullPath relPath firstEntryRef
         
         -- Check it succeeded
-        result `shouldBe` Success
+        case result of
+          Left err -> expectationFailure $ "Error processing file: " ++ show err
+          Right fileResult -> fileResult `shouldBe` Success
         
         -- Verify the file was copied to staging
         let stagingFile = stagingDir </> "test.js"
@@ -179,7 +182,49 @@ spec = do
         manifestContent `shouldBe` "  \"test.js\": \"test.js\""
         
     it "skips binary files" $ do
-      pending "Pending until we have a reliable binary file detection implementation"
+      -- Create source and staging directories
+      withSystemTempDirectory "clod-test" $ \dir -> do
+        let sourceDir = dir </> "source"
+            stagingDir = dir </> "staging"
+            fullPath = sourceDir </> "binary.bin"
+            relPath = "binary.bin"
+            manifestPath = stagingDir </> "manifest.json"
+            
+        -- Create binary content
+        createDirectory sourceDir
+        createDirectory stagingDir
+        BS.writeFile fullPath $ BS.pack [0x00, 0x01, 0x02, 0x03, 0x7F, 0xFF, 0x4D, 0x5A]
+        
+        -- First entry reference
+        firstEntryRef <- newIORef True
+        
+        -- Create config with sourceDir as project path and stagingDir
+        let config = ClodConfig 
+              { projectPath = sourceDir
+              , stagingDir = stagingDir
+              , configDir = dir
+              , lastRunFile = dir </> "lastrun"
+              , timestamp = ""
+              , currentStaging = stagingDir
+              , testMode = True
+              , ignorePatterns = []
+              }
+            
+        -- Run the function
+        result <- runClodM config $ processFile config manifestPath fullPath relPath firstEntryRef
+        
+        -- Check it was skipped (we expect a Skipped result for binary files)
+        case result of
+          Left err -> expectationFailure $ "Error processing file: " ++ show err
+          Right fileResult -> 
+            case fileResult of
+              Skipped reason -> reason `shouldBe` "binary file"
+              other -> expectationFailure $ "Expected Skipped but got " ++ show other
+        
+        -- Verify the file was NOT copied to staging
+        let stagingFile = stagingDir </> relPath
+        fileExists <- doesFileExist stagingFile
+        fileExists `shouldBe` False
 
 -- | Default test configuration
 defaultTestConfig :: ClodConfig

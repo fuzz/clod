@@ -24,16 +24,11 @@ import Data.Either (isRight)
 import qualified System.IO
 import qualified Control.Exception as Exception
 import Control.Exception (SomeException)
-
-import Polysemy
-import Polysemy.Error
-import Polysemy.Reader
+import Control.Monad.IO.Class ()
 
 import qualified Clod.Core as Core
-import Clod.Types (ClodConfig(..), ClodError(..))
+import Clod.Types (ClodConfig(..), runClodM, fileReadCap, fileWriteCap)
 import qualified Options.Applicative as Opt
-import Clod.Capability (fileReadCap, fileWriteCap)
-import Clod.Effects (runFileSystemIO, runConsoleIO)
 
 -- We'll create a mock Options type instead of importing Main
 -- This avoids circular dependencies and follows test isolation principles
@@ -191,8 +186,8 @@ cliWorkflowSpec = describe "CLI workflow" $ do
             writeCap = fileWriteCap [stagingDir]
             
         -- Process the test file manually
-        runM . runError @ClodError . runReader config . runConsoleIO . runFileSystemIO $ 
-          Core.processFileWithEffects readCap writeCap (projectDir </> "test.txt") "test.txt"
+        runClodM config $ 
+          Core.processFile readCap writeCap (projectDir </> "test.txt") "test.txt"
       
       -- Restore original directory
       setCurrentDirectory originalDir

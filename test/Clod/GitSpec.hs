@@ -22,19 +22,16 @@ import System.Process (callProcess)
 import qualified Control.Exception as Exception
 import Control.Exception (SomeException)
 import Data.Either (isRight)
+import Control.Monad.IO.Class ()
 
-import Polysemy
-import Polysemy.Error
-
-import qualified Clod.Types as T
-import Clod.Effects
-import qualified Clod.Capability as Cap
+import Clod.Types (ClodConfig(..), runClodM, gitCap)
+import Clod.Git (safeGetModifiedFiles)
 import qualified System.IO
 
 -- | Test specification for Git operations
 spec :: Spec
 spec = do
-  describe "Git operations with the effects system" $ do
+  describe "Git operations with ClodM" $ do
     it "can restrict Git operations to specific repositories" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
         -- Initialize a git repository
@@ -54,14 +51,28 @@ spec = do
             -- Create an untracked file
             System.IO.writeFile (tmpDir </> "untracked.txt") "untracked content"
             
-            -- Create a Git capability that allows access to the repo
-            let repoCapability = Cap.gitCap [tmpDir]
+            -- Create a Git capability and config
+            let config = defaultConfig tmpDir
+                gitCap' = gitCap [tmpDir]
             
-            -- Run with effects
-            result <- runM . runError @T.ClodError . runGitIO $ do
+            -- Run with ClodM
+            result <- runClodM config $ do
               -- Use capability to access Git repository
-              files <- Cap.safeGetModifiedFiles repoCapability tmpDir
+              files <- safeGetModifiedFiles gitCap' tmpDir
               pure files
             
             -- Verify result
             result `shouldSatisfy` isRight
+            
+-- | Helper function to create a default config for tests
+defaultConfig :: FilePath -> ClodConfig
+defaultConfig tmpDir = ClodConfig
+  { projectPath = tmpDir
+  , stagingDir = tmpDir </> "staging"
+  , configDir = tmpDir </> ".clod"
+  , lastRunFile = tmpDir </> ".clod" </> "last-run"
+  , timestamp = "20250401-000000"
+  , currentStaging = tmpDir </> "staging"
+  , testMode = True
+  , ignorePatterns = []
+  }

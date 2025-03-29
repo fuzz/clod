@@ -20,9 +20,9 @@ import System.IO (openTempFile, hClose, withFile, Handle, hPutStrLn, IOMode(Writ
 import Data.Either (isRight)
 import qualified System.IO
 import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString as BS
+import Data.ByteString ()
 import qualified Data.List as L
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class ()
 import System.Random (randomIO)
 
 import Clod.Types

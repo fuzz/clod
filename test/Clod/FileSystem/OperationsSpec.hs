@@ -13,20 +13,19 @@
 module Clod.FileSystem.OperationsSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
-import System.Directory (doesFileExist, createDirectory, getCurrentDirectory,
-                         withCurrentDirectory, removeFile, removeDirectoryRecursive)
+import Test.QuickCheck ()
+import System.Directory (doesFileExist, createDirectory)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory, withSystemTempFile)
-import System.IO (Handle, hClose)
-import Control.Exception (bracket)
-import Control.Monad (forM_, when)
-import Control.Monad.Except (runExceptT)
-import Control.Monad.Reader (runReaderT)
+import System.IO (hClose)
+import Control.Exception ()
+import Control.Monad ()
+import Control.Monad.Except ()
+import Control.Monad.Reader ()
 import qualified Data.ByteString as BS
-import Data.Either (isRight)
-import Data.Function (on)
-import Data.List (nubBy, sort)
+import Data.Either ()
+import Data.Function ()
+import Data.List (sort)
 
 import Clod.Types
 import Clod.FileSystem.Operations
@@ -61,11 +60,10 @@ spec = do
         
         result <- runClodM config $ findAllFiles dir ["subdir", "subdir2"]
         
-        -- Sort the results for deterministic comparison
-        let sortedResult = sort result
-        
-        -- Verify results
-        sortedResult `shouldBe` ["subdir/file2.txt", "subdir2/file3.txt"]
+        -- Verify results with sorted output for deterministic comparison
+        case result of
+          Left err -> expectationFailure $ "Error finding files: " ++ show err
+          Right files -> sort files `shouldBe` ["subdir/file2.txt", "subdir2/file3.txt"]
 
   describe "safeRemoveFile" $ do
     it "removes a file that exists" $ do
@@ -79,7 +77,7 @@ spec = do
         fileExists1 <- doesFileExist path
         fileExists1 `shouldBe` True
         
-        result <- runClodM config $ safeRemoveFile path
+        _ <- runClodM config $ safeRemoveFile path
         
         -- Verify the file doesn't exist anymore
         fileExists2 <- doesFileExist path
@@ -110,7 +108,7 @@ spec = do
             config = defaultTestConfig
         
         -- Run the function
-        result <- runClodM config $ 
+        _ <- runClodM config $ 
           safeCopyFile readCap writeCap src dest
         
         -- Verify the file was copied

@@ -16,14 +16,15 @@
 module Clod.Git.InternalSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
+import Test.QuickCheck ()
 import System.Directory
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
-import qualified Data.ByteString as BS
-import Control.Monad (forM_, void)
-import Data.Either (isRight)
+import Data.ByteString ()
+import Control.Monad (forM_)
+import Data.Either ()
 import System.Process (callProcess)
+import Data.List (sort)
 
 import Clod.Git.Internal
 
@@ -127,4 +128,7 @@ spec = do
         -- Test the result
         untrackedResult <- listUntrackedFiles repoPath
         length untrackedResult `shouldBe` length untrackedFiles
-        untrackedResult `shouldContain` untrackedFiles
+        -- Sort both lists to ensure consistent comparison
+        let sortedResult = sort untrackedResult
+            sortedExpected = sort untrackedFiles
+        sortedResult `shouldBe` sortedExpected

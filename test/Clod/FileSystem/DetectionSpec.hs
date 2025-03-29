@@ -21,49 +21,16 @@ import System.IO.Temp (withSystemTempDirectory)
 import qualified System.IO
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BC
+import Data.List ()
+import Data.Char ()
 
-import Polysemy
-import Polysemy.Error
-
-import Clod.Types (ClodError(..))
-import Clod.Effects hiding (isTextFile)
-import qualified Clod.Effects as CE
-import qualified Data.List as L
-import Data.Char (toLower)
+import Clod.Types (ClodConfig(..), runClodM, fileReadCap)
+import Clod.FileSystem.Detection (safeIsTextFile)
+import Control.Monad.IO.Class ()
 
 -- | Our own FileType definition for testing purposes
 data FileType = TextFile | BinaryFile
   deriving (Show, Eq)
-
--- | Our implementation for tests using the real algorithm
-mockIsTextFile :: FilePath -> Sem (FileSystem ': r) Bool
-mockIsTextFile path = do
-  exists <- fileExists path
-  if not exists
-    then return False
-    else do
-      -- Read a sample of the file to check
-      content <- CE.readFile path
-      let sample = BS.take 512 content
-          -- Check for common text file characteristics
-          hasNullByte = BS.elem 0 sample
-          controlCharCount = BS.length (BS.filter isControlChar sample)
-          controlCharRatio = (fromIntegral controlCharCount :: Double) / 
-                           max 1.0 ((fromIntegral (BS.length sample)) :: Double)
-          -- Check file extension for specific types we know are text
-          isJson = ".json" `L.isSuffixOf` L.map toLower path
-          isXml = ".xml" `L.isSuffixOf` L.map toLower path || ".svg" `L.isSuffixOf` L.map toLower path
-          -- Special cases for testing
-          hasBinaryName = "binary" `L.isInfixOf` path
-          hasMixedName = "mixed" `L.isInfixOf` path
-          isBinaryExtension = any (`L.isSuffixOf` path) [".pdf", ".png", ".jpg", ".exe", ".zip", ".bin"]
-          -- Text files shouldn't have many control characters and definitely no NULL bytes
-          isText = (not hasNullByte && controlCharRatio < 0.3 && not hasBinaryName && not hasMixedName 
-                  && not isBinaryExtension) || isJson || isXml
-      return isText
-  where
-    -- Check if a byte is a control character (excluding tabs, newlines and carriage returns)
-    isControlChar b = b < 32 && b /= 9 && b /= 10 && b /= 13
 
 -- | Test specification for FileSystem.Detection module
 spec :: Spec
@@ -82,9 +49,13 @@ fileTypeDetectionSpec = describe "File type detection" $ do
       let textFile = tmpDir </> "text.txt"
       System.IO.writeFile textFile "This is a text file with plain ASCII content."
       
+      -- Create a config and capabilities
+      let config = defaultConfig tmpDir
+          readCap = fileReadCap [tmpDir]
+      
       -- Run detection
-      result <- runM . runError @ClodError . runFileSystemIO $ do
-        isText <- mockIsTextFile textFile
+      result <- runClodM config $ do
+        isText <- safeIsTextFile readCap textFile
         return (if isText then TextFile else BinaryFile)
       
       -- Verify detection
@@ -98,9 +69,13 @@ fileTypeDetectionSpec = describe "File type detection" $ do
       let emptyFile = tmpDir </> "empty.txt"
       System.IO.writeFile emptyFile ""
       
+      -- Create a config and capabilities
+      let config = defaultConfig tmpDir
+          readCap = fileReadCap [tmpDir]
+      
       -- Run detection
-      result <- runM . runError @ClodError . runFileSystemIO $ do
-        isText <- mockIsTextFile emptyFile
+      result <- runClodM config $ do
+        isText <- safeIsTextFile readCap emptyFile
         return (if isText then TextFile else BinaryFile)
       
       -- Verify detection
@@ -117,9 +92,13 @@ binaryDetectionSpec = describe "Binary file detection" $ do
       let binaryFile = tmpDir </> "binary.bin"
       BS.writeFile binaryFile $ BS.pack [0x00, 0x01, 0x02, 0x03, 0x7F, 0xFF]
       
+      -- Create a config and capabilities
+      let config = defaultConfig tmpDir
+          readCap = fileReadCap [tmpDir]
+      
       -- Run detection
-      result <- runM . runError @ClodError . runFileSystemIO $ do
-        isText <- mockIsTextFile binaryFile
+      result <- runClodM config $ do
+        isText <- safeIsTextFile readCap binaryFile
         return (if isText then TextFile else BinaryFile)
       
       -- Verify detection
@@ -137,13 +116,17 @@ binaryDetectionSpec = describe "Binary file detection" $ do
       System.IO.writeFile pdfFile "This is not really a PDF file"
       System.IO.writeFile pngFile "This is not really a PNG file"
       
+      -- Create a config and capabilities
+      let config = defaultConfig tmpDir
+          readCap = fileReadCap [tmpDir]
+      
       -- Run detection for both files
-      pdfResult <- runM . runError @ClodError . runFileSystemIO $ do
-        isText <- mockIsTextFile pdfFile
+      pdfResult <- runClodM config $ do
+        isText <- safeIsTextFile readCap pdfFile
         return (if isText then TextFile else BinaryFile)
         
-      pngResult <- runM . runError @ClodError . runFileSystemIO $ do
-        isText <- mockIsTextFile pngFile
+      pngResult <- runClodM config $ do
+        isText <- safeIsTextFile readCap pngFile
         return (if isText then TextFile else BinaryFile)
       
       -- Verify detection based on extension 
@@ -164,9 +147,13 @@ encodingDetectionSpec = describe "Text encoding detection" $ do
       let utf8File = tmpDir </> "utf8.txt"
       System.IO.writeFile utf8File "UTF-8 text with special characters: äöüß éèê 日本語"
       
+      -- Create a config and capabilities
+      let config = defaultConfig tmpDir
+          readCap = fileReadCap [tmpDir]
+      
       -- Run detection
-      result <- runM . runError @ClodError . runFileSystemIO $ do
-        isText <- mockIsTextFile utf8File
+      result <- runClodM config $ do
+        isText <- safeIsTextFile readCap utf8File
         return (if isText then TextFile else BinaryFile)
       
       -- Verify detection
@@ -180,9 +167,13 @@ encodingDetectionSpec = describe "Text encoding detection" $ do
       let mixedFile = tmpDir </> "mixed.txt"
       BS.writeFile mixedFile $ BS.concat [BC.pack "This is mostly text but has a few binary bytes: ", BS.pack [0x00, 0x01, 0x02], BC.pack " and then more text."]
       
+      -- Create a config and capabilities
+      let config = defaultConfig tmpDir
+          readCap = fileReadCap [tmpDir]
+      
       -- Run detection
-      result <- runM . runError @ClodError . runFileSystemIO $ do
-        isText <- mockIsTextFile mixedFile
+      result <- runClodM config $ do
+        isText <- safeIsTextFile readCap mixedFile
         return (if isText then TextFile else BinaryFile)
       
       -- Binary detection should identify this as binary due to null bytes
@@ -205,10 +196,14 @@ extensionBasedDetectionSpec = describe "Extension-based detection" $ do
       -- Create the files
       mapM_ (\(path, content) -> System.IO.writeFile path content) files
       
+      -- Create a config and capabilities
+      let config = defaultConfig tmpDir
+          readCap = fileReadCap [tmpDir]
+      
       -- Test each file
       results <- mapM (\(path, _) -> 
-        runM . runError @ClodError . runFileSystemIO $ do
-          isText <- mockIsTextFile path
+        runClodM config $ do
+          isText <- safeIsTextFile readCap path
           return (if isText then TextFile else BinaryFile)) files
       
       -- Verify all are detected as text files
@@ -227,13 +222,30 @@ extensionBasedDetectionSpec = describe "Extension-based detection" $ do
       -- Create the files
       mapM_ (\(path, content) -> System.IO.writeFile path content) files
       
+      -- Create a config and capabilities
+      let config = defaultConfig tmpDir
+          readCap = fileReadCap [tmpDir]
+      
       -- Test each file
       results <- mapM (\(path, _) -> 
-        runM . runError @ClodError . runFileSystemIO $ do
-          isText <- mockIsTextFile path
+        runClodM config $ do
+          isText <- safeIsTextFile readCap path
           return (if isText then TextFile else BinaryFile)) files
       
       -- These should be detected as binary based on extension despite having text content
       let isCorrectType (Right BinaryFile) = True
           isCorrectType _ = False
       all isCorrectType results `shouldBe` True
+
+-- | Helper function to create a default config for tests
+defaultConfig :: FilePath -> ClodConfig
+defaultConfig tmpDir = ClodConfig
+  { projectPath = tmpDir
+  , stagingDir = tmpDir </> "staging"
+  , configDir = tmpDir </> ".clod"
+  , lastRunFile = tmpDir </> ".clod" </> "last-run"
+  , timestamp = "20250401-000000"
+  , currentStaging = tmpDir </> "staging"
+  , testMode = True
+  , ignorePatterns = []
+  }

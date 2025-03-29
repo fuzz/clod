@@ -16,12 +16,22 @@ module Clod.Git.Internal
   ( -- * File processing
     processModifiedFiles
   , processAllFiles
+  
+    -- * Testing functions
+  , isGitRepo
+  , getRepoRootPath
+  , listModifiedFiles
+  , listUntrackedFiles
   ) where
 
 import Control.Monad (filterM)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.List as L
-import System.Directory (doesFileExist, getDirectoryContents, getModificationTime)
+import System.Directory (doesFileExist, doesDirectoryExist, getDirectoryContents, getModificationTime)
+import System.FilePath ((</>))
+import System.Process (readProcess)
+import System.Exit ()
+import Control.Exception (try, SomeException)
 
 import Clod.Config (configDirName)
 import Clod.FileSystem (findAllFiles, isModifiedSince, processFiles)
@@ -93,3 +103,63 @@ processAllFiles config manifestPath = do
   -- Process all files (with file copying, not just including them in manifest)
   let includeInManifestOnly = False
   processFiles config manifestPath allFilesRecursive includeInManifestOnly
+  
+-- | Check if a directory is a git repository
+isGitRepo :: FilePath -> IO Bool
+isGitRepo path = do
+  exists <- doesDirectoryExist path
+  if not exists
+    then return False
+    else do
+      let gitDir = path </> ".git"
+      doesDirectoryExist gitDir
+
+-- | Get the root path of a git repository
+getRepoRootPath :: FilePath -> IO (Maybe FilePath)
+getRepoRootPath path = do
+  exists <- doesDirectoryExist path
+  if not exists
+    then return Nothing
+    else do
+      -- Try to run git rev-parse --show-toplevel
+      result <- try $ readProcess "git" ["-C", path, "rev-parse", "--show-toplevel"] "" :: IO (Either SomeException String)
+      case result of
+        Left _ -> return Nothing  -- Not a git repo or git not available
+        Right output -> return $ Just $ filter (/= '\n') output  -- Remove trailing newline
+
+-- | List modified files in a git repository
+listModifiedFiles :: FilePath -> IO [String]
+listModifiedFiles path = do
+  -- Check if it's a git repo
+  isRepo <- isGitRepo path
+  if not isRepo
+    then return []
+    else do
+      -- Run git status --porcelain
+      result <- try $ readProcess "git" ["-C", path, "status", "--porcelain"] "" :: IO (Either SomeException String)
+      case result of
+        Left _ -> return []  -- Git command failed
+        Right output -> do
+          -- Parse the output to find modified files
+          return $ parseModifiedFiles (lines output)
+
+-- | Parse git status output to find modified files
+parseModifiedFiles :: [String] -> [String]
+parseModifiedFiles = map extractFilename . filter isModified
+  where
+    isModified line = length line > 2 && (head line == 'M' || line !! 1 == 'M' || head line == 'A' || line !! 1 == 'A')
+    extractFilename line = drop 3 line  -- Remove status and space
+
+-- | List untracked files in a git repository
+listUntrackedFiles :: FilePath -> IO [String]
+listUntrackedFiles path = do
+  -- Check if it's a git repo
+  isRepo <- isGitRepo path
+  if not isRepo
+    then return []
+    else do
+      -- Run git ls-files --others --exclude-standard
+      result <- try $ readProcess "git" ["-C", path, "ls-files", "--others", "--exclude-standard"] "" :: IO (Either SomeException String)
+      case result of
+        Left _ -> return []  -- Git command failed
+        Right output -> return $ lines output

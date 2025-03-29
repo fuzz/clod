@@ -13,21 +13,20 @@
 module Clod.FileSystem.TransformationsSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
-import System.Directory (doesFileExist, createDirectory, withCurrentDirectory, 
-                         removeFile, removeDirectoryRecursive)
+import Test.QuickCheck ()
+import System.Directory (doesFileExist, createDirectory)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
-import Control.Exception (bracket)
-import Control.Monad (forM_, when)
-import Control.Monad.Except (runExceptT)
-import Control.Monad.Reader (runReaderT)
+import Control.Exception ()
+import Control.Monad ()
+import Control.Monad.Except ()
+import Control.Monad.Reader ()
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import Data.Either (isRight)
-import Data.Function (on)
-import Data.List (nubBy, sort)
+import Data.Either ()
+import Data.Function ()
+import Data.List ()
 
 import Clod.Types
 import Clod.FileSystem.Transformations
@@ -47,6 +46,7 @@ spec = do
       transformFilename "file with spaces.txt" "file with spaces.txt" `shouldBe` "filewithtxt"
       transformFilename "#weird$chars%.js" "#weird$chars%.js" `shouldBe` "weirdchars.js"
       transformFilename "$$$.svg" "$$$.svg" `shouldBe` "-svg.xml"
+      
       
     it "returns a default name for empty filenames" $ do
       transformFilename "" "" `shouldBe` "unnamed"
@@ -147,11 +147,11 @@ spec = do
         -- Create capabilities
         let readCap = fileReadCap [srcDir, destDir]
             writeCap = fileWriteCap [destDir]
-            transformFn = id -- Identity function for this test
+            transformFn = TE.decodeUtf8 -- Transform ByteString to Text
             config = defaultTestConfig
             
         -- Run the transformation
-        result <- runClodM config $ 
+        _ <- runClodM config $ 
           transformFileContent readCap writeCap transformFn svgPath xmlPath
           
         -- Verify the XML file was created with the same content
@@ -176,25 +176,19 @@ spec = do
             writeCap = fileWriteCap [tmpDir]
             config = defaultTestConfig
             
-        -- Define a complex transformation function that adds comments
-        let transform :: BS.ByteString -> T.Text
-            transform bs = 
-              let text = TE.decodeUtf8 bs
-                  isJs = T.isSuffixOf ".js" (T.pack jsPath)
-                  isHtml = T.isSuffixOf ".html" (T.pack htmlPath)
-                  prefix = if isJs 
-                           then "// Transformed by Clod\n" 
-                           else if isHtml
-                                then "<!-- Transformed by Clod -->\n"
-                                else "/* Transformed by Clod */\n"
-              in prefix <> text
+        -- Define a simple transformation function that adds different comments for different file types
+        let jsTransform :: BS.ByteString -> T.Text
+            jsTransform bs = "// Transformed by Clod\n" <> TE.decodeUtf8 bs
+            
+            htmlTransform :: BS.ByteString -> T.Text
+            htmlTransform bs = "<!-- Transformed by Clod -->\n" <> TE.decodeUtf8 bs
               
         -- Run transformations
         let jsDest = tmpDir </> "script.transformed.js"
             htmlDest = tmpDir </> "page.transformed.html"
             
-        _ <- runClodM config $ transformFileContent readCap writeCap transform jsPath jsDest
-        _ <- runClodM config $ transformFileContent readCap writeCap transform htmlPath htmlDest
+        _ <- runClodM config $ transformFileContent readCap writeCap jsTransform jsPath jsDest
+        _ <- runClodM config $ transformFileContent readCap writeCap htmlTransform htmlPath htmlDest
         
         -- Verify results
         jsResult <- TE.decodeUtf8 <$> BS.readFile jsDest

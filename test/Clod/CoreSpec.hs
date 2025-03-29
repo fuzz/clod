@@ -22,24 +22,21 @@ import System.IO.Temp (withSystemTempDirectory)
 import Data.Either (isRight)
 import qualified System.IO
 
-import Polysemy
-import Polysemy.Error
-import Polysemy.Reader
-
 import Clod.Core
-import Clod.Types (ClodConfig(..), ClodError(..), FileResult(..))
-import Clod.Effects
-import Clod.Capability
+import Clod.Types 
+  ( ClodConfig(..), FileResult(..), FileReadCap(..)
+  , runClodM, isPathAllowed, fileReadCap, fileWriteCap
+  )
 
 -- | Test specification for Core module
 spec :: Spec
 spec = do
-  effectsApiSpec
+  fileProcessingSpec
   runClodAppSpec
   
--- | Tests for the effects-based API
-effectsApiSpec :: Spec
-effectsApiSpec = describe "Effects-based API" $ do
+-- | Tests for the file processing functionality
+fileProcessingSpec :: Spec
+fileProcessingSpec = describe "File processing with ClodM" $ do
   it "can process text files with capabilities" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
       -- Create test files
@@ -69,9 +66,9 @@ effectsApiSpec = describe "Effects-based API" $ do
       let readCap = fileReadCap [tmpDir]
           writeCap = fileWriteCap [tmpDir, stagingDir config]
       
-      -- Run test with effects
-      result <- runM . runError @ClodError . runReader config . runConsoleIO . runFileSystemIO $
-        processFileWithEffects readCap writeCap (tmpDir </> "src" </> "test.txt") "src/test.txt"
+      -- Run test with ClodM monad
+      result <- runClodM config $
+        processFile readCap writeCap (tmpDir </> "src" </> "test.txt") "src/test.txt"
       
       -- Verify result
       result `shouldSatisfy` isRight
@@ -115,8 +112,8 @@ effectsApiSpec = describe "Effects-based API" $ do
           writeCap = fileWriteCap [tmpDir </> "staging"]
       
       -- Try to access file outside allowed directory
-      result <- runM . runError @ClodError . runReader config . runConsoleIO . runFileSystemIO $
-        processFileWithEffects readCap writeCap (tmpDir </> "private" </> "secret.txt") "private/secret.txt"
+      result <- runClodM config $
+        processFile readCap writeCap (tmpDir </> "private" </> "secret.txt") "private/secret.txt"
       
       -- Should fail due to capability restriction
       result `shouldSatisfy` isLeft
@@ -144,7 +141,7 @@ runClodAppSpec = describe "runClodApp" $ do
             ignorePatterns = []
           }
           
-      -- Run initialization effect
+      -- Run initialization function
       result <- runClodApp config "" False False True
       
       -- Should succeed
@@ -175,7 +172,7 @@ runClodAppSpec = describe "runClodApp" $ do
             ignorePatterns = []
           }
           
-      -- Run effects
+      -- Run application
       result <- runClodApp config "" False False True
       
       -- Should succeed
@@ -192,7 +189,7 @@ runClodAppSpec = describe "runClodApp" $ do
       let forbiddenDir = "/tmp/forbidden"  -- A directory outside our capability
       
       -- Create a test config
-      let config = ClodConfig {
+      let _config = ClodConfig {
             projectPath = tmpDir,
             stagingDir = tmpDir </> "staging",
             configDir = tmpDir </> ".clod", 
@@ -204,14 +201,8 @@ runClodAppSpec = describe "runClodApp" $ do
           }
       
       -- Test that our capability restricts access as expected
-      result <- runM . runError @ClodError . runReader config . runFileSystemIO $ do
-        -- Create capability that only allows access to the test directory
-        let readCap = fileReadCap [tmpDir]
-        
-        -- Try to access a file outside our capability
-        safeFileExists readCap forbiddenDir
+      let readCap = fileReadCap [tmpDir]
       
-      -- Should fail with a permission error
-      case result of
-        Left _ -> return ()  -- Expected to fail
-        Right _ -> expectationFailure "Access was granted to a directory outside our capability"
+      -- Try to check if a file exists outside our capability
+      allowed <- isPathAllowed (allowedReadDirs readCap) forbiddenDir
+      allowed `shouldBe` False

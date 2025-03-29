@@ -30,6 +30,7 @@ module Clod.Git.LibGit
     -- * Direct IO operations (for effects system)
   , directGetModifiedFiles
   , directGetUntrackedFiles
+  , directGetRepositoryStatus
   ) where
 
 import Control.Exception (try, bracket, SomeException)
@@ -225,7 +226,7 @@ directGetModifiedFiles repoPath = do
       when isModified $ do
         -- Get file path and add to the list
         path <- BC.unpack <$> BS.packCString pathPtr
-        modifyIORef' modifiedFilesRef ((repoPath </> path) :)
+        modifyIORef' modifiedFilesRef (path :)
       
       return 0
     
@@ -255,7 +256,7 @@ directGetUntrackedFiles repoPath = do
       when isUntracked $ do
         -- Get file path and add to the list
         path <- BC.unpack <$> BS.packCString pathPtr
-        modifyIORef' untrackedFilesRef ((repoPath </> path) :)
+        modifyIORef' untrackedFilesRef (path :)
       
       return 0
     
@@ -265,6 +266,13 @@ directGetUntrackedFiles repoPath = do
     
     -- Read the list of untracked files
     readIORef untrackedFilesRef
+
+-- | Get combined repository status (modified and untracked files)
+directGetRepositoryStatus :: FilePath -> IO ([String], [String])
+directGetRepositoryStatus repoPath = do
+  modified <- directGetModifiedFiles repoPath
+  untracked <- directGetUntrackedFiles repoPath
+  return (modified, untracked)
 
 -- | Helper function to open a repository and perform an action with it
 withRepository :: FilePath -> (Ptr Git.C'git_repository -> IO a) -> IO a

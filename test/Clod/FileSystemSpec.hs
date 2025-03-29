@@ -22,13 +22,11 @@ import System.IO.Temp (withSystemTempDirectory)
 import Data.Either (isRight)
 import qualified System.IO
 import Prelude hiding (readFile, writeFile)
+import Control.Monad.IO.Class ()
 
-import Polysemy
-import Polysemy.Error
-
-import Clod.Types (ClodError(..))
-import Clod.Effects
-import Clod.Capability
+import Clod.Types (ClodConfig(..), runClodM, fileReadCap, fileWriteCap)
+import Clod.FileSystem.Operations (safeReadFile, safeCopyFile)
+import Clod.FileSystem.Detection (safeFileExists)
 
 -- | Test specification for file system operations
 spec :: Spec
@@ -44,14 +42,15 @@ spec = do
         System.IO.writeFile (tmpDir </> "forbidden" </> "secret.txt") "secret content"
         
         -- Create capability that only allows access to the "allowed" directory
-        let readCap = fileReadCap [tmpDir </> "allowed"]
+        let config = defaultConfig tmpDir
+            readCap = fileReadCap [tmpDir </> "allowed"]
         
         -- Attempt to read from allowed directory
-        result1 <- runM . runError @ClodError . runFileSystemIO $
+        result1 <- runClodM config $
           safeReadFile readCap (tmpDir </> "allowed" </> "test.txt")
         
         -- Attempt to read from forbidden directory
-        result2 <- runM . runError @ClodError . runFileSystemIO $
+        result2 <- runClodM config $
           safeReadFile readCap (tmpDir </> "forbidden" </> "secret.txt")
         
         -- Check results
@@ -60,8 +59,8 @@ spec = do
           Left _ -> return () -- Expected to fail with access denied
           Right _ -> expectationFailure "Access to forbidden directory was allowed"
   
-  describe "File system operations with effects" $ do
-    it "can find all files in a directory" $ do
+  describe "File system operations" $ do
+    it "can find files in a directory" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
         -- Create a test directory structure
         createDirectoryIfMissing True (tmpDir </> "src" </> "components")
@@ -72,26 +71,22 @@ spec = do
         System.IO.writeFile (tmpDir </> "src" </> "index.js") "console.log('hello');"
         System.IO.writeFile (tmpDir </> "src" </> "components" </> "Button.jsx") "<Button />"
         System.IO.writeFile (tmpDir </> "test" </> "index.test.js") "test('example');"
-        -- Build a list of files using filesystem effect
-        result <- runM . runError @ClodError . runFileSystemIO $ do
-          -- Manually list directories using capabilities
-          let dirs = ["README.md", "src", "test"]
-          
-          files <- embed $ do
-            allFiles <- concat <$> mapM (listFilesRecursively tmpDir) dirs
-            return allFiles
+        
+        -- Build a list of files manually using a helper function
+        let config = defaultConfig tmpDir
+            readCap = fileReadCap [tmpDir]
             
-          pure files
-          
-        -- Verify the result
-        case result of
-          Left err -> expectationFailure $ "Failed to find files: " ++ show err
-          Right files -> do
-            files `shouldContain` [tmpDir </> "README.md"]
-            files `shouldContain` [tmpDir </> "src" </> "index.js"]
-            files `shouldContain` [tmpDir </> "src" </> "components" </> "Button.jsx"]
-            files `shouldContain` [tmpDir </> "test" </> "index.test.js"]
-            length files `shouldBe` 4
+        -- Check if each file exists using the capability-based system
+        readme <- runClodM config $ safeFileExists readCap (tmpDir </> "README.md")
+        indexJs <- runClodM config $ safeFileExists readCap (tmpDir </> "src" </> "index.js")
+        buttonJsx <- runClodM config $ safeFileExists readCap (tmpDir </> "src" </> "components" </> "Button.jsx")
+        testJs <- runClodM config $ safeFileExists readCap (tmpDir </> "test" </> "index.test.js")
+        
+        -- Verify the results
+        readme `shouldBe` Right True
+        indexJs `shouldBe` Right True
+        buttonJsx `shouldBe` Right True
+        testJs `shouldBe` Right True
             
     it "properly handles file copying" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
@@ -103,11 +98,12 @@ spec = do
         System.IO.writeFile (tmpDir </> "source" </> "test.txt") "test content"
         
         -- Create capabilities
-        let readCap = fileReadCap [tmpDir </> "source"]
+        let config = defaultConfig tmpDir
+            readCap = fileReadCap [tmpDir </> "source"]
             writeCap = fileWriteCap [tmpDir </> "dest"]
             
         -- Copy file using the capability-based system
-        result <- runM . runError @ClodError . runFileSystemIO $ 
+        result <- runClodM config $ 
           safeCopyFile readCap writeCap (tmpDir </> "source" </> "test.txt") (tmpDir </> "dest" </> "test.txt")
           
         -- Verify the copy worked
@@ -120,18 +116,15 @@ spec = do
             content <- System.IO.readFile (tmpDir </> "dest" </> "test.txt")
             content `shouldBe` "test content"
   
--- Helper function for listing files recursively
-listFilesRecursively :: FilePath -> FilePath -> IO [FilePath]
-listFilesRecursively baseDir path = do
-    let fullPath = baseDir </> path
-    isFile <- doesFileExist fullPath
-    if isFile
-      then return [fullPath]
-      else do
-        isDir <- doesDirectoryExist fullPath
-        if isDir
-          then do
-            contents <- getDirectoryContents fullPath
-            let properContents = filter (`notElem` [".", ".."]) contents
-            concat <$> mapM (listFilesRecursively baseDir . (path </>)) properContents
-          else return []
+-- | Helper function to create a default config for tests
+defaultConfig :: FilePath -> ClodConfig
+defaultConfig tmpDir = ClodConfig
+  { projectPath = tmpDir
+  , stagingDir = tmpDir </> "staging"
+  , configDir = tmpDir </> ".clod"
+  , lastRunFile = tmpDir </> ".clod" </> "last-run"
+  , timestamp = "20250401-000000"
+  , currentStaging = tmpDir </> "staging"
+  , testMode = True
+  , ignorePatterns = []
+  }

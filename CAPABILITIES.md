@@ -1,126 +1,108 @@
-# Effects System for Clod
+# Clod Capability System
 
-This document explains the capability-based effects system used in Clod to improve safety when working with AI-generated code.
+This document describes Clod's capability-based security model that restricts file and Git repository access.
 
-## Overview
+## Capability-Based Security Model
 
-Clod uses algebraic effects through the Polysemy library to provide a capability-based security model for file system operations and Git interactions. This enables an extra layer of safety when working with AI-generated code by restricting file access to explicitly allowed directories.
+Clod implements a capability-based security model for file operations. A capability is essentially a token that grants permission to perform specific operations on a set of files or directories. 
 
-## Core Concepts
+The key principles are:
 
-### 1. Effects
+1. **Default Denial**: By default, no file access is permitted
+2. **Explicit Capabilities**: Each operation requires an explicit capability token
+3. **Restricted Paths**: Capabilities only allow operations within specific directory trees
+4. **Capability Verification**: All operations verify capabilities before execution
 
-Effects are explicitly tracked in type signatures using the `Members` constraint, making it clear what side effects a function can have:
+This design was chosen to ensure safety when working with AI-generated code or when running Clod in sensitive environments.
 
-```haskell
-processFileWithEffects :: Members '[FileSystem, Error T.ClodError, Console, Reader T.ClodConfig] r
-                       => FileReadCap -> FileWriteCap -> FilePath -> FilePath -> Sem r T.FileResult
-```
+## How It Works
 
-This type signature indicates that the function can:
-- Perform file system operations (`FileSystem`)
-- Throw typed errors (`Error ClodError`)
-- Write to the console (`Console`)
+### Capability Types
 
-But it cannot:
-- Access the network
-- Launch external processes
-- Perform other unrestricted IO
+Clod defines three primary capability types:
 
-### 2. Capabilities
+1. **FileReadCap**: Grants permission to read files within specified directories
+2. **FileWriteCap**: Grants permission to write files within specified directories
+3. **GitCap**: Grants permission to perform Git operations on specified repositories
 
-Capabilities are "permission tokens" that grant access to specific resources. In Clod, we use capabilities to restrict file access to specific directories:
+### Creating Capabilities
+
+Capabilities are created with a list of directories where operations are permitted:
 
 ```haskell
-data FileReadCap = FileReadCap { allowedReadDirs :: [FilePath] }
-data FileWriteCap = FileWriteCap { allowedWriteDirs :: [FilePath] }
-data GitCap = GitCap { allowedRepos :: [FilePath] }
+-- Create a read capability for project and test directories
+myReadCap = fileReadCap ["/home/user/project", "/home/user/tests"]
+
+-- Create a write capability for output directory only
+myWriteCap = fileWriteCap ["/home/user/output"]
+
+-- Create a Git capability for the project repository
+myGitCap = gitCap ["/home/user/project"]
 ```
 
-Functions that need to access files must be explicitly granted these capabilities:
+### Using Capabilities
+
+All file system operations that interact with the filesystem require appropriate capabilities:
 
 ```haskell
-safeReadFile :: Members '[FileSystem, Error ClodError] r 
-             => FileReadCap -> FilePath -> Sem r ByteString
+-- Read a file (requires FileReadCap)
+content <- safeReadFile myReadCap "/home/user/project/src/Main.hs"
+
+-- Write a file (requires FileWriteCap)
+safeWriteFile myWriteCap "/home/user/output/result.txt" "Hello, world!"
+
+-- Copy a file (requires both FileReadCap and FileWriteCap)
+safeCopyFile myReadCap myWriteCap "/home/user/project/data.csv" "/home/user/output/data-copy.csv"
+
+-- Get modified files from a Git repository (requires GitCap)
+files <- safeGetModifiedFiles myGitCap "/home/user/project"
 ```
 
-This ensures that even if AI-generated code tries to access files outside the allowed directories, it will be blocked by the capability system.
+## Security Benefits
 
-## Using the Effects System
+This capability-based approach provides several important security benefits:
 
-### 1. Default Behavior
+1. **Path Traversal Prevention**: Files outside allowed directories cannot be accessed, even with path traversal attacks
+2. **Explicit Permission Model**: The code clearly indicates which operations are permitted and where
+3. **Principle of Least Privilege**: Components only get access to the specific directories they need
+4. **Transparent Intentions**: Code that needs file access must explicitly request capabilities
 
-Clod uses the effects system by default with safe permissions. The capability-based approach restricts file access to:
+## Implementation Details
 
-- The repository directory for reading (where Clod is run)
-- The staging directory for writing (where processed files are stored)
-- The repository directory for Git operations
+The capability system is implemented using runtime checks:
 
-### 2. Programmatic Usage
+1. When a file operation is requested, the path is canonicalized to resolve any `.`, `..`, or symlinks
+2. The canonical path is checked against the directories allowed by the capability
+3. If the path is within an allowed directory, the operation proceeds
+4. If the path is outside allowed directories, an error is thrown
 
-In your Haskell code, you can use the effects system like this:
+Example of the path verification logic:
 
 ```haskell
-import Polysemy
-import Clod.Effects
-import Clod.Capability
-
-myFunction :: Members '[FileSystem, Console] r 
-           => FileReadCap -> FileWriteCap -> Sem r ()
-myFunction readCap writeCap = do
-  -- Only allowed to read files in directories specified by readCap
-  content <- safeReadFile readCap "allowed/file.txt"
-  
-  -- Only allowed to write files in directories specified by writeCap
-  safeWriteFile writeCap "allowed/output.txt" processedContent
+isPathAllowed :: [FilePath] -> FilePath -> IO Bool
+isPathAllowed allowedDirs path = do
+  -- Get canonical paths to resolve any `.`, `..`, or symlinks
+  canonicalPath <- canonicalizePath path
+  -- Check if the canonical path is within any of the allowed directories
+  checks <- mapM (\dir -> do
+                   canonicalDir <- canonicalizePath dir
+                   -- A path is allowed if:
+                   -- 1. It equals an allowed directory exactly, or
+                   -- 2. It's a proper subdirectory (dir is a prefix and has a path separator)
+                   let isAllowed = canonicalDir == canonicalPath || 
+                                  (canonicalDir `isPrefixOf` canonicalPath && 
+                                   length canonicalPath > length canonicalDir &&
+                                   isPathSeparator (canonicalPath !! length canonicalDir))
+                   return isAllowed) allowedDirs
+  -- Return result
+  return (or checks)
 ```
 
-### 3. Example Code
+## Future Directions
 
-See `examples/EffectsExample.hs` for a complete demonstration of how the effects system protects against malicious or buggy AI-generated code.
+For future versions of Clod, we're considering:
 
-## Benefits for AI Safety
-
-1. **Path Restriction**: AI can only access files in explicitly permitted directories
-2. **Type Safety**: Effects are enforced by the type system at compile time
-3. **Intent Signaling**: Functions that need file access must explicitly request capabilities
-4. **Principle of Least Privilege**: AI code only gets the minimal permissions it needs
-
-## Technical Details
-
-### Effect Implementation
-
-Effects are defined using Polysemy's GADT-based approach:
-
-```haskell
-data FileSystem m a where
-  ReadFile :: FilePath -> FileSystem m ByteString
-  WriteFile :: FilePath -> ByteString -> FileSystem m ()
-  CopyFile :: FilePath -> FilePath -> FileSystem m ()
-  FileExists :: FilePath -> FileSystem m Bool
-```
-
-Each effect has a corresponding interpreter that can run the effect in different contexts:
-
-```haskell
-runFileSystemIO :: Member (Embed IO) r => Sem (FileSystem ': r) a -> Sem r a
-```
-
-### Capability Checking
-
-Capabilities are checked at runtime by verifying path prefixes:
-
-```haskell
-isPathAllowed :: [FilePath] -> FilePath -> Bool
-isPathAllowed allowedDirs path = any (\dir -> dir `isPrefixOf` path) allowedDirs
-```
-
-This simple but effective approach ensures that files can only be accessed within the allowed directories.
-
-## Future Enhancements
-
-Future versions may include:
-- More fine-grained capabilities (e.g., per-file permissions)
-- Static analysis to verify capability usage at compile time
-- Integration with more advanced effect types like `Eff` or `fused-effects`
-- Property-based testing of capability invariants
+1. **More Granular Capabilities**: Adding more specialized capabilities (e.g., for specific operations)
+2. **Type-Level Guarantees**: Exploring type-level verification of capabilities
+3. **Better Error Messages**: Improving error messages for capability violations
+4. **Capability Composition**: Making it easier to compose and transform capabilities

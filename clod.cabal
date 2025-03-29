@@ -42,7 +42,6 @@ extra-source-files:
   README.md,
   CONTRIBUTING.md, 
   RELEASING.md,
-  EFFECTS.md,
   HUMAN.md,
   HASKELL.md,
   INSTALLING.md,
@@ -59,7 +58,9 @@ extra-doc-files:
 data-files:
   man/clod.1,
   man/clod.7,
-  man/clod.8
+  man/clod.8,
+  resources/file_types.dhall,
+  resources/binary_signatures.dhall
 
 source-repository head
   type:     git
@@ -91,6 +92,7 @@ library
                , process >= 1.6 && < 1.7
                , text >= 1.2 && < 1.3
                , aeson >= 2.0 && < 3.0
+               , dhall >= 1.41 && < 1.42
                , bytestring >= 0.10 && < 0.12
                , containers >= 0.6 && < 0.7
                , time >= 1.9 && < 1.13
