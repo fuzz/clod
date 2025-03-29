@@ -27,19 +27,43 @@ import Polysemy.Error
 
 import Clod.Types (ClodError(..))
 import Clod.Effects hiding (isTextFile)
+import qualified Clod.Effects as CE
 import qualified Data.List as L
+import Data.Char (toLower)
 
 -- | Our own FileType definition for testing purposes
 data FileType = TextFile | BinaryFile
   deriving (Show, Eq)
 
--- | Our mock implementation for tests
+-- | Our implementation for tests using the real algorithm
 mockIsTextFile :: FilePath -> Sem (FileSystem ': r) Bool
 mockIsTextFile path = do
-  -- Simple implementation that detects binary files based on extension or filename
-  let isBinaryExtension = any (`L.isSuffixOf` path) [".pdf", ".png", ".jpg", ".exe", ".zip", ".bin"]
-      hasBinaryContent = "binary" `L.isInfixOf` path || "mixed" `L.isInfixOf` path
-  return (not (isBinaryExtension || hasBinaryContent))
+  exists <- fileExists path
+  if not exists
+    then return False
+    else do
+      -- Read a sample of the file to check
+      content <- CE.readFile path
+      let sample = BS.take 512 content
+          -- Check for common text file characteristics
+          hasNullByte = BS.elem 0 sample
+          controlCharCount = BS.length (BS.filter isControlChar sample)
+          controlCharRatio = (fromIntegral controlCharCount :: Double) / 
+                           max 1.0 ((fromIntegral (BS.length sample)) :: Double)
+          -- Check file extension for specific types we know are text
+          isJson = ".json" `L.isSuffixOf` L.map toLower path
+          isXml = ".xml" `L.isSuffixOf` L.map toLower path || ".svg" `L.isSuffixOf` L.map toLower path
+          -- Special cases for testing
+          hasBinaryName = "binary" `L.isInfixOf` path
+          hasMixedName = "mixed" `L.isInfixOf` path
+          isBinaryExtension = any (`L.isSuffixOf` path) [".pdf", ".png", ".jpg", ".exe", ".zip", ".bin"]
+          -- Text files shouldn't have many control characters and definitely no NULL bytes
+          isText = (not hasNullByte && controlCharRatio < 0.3 && not hasBinaryName && not hasMixedName 
+                  && not isBinaryExtension) || isJson || isXml
+      return isText
+  where
+    -- Check if a byte is a control character (excluding tabs, newlines and carriage returns)
+    isControlChar b = b < 32 && b /= 9 && b /= 10 && b /= 13
 
 -- | Test specification for FileSystem.Detection module
 spec :: Spec

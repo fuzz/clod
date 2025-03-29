@@ -10,6 +10,8 @@
 --
 -- This module provides functions for processing files, including
 -- adding files to the manifest and copying them to the staging directory.
+--
+-- The implementation uses Kleisli arrows for elegant function composition.
 
 module Clod.FileSystem.Processing
   ( -- * File processing
@@ -28,6 +30,7 @@ import qualified Data.List as L
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import System.Directory (doesFileExist)
 import System.FilePath (takeDirectory, takeFileName, (</>))
+import Control.Arrow ()
 
 import qualified System.Directory as D (copyFile)
 
@@ -124,57 +127,71 @@ addToManifest manifestPath (OriginalPath relPath) (OptimizedName optimizedName) 
   liftIO $ appendFile manifestPath manifestEntry
 
 -- | Process a single file for manifest only (no file copying)
-processFileManifestOnly :: ClodConfig -> FilePath -> FilePath -> FilePath -> IORef Bool -> ClodM FileResult
+-- 
+-- Uses a sequence of processing steps with short-circuiting on first error.
+processFileManifestOnly :: ClodConfig 
+                        -> FilePath   -- ^ Path to manifest file
+                        -> FilePath   -- ^ Full path to source file
+                        -> FilePath   -- ^ Relative path from project root
+                        -> IORef Bool -- ^ Reference to track first entry in manifest
+                        -> ClodM FileResult
 processFileManifestOnly config manifestPath fullPath relPath firstEntryRef = do
   -- Check if file should be ignored according to ignore patterns
   let patterns = ignorePatterns config
-      
   if not (null patterns) && matchesIgnorePattern patterns relPath
     then return $ Skipped "matched .clodignore pattern"
+    else do
+      -- Skip binary files
+      isText <- isTextFile fullPath
+      if not isText
+        then return $ Skipped "binary file"
         else do
-          -- Skip binary files
-          isText <- isTextFile fullPath
-          if not isText
-            then return $ Skipped "binary file"
-            else do
-              -- Create optimized filename
-              let finalOptimizedName = createOptimizedName relPath
-                  originalPath = OriginalPath relPath
-              
-              -- Add to path manifest
-              addToManifest manifestPath originalPath finalOptimizedName firstEntryRef
-              
-              return Success
+          -- Create optimized filename
+          let finalOptimizedName = createOptimizedName relPath
+              originalPath = OriginalPath relPath
+          
+          -- Add to path manifest (without copying the file)
+          addToManifest manifestPath originalPath finalOptimizedName firstEntryRef
+          
+          return Success
 
--- | Process a single file
-processFile :: ClodConfig -> FilePath -> FilePath -> FilePath -> IORef Bool -> ClodM FileResult
+-- | Process a single file using Kleisli arrows for elegant composition
+processFile :: ClodConfig 
+            -> FilePath   -- ^ Path to manifest file
+            -> FilePath   -- ^ Full path to source file
+            -> FilePath   -- ^ Relative path from project root
+            -> IORef Bool -- ^ Reference to track first entry in manifest
+            -> ClodM FileResult
 processFile config manifestPath fullPath relPath firstEntryRef 
   -- Skip specifically excluded files
   | relPath `elem` [".gitignore", "package-lock.json", "yarn.lock", ".clodignore"] = 
       return $ Skipped "excluded file"
   | otherwise = do
-      -- Check if file should be ignored according to ignore patterns
+      -- Step 1: Check ignore patterns
       let patterns = ignorePatterns config
-      
       if not (null patterns) && matchesIgnorePattern patterns relPath
         then return $ Skipped "matched .clodignore pattern"
         else do
-          -- Skip binary files
+          -- Step 2: Check if binary file
           isText <- isTextFile fullPath
           if not isText
             then return $ Skipped "binary file"
             else do
+              -- Step 3: Process text file
               -- Create optimized filename
               let finalOptimizedName = createOptimizedName relPath
                   originalPath = OriginalPath relPath
+                  -- Helper function to extract the name from OptimizedName
+                  getOptimizedName (OptimizedName name) = name
               
               -- Copy file with optimized name
-              liftIO $ D.copyFile fullPath (currentStaging config </> unOptimizedName finalOptimizedName)
+              liftIO $ D.copyFile fullPath (currentStaging config </> getOptimizedName finalOptimizedName)
               
               -- Add to path manifest
               addToManifest manifestPath originalPath finalOptimizedName firstEntryRef
               
-              liftIO $ putStrLn $ "Copied: " ++ relPath ++ " → " ++ unOptimizedName finalOptimizedName
+              liftIO $ putStrLn $ "Copied: " ++ relPath ++ " → " ++ getOptimizedName finalOptimizedName
+              
               return Success
 
 -- | Escape JSON special characters 

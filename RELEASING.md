@@ -14,7 +14,7 @@ Before releasing, ensure you have:
 
 1. **Update Version Numbers**
    - Update version in `clod.cabal`
-   - Update version in `src/Clod/Core.hs` (version output)
+   - Version is automatically accessed via the Paths_clod module (no need to update in Core.hs)
    - Ensure version follows [Semantic Versioning](https://semver.org/)
 
 2. **Update Changelog**

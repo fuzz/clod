@@ -120,23 +120,25 @@ copyToStaging readCap writeCap fullPath relPath = do
 processFileWithEffects :: Members '[FileSystem, Error T.ClodError, Console, Reader T.ClodConfig, Embed IO] r
                        => FileReadCap -> FileWriteCap -> FilePath -> FilePath -> Sem r T.FileResult
 processFileWithEffects readCap writeCap fullPath relPath = do
-  -- Chain file processing steps manually instead of with Kleisli composition
-  r1 <- checkIgnorePatterns fullPath relPath
-  case r1 of
-    Left reason -> pure $ T.Skipped reason
-    Right _ -> do
-      r2 <- checkFileExists readCap fullPath relPath
-      case r2 of
-        Left reason -> pure $ T.Skipped reason
-        Right _ -> do
-          r3 <- checkIsTextFile readCap fullPath relPath 
-          case r3 of
-            Left reason -> pure $ T.Skipped reason
-            Right _ -> do
-              r4 <- copyToStaging readCap writeCap fullPath relPath
-              case r4 of
-                Left reason -> pure $ T.Skipped reason
-                Right success -> pure success
+  let steps = [ checkIgnorePatterns fullPath relPath
+              , checkFileExists readCap fullPath relPath
+              , checkIsTextFile readCap fullPath relPath
+              , copyToStaging readCap writeCap fullPath relPath
+              ]
+
+      -- Process steps sequentially, stopping on first error
+      processSteps [] = pure $ Right T.Success
+      processSteps (step:remaining) = do
+        result <- step
+        case result of
+          Left reason -> pure $ Left reason
+          Right _ -> processSteps remaining
+
+  -- Run the processing pipeline and convert result
+  result <- processSteps steps
+  pure $ case result of
+    Left reason -> T.Skipped reason
+    Right _ -> T.Success
     
 -- | Run a computation with the Clod effects system
 runClodApp :: T.ClodConfig -> FilePath -> Bool -> Bool -> Bool -> IO (Either T.ClodError ())

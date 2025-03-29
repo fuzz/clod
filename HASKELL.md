@@ -129,10 +129,22 @@ This document contains learning points about working with Haskell from Claude Co
   - Every function using capability-based operations needs explicit effect constraints
   - Include `Member (Embed IO) r` in any function that calls into IO directly
   - Use `Members '[...]` syntax for multiple effect constraints
+  - Consider alternatives to Polysemy for better type inference and error messages
 - **Pattern synonyms**: Make pattern synonyms bidirectional when possible, providing both pattern and expression components for better usability and type inference.
 - **Clean code practices**: Regularly remove unused imports, declarations, and type class instances as they create maintenance burden and compilation warnings.
 - **Kleisli composition**: While elegant for monadic pipelines, sometimes direct do-notation is clearer, especially for complex error handling logic.
+  - Use `import Control.Arrow ((>>>), (<<<), Kleisli(..), runKleisli)` when working with Kleisli arrows
+  - Compose Kleisli arrows with `>>>` to create processing pipelines
+  - Use `runKleisli` to execute the composed pipeline with an initial input
 - **Type safety**: Prefer explicit types over type inference for public API functions to improve documentation and stability.
+- **Type synonym constraints**: When working with type synonyms like `ClodM` in type signatures for higher-order functions (especially with Kleisli arrows), always check if the type synonym requires parameters. Many type errors occur because type synonyms aren't fully applied.
+- **Graceful degradation**: When advanced type-level features cause compatibility issues, have fallback implementations ready that use simpler types but preserve the core logic.
+- **Progressive enhancement**: Start with simple working code, then gradually introduce more sophisticated type-level abstractions. This helps isolate type errors and makes the code evolution more manageable.
+- **Type-level programming benefits for human-AI collaboration**: 
+  - Provides precise, machine-checkable specifications that guide AI implementations
+  - Constrains solutions to match human intent through the type system
+  - Makes domain concepts and invariants explicit, improving communication
+  - Reduces the need for extensive documentation of invariants and constraints
 
 ## Haddock Documentation
 
@@ -158,3 +170,100 @@ This document contains learning points about working with Haskell from Claude Co
 - **Consistent Error Handling**: When throwing errors in capability systems:
   - Define a unified approach to error construction across modules
   - Use qualified imports to avoid ambiguity in error-throwing functions
+
+## Advanced Functional Composition
+
+- **Pipeline Pattern**: Use a list of effectful operations with a folding function to create processing pipelines:
+  ```haskell
+  processInSequence :: Monad m => [m (Either e a)] -> m (Either e a)
+  processInSequence [] = pure $ Right defaultSuccess
+  processInSequence (x:xs) = do
+    result <- x
+    case result of
+      Left e -> pure $ Left e  -- Short-circuit on first error
+      Right _ -> processInSequence xs  -- Continue processing
+  ```
+
+- **Kleisli Composition**: When composing functions that return monadic values, use Kleisli arrows from Control.Arrow:
+  ```haskell
+  import Control.Arrow ((>>>), (<<<), Kleisli(..), runKleisli)
+  
+  -- Create Kleisli arrows for monadic functions
+  step1K = Kleisli $ \input -> step1 input
+  step2K = Kleisli $ \input -> step2 input
+  
+  -- Compose them
+  pipeline = step1K >>> step2K >>> step3K
+  
+  -- Run the pipeline
+  result <- runKleisli pipeline initialInput
+  ```
+
+- **Type Annotation for Generic Functions**: When writing highly generic composition helpers, specify concrete types in implementation:
+  ```haskell
+  -- This will cause ambiguity:
+  processAll [] = pure $ Right successValue
+  
+  -- This is better:
+  processAll [] = pure $ (Right successValue :: Either String Result)
+  ```
+
+## Cross-Platform Development
+
+- **Pure Alternatives to Shell Commands**: Replace system commands with pure Haskell implementations:
+  - Instead of using the `file` command to detect binary files, implement text detection with ByteString analysis
+  - Check for null bytes, control character ratios, and UTF-8 validity
+  - This improves cross-platform compatibility and removes external dependencies
+
+- **Dynamic Binary Locating**: When writing wrapper scripts, use `find` to locate binaries rather than hardcoded paths:
+  ```bash
+  # Instead of hardcoded paths with specific architecture/version:
+  # ./dist-newstyle/build/aarch64-osx/ghc-9.4.8/package-0.1.0/...
+  
+  # Use find to dynamically locate the binary:
+  BINARY=$(find "./dist-newstyle" -name "package" -type f -executable | grep -v "\.dyn_o" | head -n 1)
+  ```
+
+- **Platform-Specific Code**: Explicitly document platform assumptions and provide graceful degradation:
+  ```bash
+  if [ "$(uname -s)" != "Darwin" ]; then
+    echo "Warning: This feature works best on macOS. Continue? [y/N]"
+    read -r response
+    if [[ ! "$response" =~ ^[Yy] ]]; then
+      echo "Operation canceled. Files are in: $OUTPUT_DIR"
+      exit 0
+    fi
+  fi
+  ```
+
+## Security Best Practices
+
+- **Canonical Paths in Error Messages**: When rejecting a path due to security restrictions:
+  ```haskell
+  -- Don't use the raw path in error messages
+  throw $ SecurityError $ "Access denied: " ++ path
+  
+  -- Instead, use canonical paths for clarity and security
+  canonicalPath <- embed $ canonicalizePath path
+  throw $ SecurityError $ "Access denied: " ++ canonicalPath
+  ```
+
+- **Detailed Security Error Messages**: Provide specific reasons for access denials:
+  ```haskell
+  -- Instead of generic errors:
+  throw $ SecurityError "Access denied"
+  
+  -- Use more specific errors with context:
+  throw $ SecurityError $ "Access denied: Source path violates restrictions: " ++ srcPath
+  ```
+
+- **Reducing Duplicated Security Logic**: Use higher-order functions to encapsulate security patterns:
+  ```haskell
+  -- Create a single policy-checking function
+  makePathPolicy :: [FilePath] -> FilePath -> Sem r Bool
+  makePathPolicy allowedDirs path = embed $ isPathAllowed allowedDirs path
+  
+  -- Reuse it in multiple capability constructors
+  fileReadCap dirs = FileReadCap { allowedDirs = dirs, policy = makePathPolicy dirs }
+  fileWriteCap dirs = FileWriteCap { allowedDirs = dirs, policy = makePathPolicy dirs }
+  ```

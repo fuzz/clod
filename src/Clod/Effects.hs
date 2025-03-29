@@ -124,8 +124,6 @@ import Polysemy.Error (Error)
 import Polysemy.Reader
 import qualified System.Directory as Dir
 import qualified Data.ByteString as BS
-import Data.List (isPrefixOf)
-import System.Process (readProcess)
 import Prelude hiding (readFile, writeFile)
 import qualified Clod.Git.LibGit as GitLib
 import qualified Clod.Types as T
@@ -133,6 +131,8 @@ import qualified Control.Exception as Exception
 import Control.Exception (SomeException)
 import Data.Function ((&))
 import GHC.Exts (Constraint)
+import Data.Char (toLower)
+import Data.List (isPrefixOf)
 
 -- | Throw an error in an effect context
 -- Re-exported from Polysemy.Error
@@ -161,8 +161,7 @@ data FileSystem m a where
   -- | Check if a file is a text file (not binary)
   IsTextFile :: FilePath -> FileSystem m Bool
 
--- Generate effect functions with Template Haskell
--- Generate effect functions with Template Haskell
+-- | Generate effect functions with Template Haskell
 makeSem ''FileSystem
 
 -- | Read a file from the file system
@@ -282,13 +281,33 @@ runFileSystemIO = interpret $ \case
   CopyFile src dest -> embed $ Dir.copyFile src dest
   FileExists path -> embed $ Dir.doesFileExist path
   IsTextFile path -> embed $ do
-    -- Reimplement the isTextFile logic from Detection module
-    result <- Exception.try (readProcess "file" ["--mime-type", "-b", path] "") :: IO (Either SomeException String)
-    case result of
-      Left _ -> return False  -- On error, assume it's not a text file
-      Right mimeType -> return $ "text/" `isPrefixOf` mimeType || 
-                                "application/json" `isPrefixOf` mimeType ||
-                                "application/xml" `isPrefixOf` mimeType
+    -- Use a pure Haskell implementation for better cross-platform support
+    exists <- Dir.doesFileExist path
+    if not exists
+      then return False
+      else do
+        -- Read up to 512 bytes from the beginning of the file
+        eContent <- Exception.try $ BS.readFile path :: IO (Either SomeException BS.ByteString)
+        case eContent of
+          Left _ -> return False  -- On error, assume it's not a text file
+          Right content -> do
+            let sample = BS.take 512 content
+                -- Check for common text file characteristics
+                hasNullByte = BS.elem 0 sample
+                controlCharCount = BS.length (BS.filter isControlChar sample)
+                controlCharRatio = (fromIntegral controlCharCount :: Double) / 
+                                  max 1.0 ((fromIntegral (BS.length sample)) :: Double)
+                -- Check file extension for specific types we know are text
+                isJson = ".json" `isSuffixOf` map toLower path
+                isXml = ".xml" `isSuffixOf` map toLower path || ".svg" `isSuffixOf` map toLower path
+                -- Text files shouldn't have many control characters and definitely no NULL bytes
+                isText = (not hasNullByte && controlCharRatio < 0.3) || isJson || isXml
+            return isText
+    where
+      -- Check if a byte is a control character (excluding tabs, newlines and carriage returns)
+      isControlChar b = b < 32 && b /= 9 && b /= 10 && b /= 13
+      -- Check if a string ends with a suffix
+      isSuffixOf suffix str = reverse suffix `isPrefixOf` reverse str
 
 -- | Run Git operations in IO
 runGitIO :: Members '[Error T.ClodError, Embed IO] r => Sem (Git ': r) a -> Sem r a

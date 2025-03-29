@@ -17,9 +17,11 @@ find_clod() {
     fi
   done
 
-  # If we can't find it, try the current directory 
-  if [ -x "./dist-newstyle/build/aarch64-osx/ghc-9.4.8/clod-0.1.0/x/clod/build/clod/clod" ]; then
-    echo "./dist-newstyle/build/aarch64-osx/ghc-9.4.8/clod-0.1.0/x/clod/build/clod/clod"
+  # If we can't find it, try the build directory
+  # Use find to locate the clod binary in dist-newstyle regardless of architecture or GHC version
+  BUILT_CLOD=$(find "./dist-newstyle" -name "clod" -type f -executable 2>/dev/null | grep -v "\.dyn_o" | head -n 1)
+  if [ -n "$BUILT_CLOD" ]; then
+    echo "$BUILT_CLOD"
     return
   fi
 
@@ -65,35 +67,33 @@ if [ $CLOD_EXIT -eq 0 ] && [ "$OPEN" = true ]; then
     mkdir -p "$STAGING_PATH"
   fi
 
-  # Detect platform and use appropriate open command
-  case "$(uname -s)" in
-    Darwin)
+  # Check platform
+  PLATFORM="$(uname -s)"
+  if [ "$PLATFORM" != "Darwin" ]; then
+    echo "Warning: This script has only been tested on macOS but should work on" >&2
+    echo "any platform that has an 'open' command that takes a directory as an argument." >&2
+    echo "Proceed [y/N]?" >&2
+    read -r response
+    if [[ ! "$response" =~ ^[Yy] ]]; then
+      echo "Files are in: $STAGING_PATH" >&2
+      OPEN=false
+    fi
+  fi
+  
+  # Open directory if enabled
+  if [ "$OPEN" = true ]; then
+    if [ "$PLATFORM" = "Darwin" ]; then
       # macOS
       open "$STAGING_PATH"
-      ;;
-    Linux)
-      # Linux
-      if command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$STAGING_PATH" &
-      elif command -v gio >/dev/null 2>&1; then
-        gio open "$STAGING_PATH" &
-      elif command -v gnome-open >/dev/null 2>&1; then
-        gnome-open "$STAGING_PATH" &
-      elif command -v kde-open >/dev/null 2>&1; then
-        kde-open "$STAGING_PATH" &
+    else
+      # Try to use open command
+      if command -v open >/dev/null 2>&1; then
+        open "$STAGING_PATH"
       else
-        echo "Warning: Could not detect a file browser. Files are in: $STAGING_PATH" >&2
+        echo "Warning: 'open' command not found. Files are in: $STAGING_PATH" >&2
       fi
-      ;;
-    CYGWIN*|MINGW*|MSYS*)
-      # Windows
-      explorer.exe "$(cygpath -w "$STAGING_PATH")" &
-      ;;
-    *)
-      # Unknown OS
-      echo "Warning: Unknown operating system. Files are in: $STAGING_PATH" >&2
-      ;;
-  esac
+    fi
+  fi
 fi
 
 # Print the clod output

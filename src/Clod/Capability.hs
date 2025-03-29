@@ -183,38 +183,31 @@ data GitCap = GitCap
 instance HasPermission GitCap GitAllowed where
   checkPermission cap = isPathAllowed (allowedRepos cap)
 
+-- | Generic capability policy for path checking
+-- This reduces duplication between the different capability types
+makePathPolicy :: [FilePath] -> Member (E.Embed IO) r => FilePath -> Sem r Bool
+makePathPolicy allowedDirs path = E.embed $ isPathAllowed allowedDirs path
+
 -- | Create a file read capability for specified directories
 fileReadCap :: [FilePath] -> FileReadCap
 fileReadCap dirs = FileReadCap 
   { allowedReadDirs = dirs
-  , readPolicy = defaultReadPolicy dirs
+  , readPolicy = \path -> makePathPolicy dirs path
   }
-  where
-    defaultReadPolicy :: [FilePath] -> Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
-                      => FilePath -> Sem r Bool
-    defaultReadPolicy allowedDirs path = E.embed $ isPathAllowed allowedDirs path
 
 -- | Create a file write capability for specified directories
 fileWriteCap :: [FilePath] -> FileWriteCap
 fileWriteCap dirs = FileWriteCap 
   { allowedWriteDirs = dirs
-  , writePolicy = defaultWritePolicy dirs
+  , writePolicy = \path -> makePathPolicy dirs path
   }
-  where
-    defaultWritePolicy :: [FilePath] -> Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
-                       => FilePath -> Sem r Bool
-    defaultWritePolicy allowedDirs path = E.embed $ isPathAllowed allowedDirs path
 
 -- | Create a Git capability for specified repositories
 gitCap :: [FilePath] -> GitCap
 gitCap dirs = GitCap 
   { allowedRepos = dirs
-  , gitPolicy = defaultGitPolicy dirs
+  , gitPolicy = \path -> makePathPolicy dirs path
   }
-  where
-    defaultGitPolicy :: [FilePath] -> Members '[Git, Error T.ClodError, E.Embed IO] r 
-                     => FilePath -> Sem r Bool
-    defaultGitPolicy allowedDirs path = E.embed $ isPathAllowed allowedDirs path
 
 -- | Check if a path is within allowed directories
 -- This improved version handles path traversal attacks by comparing canonical paths
@@ -232,8 +225,10 @@ isPathAllowed allowedDirs path = do
                                    (canonicalDir `isPrefixOf` canonicalPath && 
                                     length canonicalPath > length canonicalDir &&
                                     isPathSeparator (canonicalPath !! length canonicalDir))
-                    return isAllowed) allowedDirs
-  return (or checks)
+                    return (isAllowed, canonicalDir, canonicalPath)) allowedDirs
+  -- Return result, including the canonical paths for better error messages
+  let allowed = or (map (\(isAllowed, _, _) -> isAllowed) checks)
+  return allowed
   where
     isPathSeparator c = c == '/' || c == '\\'
     
@@ -305,7 +300,9 @@ safeReadFile cap path = do
   allowed <- readPolicy cap path
   if allowed
     then readFile path
-    else PE.throw $ T.ConfigError $ "Access denied: Cannot read file outside allowed directories: " ++ path
+    else do
+      canonicalPath <- E.embed $ canonicalizePath path
+      PE.throw $ T.ConfigError $ "Access denied: Cannot read file outside allowed directories: " ++ canonicalPath
 
 -- | Safe file existence check that checks capabilities
 safeFileExists :: Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
@@ -316,7 +313,9 @@ safeFileExists cap path = do
   allowed <- readPolicy cap path
   if allowed
     then fileExists path
-    else PE.throw $ T.ConfigError $ "Access denied: Cannot check existence of file outside allowed directories: " ++ path
+    else do
+      canonicalPath <- E.embed $ canonicalizePath path
+      PE.throw $ T.ConfigError $ "Access denied: Cannot check existence of file outside allowed directories: " ++ canonicalPath
 
 -- | Safe file type check that checks capabilities
 safeIsTextFile :: Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
@@ -327,7 +326,9 @@ safeIsTextFile cap path = do
   allowed <- readPolicy cap path
   if allowed
     then isTextFile path
-    else PE.throw $ T.ConfigError $ "Access denied: Cannot check file type outside allowed directories: " ++ path
+    else do
+      canonicalPath <- E.embed $ canonicalizePath path
+      PE.throw $ T.ConfigError $ "Access denied: Cannot check file type outside allowed directories: " ++ canonicalPath
 
 -- | Safe file writing that checks capabilities
 safeWriteFile :: Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
@@ -339,7 +340,9 @@ safeWriteFile cap path content = do
   allowed <- writePolicy cap path
   if allowed
     then writeFile path content
-    else PE.throw $ T.ConfigError $ "Access denied: Cannot write file outside allowed directories: " ++ path
+    else do
+      canonicalPath <- E.embed $ canonicalizePath path
+      PE.throw $ T.ConfigError $ "Access denied: Cannot write file outside allowed directories: " ++ canonicalPath
 
 -- | Safe file copying that checks capabilities for both read and write
 safeCopyFile :: Members '[FileSystem, Error T.ClodError, E.Embed IO] r 
@@ -353,7 +356,15 @@ safeCopyFile readCap writeCap src dest = do
   destAllowed <- writePolicy writeCap dest
   if srcAllowed && destAllowed
     then copyFile src dest
-    else PE.throw $ T.ConfigError $ "Access denied: Cannot copy file - path restrictions violated"
+    else do
+      canonicalSrc <- E.embed $ canonicalizePath src
+      canonicalDest <- E.embed $ canonicalizePath dest
+      let errorMsg = if not srcAllowed && not destAllowed
+                     then "Access denied: Both source and destination paths violate restrictions"
+                     else if not srcAllowed
+                          then "Access denied: Source path violates restrictions: " ++ canonicalSrc
+                          else "Access denied: Destination path violates restrictions: " ++ canonicalDest
+      PE.throw $ T.ConfigError errorMsg
 
 -- | Safe git modified files checking with capabilities
 safeGetModifiedFiles :: Members '[Git, Error T.ClodError, E.Embed IO] r 
@@ -364,7 +375,9 @@ safeGetModifiedFiles cap repoPath = do
   allowed <- gitPolicy cap repoPath
   if allowed
     then getModifiedFiles repoPath
-    else PE.throw $ T.ConfigError $ "Access denied: Cannot access Git repository: " ++ repoPath
+    else do
+      canonicalPath <- E.embed $ canonicalizePath repoPath
+      PE.throw $ T.ConfigError $ "Access denied: Cannot access Git repository: " ++ canonicalPath
 
 -- | Safe git untracked files checking with capabilities
 safeGetUntrackedFiles :: Members '[Git, Error T.ClodError, E.Embed IO] r 
@@ -375,4 +388,6 @@ safeGetUntrackedFiles cap repoPath = do
   allowed <- gitPolicy cap repoPath
   if allowed
     then getUntrackedFiles repoPath
-    else PE.throw $ T.ConfigError $ "Access denied: Cannot access Git repository: " ++ repoPath
+    else do
+      canonicalPath <- E.embed $ canonicalizePath repoPath
+      PE.throw $ T.ConfigError $ "Access denied: Cannot access Git repository: " ++ canonicalPath

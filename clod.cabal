@@ -82,6 +82,7 @@ library
                  , Clod.Types
                  , Clod.Effects
                  , Clod.Capability
+                 , Clod.AdvancedCapability
   other-modules: Paths_clod
   autogen-modules: Paths_clod
   build-depends: base >= 4.7 && < 5
@@ -160,6 +161,7 @@ test-suite clod-test
                , Clod.MainSpec
                , Clod.FileSystem.DetectionSpec
                , Clod.CapabilitySpec
+               , Clod.AdvancedCapabilitySpec
   build-depends: base >= 4.7 && < 5
                , clod
                , directory >= 1.3 && < 1.4
@@ -179,6 +181,7 @@ test-suite clod-test
                , random >= 1.2 && < 1.4
                , deepseq >= 1.4 && < 1.5
                , lens >= 5.0 && < 5.3
+               , mtl >= 2.2 && < 2.4
   default-language: Haskell2010
   default-extensions: OverloadedStrings
                     , TypeOperators

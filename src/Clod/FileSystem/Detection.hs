@@ -22,27 +22,49 @@ import qualified Data.List as L
 import Data.Time.Clock (UTCTime)
 import System.Directory (doesFileExist, getModificationTime)
 import System.FilePath ((</>))
-import System.Process (readProcess)
+import qualified Data.ByteString as BS
+import Data.Char (toLower)
 
 import Clod.Types (ClodM, liftIO)
 
 -- | Check if a file is a text file (not binary)
 --
--- This function uses the 'file' command to determine if a file is a text file.
--- It doesn't rely on extensions because that approach is error-prone and requires
--- maintaining lists of extensions, which should be in configuration files.
+-- This function uses a pure Haskell implementation to determine if a file is text or binary.
+-- It examines the content of the file rather than relying on an external command.
 --
--- The strategy is to use the system's 'file' command to detect the MIME type,
--- and consider anything that starts with "text/" as a text file.
+-- The strategy is to:
+-- 1. Check for null bytes (common in binary files)
+-- 2. Calculate the ratio of control characters (excluding whitespace)
+-- 3. Consider specific MIME types (JSON, XML) as text
+--
+-- This approach is more reliable and cross-platform than using external tools.
 isTextFile :: FilePath -> ClodM Bool
 isTextFile file = do
-  -- Use 'file' command to check mime type
-  result <- liftIO $ try (readProcess "file" ["--mime-type", "-b", file] "") :: ClodM (Either IOError String)
-  case result of
-    Left _ -> return False  -- On error, assume it's not a text file
-    Right mimeType -> return $ "text/" `L.isPrefixOf` mimeType || 
-                              "application/json" `L.isPrefixOf` mimeType ||
-                              "application/xml" `L.isPrefixOf` mimeType
+  -- Check if file exists
+  exists <- liftIO $ doesFileExist file
+  if not exists
+    then return False
+    else do
+      -- Read up to 512 bytes from the beginning of the file
+      result <- liftIO $ try $ BS.readFile file :: ClodM (Either IOError BS.ByteString)
+      case result of
+        Left _ -> return False  -- On error, assume it's not a text file
+        Right content -> do
+          let sample = BS.take 512 content
+              -- Check for common text file characteristics
+              hasNullByte = BS.elem 0 sample
+              controlCharCount = BS.length (BS.filter isControlChar sample)
+              controlCharRatio = (fromIntegral controlCharCount :: Double) / 
+                               max 1.0 ((fromIntegral (BS.length sample)) :: Double)
+              -- Check file extension for specific types we know are text
+              isJson = ".json" `L.isSuffixOf` L.map toLower file
+              isXml = ".xml" `L.isSuffixOf` L.map toLower file || ".svg" `L.isSuffixOf` L.map toLower file
+              -- Text files shouldn't have many control characters and definitely no NULL bytes
+              isText = (not hasNullByte && controlCharRatio < 0.3) || isJson || isXml
+          return isText
+  where
+    -- Check if a byte is a control character (excluding tabs, newlines and carriage returns)
+    isControlChar b = b < 32 && b /= 9 && b /= 10 && b /= 13
 
 -- | Check if a file has been modified since the given time
 isModifiedSince :: FilePath -> UTCTime -> FilePath -> ClodM Bool
