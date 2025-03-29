@@ -29,6 +29,10 @@ module Clod.Git
   , getUntrackedFiles
   , getModifiedFiles
   
+    -- * Safe git operations with capabilities
+  , safeGetModifiedFiles
+  , safeGetUntrackedFiles
+  
     -- * File processing
   , processModifiedFiles
   , processAllFiles
@@ -40,3 +44,28 @@ import Clod.Git.LibGit (getRepositoryRoot, isGitRepository, checkUncommittedChan
 
 -- Re-export file processing functions from Git.Internal
 import Clod.Git.Internal (processModifiedFiles, processAllFiles)
+
+import Clod.Types (ClodM, GitCap(..), ClodError(..), isPathAllowed)
+import Control.Monad.Except (throwError)
+import Control.Monad.IO.Class (liftIO)
+import System.Directory (canonicalizePath)
+
+-- | Safe git modified files checking with capabilities
+safeGetModifiedFiles :: GitCap -> FilePath -> ClodM [FilePath]
+safeGetModifiedFiles cap repoPath = do
+  allowed <- liftIO $ isPathAllowed (allowedRepos cap) repoPath
+  if allowed
+    then getModifiedFiles repoPath
+    else do
+      canonicalPath <- liftIO $ canonicalizePath repoPath
+      throwError $ CapabilityError $ "Access denied: Cannot access Git repository: " ++ canonicalPath
+
+-- | Safe git untracked files checking with capabilities
+safeGetUntrackedFiles :: GitCap -> FilePath -> ClodM [FilePath]
+safeGetUntrackedFiles cap repoPath = do
+  allowed <- liftIO $ isPathAllowed (allowedRepos cap) repoPath
+  if allowed
+    then getUntrackedFiles repoPath
+    else do
+      canonicalPath <- liftIO $ canonicalizePath repoPath
+      throwError $ CapabilityError $ "Access denied: Cannot access Git repository: " ++ canonicalPath

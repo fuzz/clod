@@ -1,6 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
 
 -- |
 -- Module      : Clod.FileSystem.Transformations
@@ -31,12 +29,10 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString as BS
 import Data.Char (isAlphaNum)
-import Polysemy
-import Polysemy.Error
+import Control.Monad.IO.Class (liftIO)
 
-import Clod.Types
-import Clod.Capability
-import Clod.Effects
+import Clod.Types (ClodM, FileReadCap, FileWriteCap)
+import Clod.FileSystem.Operations (safeReadFile, safeWriteFile)
 
 -- | Transform filename for Claude compatibility
 --
@@ -68,8 +64,8 @@ flattenPath path =
   let filename = takeFileName path
       -- If there's more to the path than just the filename, we replace / and \ with _
       flattenedPath = if length path > length filename
-                      then map replacePathSep path
-                      else path
+                     then map replacePathSep path
+                     else path
   in flattenedPath
   where
     replacePathSep '/' = '_'
@@ -96,10 +92,9 @@ sanitizeFilename filename =
 
 -- | Transform file content for Claude compatibility
 -- This function is used for special file types that need transformation
-transformFileContent :: Members '[FileSystem, Error ClodError, Embed IO] r
-                     => FileReadCap -> FileWriteCap 
+transformFileContent :: FileReadCap -> FileWriteCap 
                      -> (BS.ByteString -> T.Text) -- ^ Transformation function
-                     -> FilePath -> FilePath -> Sem r ()
+                     -> FilePath -> FilePath -> ClodM ()
 transformFileContent readCap writeCap transformFn srcPath destPath = do
   -- Read with capability check
   content <- safeReadFile readCap srcPath

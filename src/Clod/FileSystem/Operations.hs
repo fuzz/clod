@@ -16,14 +16,21 @@ module Clod.FileSystem.Operations
     findAllFiles
   , copyFile
   , safeRemoveFile
+  , safeReadFile
+  , safeWriteFile
+  , safeCopyFile
   ) where
 
 import Control.Monad (when)
-import System.Directory (doesDirectoryExist, doesFileExist, getDirectoryContents, removeFile)
+import Control.Monad.Except (throwError)
+import Control.Monad.IO.Class (liftIO)
+import System.Directory (doesDirectoryExist, doesFileExist, getDirectoryContents, removeFile, 
+                        copyFile, canonicalizePath)
 import System.FilePath ((</>))
-import qualified System.Directory as D (copyFile)
+import Data.List (isPrefixOf)
+import qualified Data.ByteString as BS
 
-import Clod.Types (ClodM, liftIO)
+import Clod.Types (ClodM, FileReadCap(..), FileWriteCap(..), ClodError(..), isPathAllowed)
 
 -- | Recursively find all files in a directory
 --
@@ -59,15 +66,45 @@ findAllFiles basePath = fmap concat . mapM findFilesRecursive
           -- Prepend current path to subdirectory files
           return $ map (file </>) subFiles
 
--- | Copy a file from source to destination
---
--- This is a simple wrapper around System.Directory.copyFile
--- that makes it easier to use in the ClodM monad.
-copyFile :: FilePath -> FilePath -> ClodM ()
-copyFile source dest = liftIO $ D.copyFile source dest
-
 -- | Safely remove a file, ignoring errors if it doesn't exist
 safeRemoveFile :: FilePath -> ClodM ()
 safeRemoveFile path = do
   exists <- liftIO $ doesFileExist path
   when exists $ liftIO $ removeFile path
+
+-- | Safe file reading that checks capabilities
+safeReadFile :: FileReadCap -> FilePath -> ClodM BS.ByteString
+safeReadFile cap path = do
+  allowed <- liftIO $ isPathAllowed (allowedReadDirs cap) path
+  if allowed
+    then liftIO $ BS.readFile path
+    else do
+      canonicalPath <- liftIO $ canonicalizePath path
+      throwError $ CapabilityError $ "Access denied: Cannot read file outside allowed directories: " ++ canonicalPath
+
+-- | Safe file writing that checks capabilities
+safeWriteFile :: FileWriteCap -> FilePath -> BS.ByteString -> ClodM ()
+safeWriteFile cap path content = do
+  allowed <- liftIO $ isPathAllowed (allowedWriteDirs cap) path
+  if allowed
+    then liftIO $ BS.writeFile path content
+    else do
+      canonicalPath <- liftIO $ canonicalizePath path
+      throwError $ CapabilityError $ "Access denied: Cannot write file outside allowed directories: " ++ canonicalPath
+
+-- | Safe file copying that checks capabilities for both read and write
+safeCopyFile :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM ()
+safeCopyFile readCap writeCap src dest = do
+  srcAllowed <- liftIO $ isPathAllowed (allowedReadDirs readCap) src
+  destAllowed <- liftIO $ isPathAllowed (allowedWriteDirs writeCap) dest
+  if srcAllowed && destAllowed
+    then liftIO $ copyFile src dest
+    else do
+      canonicalSrc <- liftIO $ canonicalizePath src
+      canonicalDest <- liftIO $ canonicalizePath dest
+      let errorMsg = if not srcAllowed && not destAllowed
+                     then "Access denied: Both source and destination paths violate restrictions"
+                     else if not srcAllowed
+                          then "Access denied: Source path violates restrictions: " ++ canonicalSrc
+                          else "Access denied: Destination path violates restrictions: " ++ canonicalDest
+      throwError $ CapabilityError errorMsg

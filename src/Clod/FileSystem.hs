@@ -42,10 +42,17 @@ module Clod.FileSystem
   ( -- * Re-exports from FileSystem.Operations
     findAllFiles
   , safeRemoveFile
+  , copyFile
+  , safeReadFile
+  , safeWriteFile
+  , safeCopyFile
     
     -- * Re-exports from FileSystem.Detection
   , isModifiedSince
   , isTextFile
+  , isTextContent
+  , safeFileExists
+  , safeIsTextFile
   
     -- * Re-exports from FileSystem.Processing
   , processFiles
@@ -54,14 +61,26 @@ module Clod.FileSystem
   , createOptimizedName
   , addToManifest
   , escapeJSON
+  
+    -- * Re-exports from FileSystem.Transformations
+  , transformFilename
+  , flattenPath
+  , sanitizeFilename
+  , transformFileContent
   ) where
 
 -- Re-export from FileSystem.Operations
-import Clod.FileSystem.Operations (findAllFiles, safeRemoveFile)
+import Clod.FileSystem.Operations (findAllFiles, safeRemoveFile, copyFile, 
+                                 safeReadFile, safeWriteFile, safeCopyFile)
 
 -- Re-export from FileSystem.Detection
-import Clod.FileSystem.Detection (isModifiedSince, isTextFile)
+import Clod.FileSystem.Detection (isModifiedSince, isTextFile, isTextContent,
+                                safeFileExists, safeIsTextFile)
 
 -- Re-export from FileSystem.Processing
 import Clod.FileSystem.Processing (processFiles, processFile, processFileManifestOnly, 
                                   createOptimizedName, addToManifest, escapeJSON)
+
+-- Re-export from FileSystem.Transformations
+import Clod.FileSystem.Transformations (transformFilename, flattenPath, 
+                                      sanitizeFilename, transformFileContent)

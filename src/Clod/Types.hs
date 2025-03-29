@@ -6,8 +6,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE ConstraintKinds #-}
 
@@ -37,29 +35,43 @@ module Clod.Types
   , FileResult(..)
   , ClodError(..)
   , ClodM
-  , ClodT
   
     -- * Type conversions and runners
   , runClodM
   , throwError
+  , catchError
   , liftIO
   , ask
   , asks
-  -- | Run a reader monad transformer with the given environment
+  , local
   , runReaderT
+  , runExceptT
   
     -- * Newtypes for type safety
   , IgnorePattern(..)
   , OptimizedName(..)
   , OriginalPath(..)
+  
+    -- * Capability types
+  , FileReadCap(..)
+  , FileWriteCap(..)
+  , GitCap(..)
+  , fileReadCap
+  , fileWriteCap
+  , gitCap
+  
+    -- * Path validation
+  , isPathAllowed
   ) where
 
-import Control.Monad.Except (ExceptT, runExceptT, throwError)
+import Control.Monad.Except (ExceptT, runExceptT, throwError, catchError)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (ReaderT, ask, asks, runReaderT)
+import Control.Monad.Reader (ReaderT, ask, asks, local, runReaderT)
 import Data.String (IsString(..))
 import GHC.Generics (Generic)
 import Data.Typeable (Typeable)
+import Data.List (isPrefixOf)
+import System.Directory (canonicalizePath)
 
 -- | Newtype for ignore patterns to prevent mixing with other string types
 newtype IgnorePattern = IgnorePattern { unIgnorePattern :: String }
@@ -108,38 +120,71 @@ data ClodError
   | FileSystemError !FilePath !IOError -- ^ Error related to filesystem operations
   | ConfigError !String                -- ^ Error related to configuration (e.g., invalid settings)
   | PatternError !String               -- ^ Error related to pattern matching (e.g., invalid pattern)
+  | CapabilityError !String           -- ^ Error related to capability validation
   deriving stock (Show, Eq, Generic)
   deriving anyclass (Typeable)
 
--- Standard error constraint: Member (Error ClodError) r
-
--- | The Clod transformer monad
+-- | The Clod monad
 --
--- NOTE: This traditional monad stack has been largely replaced by the effects system,
--- but is kept for backward compatibility with legacy code and tests.
---
--- This monad transformer stack combines:
+-- This monad stack combines:
 --
 -- * Reader for dependency injection of ClodConfig
 -- * Error handling with ExceptT for 'ClodError'
 -- * IO for filesystem, git, and other side effects
 --
--- New code should use the effects system in Clod.Effects instead.
-type ClodT m a = ReaderT ClodConfig (ExceptT ClodError m) a
-
--- | Monad for Clod operations
---
--- NOTE: This traditional monad has been largely replaced by the effects system,
--- but is kept for backward compatibility with legacy code and tests.
---
--- New code should use the effects system in Clod.Effects instead.
-type ClodM a = ClodT IO a
+-- This replaces the previous effects-based approach with a simpler,
+-- more traditional monad stack.
+type ClodM a = ReaderT ClodConfig (ExceptT ClodError IO) a
 
 -- | Run a ClodM computation, returning either an error or a result
---
--- NOTE: This function has been largely replaced by effects-based runners,
--- but is kept for backward compatibility with legacy code and tests.
---
--- New code should use the effects system in Clod.Effects instead.
-runClodM :: ClodM a -> IO (Either ClodError a)
-runClodM = runExceptT . flip runReaderT (error "ClodConfig not initialized")
+runClodM :: ClodConfig -> ClodM a -> IO (Either ClodError a)
+runClodM config action = runExceptT (runReaderT action config)
+
+-- | Capability for reading files within certain directories
+data FileReadCap = FileReadCap 
+  { allowedReadDirs :: [FilePath] -- ^ Directories where reading is permitted
+  } deriving (Show, Eq)
+
+-- | Capability for writing files within certain directories
+data FileWriteCap = FileWriteCap 
+  { allowedWriteDirs :: [FilePath] -- ^ Directories where writing is permitted
+  } deriving (Show, Eq)
+
+-- | Capability for Git operations
+data GitCap = GitCap 
+  { allowedRepos :: [FilePath] -- ^ Git repositories where operations are permitted
+  } deriving (Show, Eq)
+
+-- | Create a file read capability for specified directories
+fileReadCap :: [FilePath] -> FileReadCap
+fileReadCap dirs = FileReadCap { allowedReadDirs = dirs }
+
+-- | Create a file write capability for specified directories
+fileWriteCap :: [FilePath] -> FileWriteCap
+fileWriteCap dirs = FileWriteCap { allowedWriteDirs = dirs }
+
+-- | Create a Git capability for specified repositories
+gitCap :: [FilePath] -> GitCap
+gitCap dirs = GitCap { allowedRepos = dirs }
+
+-- | Check if a path is within allowed directories
+-- This improved version handles path traversal attacks by comparing canonical paths
+isPathAllowed :: [FilePath] -> FilePath -> IO Bool
+isPathAllowed allowedDirs path = do
+  -- Get canonical paths to resolve any `.`, `..`, or symlinks
+  canonicalPath <- canonicalizePath path
+  -- Check if the canonical path is within any of the allowed directories
+  checks <- mapM (\dir -> do
+                   canonicalDir <- canonicalizePath dir
+                   -- A path is allowed if:
+                   -- 1. It equals an allowed directory exactly, or
+                   -- 2. It's a proper subdirectory (dir is a prefix and has a path separator)
+                   let isAllowed = canonicalDir == canonicalPath || 
+                                  (canonicalDir `isPrefixOf` canonicalPath && 
+                                   length canonicalPath > length canonicalDir &&
+                                   isPathSeparator (canonicalPath !! length canonicalDir))
+                   return isAllowed) allowedDirs
+  -- Return result
+  return (or checks)
+  where
+    isPathSeparator c = c == '/' || c == '\\'
