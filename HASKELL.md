@@ -816,6 +816,65 @@ This document contains learning points about working with Haskell from Claude Co
     (null (normalise dir) || normalise path /= normalise dir)
   ```
 
+- **Avoiding Unwanted Path Prefixes**: When traversing filesystem directories to collect files:
+  ```haskell
+  -- Special handling for root directory traversal to avoid "./" prefixes
+  findFilesRecursive :: FilePath -> ClodM [FilePath]
+  findFilesRecursive file = do
+    -- Special case for empty string or "." to handle root directory
+    let useBasePath = null file || file == "."
+        fullPath = if useBasePath then basePath else basePath </> file
+    
+    isDir <- liftIO $ doesDirectoryExist fullPath
+    case isDir of
+      False -> return [file]  
+      True  -> do
+        -- Get directory contents, excluding "." and ".."
+        contents <- liftIO $ getDirectoryContents fullPath
+        let validContents = filter (`notElem` [".", ".."]) contents
+        
+        -- Recursively process subdirectories
+        subFiles <- findAllFiles fullPath validContents
+        
+        -- Add directory prefix only if not at root
+        return $ if useBasePath
+                then subFiles  -- For root dir, don't add any prefix
+                else map (file </>) subFiles
+  ```
+
+- **Handling Hidden Files**: When transforming filenames, handle hidden files (dot files) specially:
+  ```haskell
+  -- Transform file names according to spec
+  transformFilename :: String -> String -> String
+  transformFilename name original
+    -- Handle hidden files (those starting with a dot)
+    | not (null name) && head name == '.' =
+        -- Remove the leading dot and add the "dot--" prefix
+        "dot--" ++ tail name
+    -- Other special cases...
+    | otherwise = name
+    
+  -- When flattening directory paths with hidden directories  
+  transformDirPart :: String -> String
+  transformDirPart dir = 
+    -- Remove trailing slash if present
+    let cleanDir = if L.isSuffixOf "/" dir then init dir else dir
+    -- Apply hidden file transformation if needed
+    in if not (null cleanDir) && head cleanDir == '.'
+       then "dot--" ++ tail cleanDir
+       else cleanDir
+  ```
+
+- **Directory Path Segmentation**: When splitting paths into segments, handle directory separators correctly:
+  ```haskell
+  -- Split a path into its directory components
+  splitPath :: FilePath -> [String]
+  splitPath path = filter (not . null) $ map getSegment $ L.groupBy sameGroup path
+    where
+      sameGroup c1 c2 = c1 /= '/' && c2 /= '/'
+      getSegment seg = filter (/= '/') seg
+  ```
+
 - **Preserving Path Structure**: When transforming files while preserving path structure:
   ```haskell
   -- Create output paths that mirror input structure

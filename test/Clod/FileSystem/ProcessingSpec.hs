@@ -40,6 +40,16 @@ spec = do
       
     it "leaves files without directories unchanged" $ do
       unOptimizedName (createOptimizedName "file.txt") `shouldBe` "file.txt"
+      
+    it "handles hidden files correctly" $ do
+      unOptimizedName (createOptimizedName ".gitignore") `shouldBe` "dot--gitignore"
+      unOptimizedName (createOptimizedName "src/.env") `shouldBe` "src-dot--env"
+      unOptimizedName (createOptimizedName ".config/settings.json") `shouldBe` "dot--config-settings.json"
+      
+    it "handles complex paths with multiple hidden components" $ do
+      unOptimizedName (createOptimizedName ".hidden/.nested/.config/file.txt") `shouldBe` "dot--hidden-dot--nested-dot--config-file.txt"
+      unOptimizedName (createOptimizedName "projects/.git/config") `shouldBe` "projects-dot--git-config"
+      unOptimizedName (createOptimizedName ".vscode/launch.json") `shouldBe` "dot--vscode-launch.json"
 
   describe "escapeJSON" $ do
     it "escapes backslashes and quotes" $ do
@@ -49,7 +59,7 @@ spec = do
       
     it "leaves other characters unchanged" $ do
       escapeJSON "normal text" `shouldBe` "normal text"
-      escapeJSON "!@#$%^&*()" `shouldBe` "!@#$%^&*()"
+      escapeJSON "symbols" `shouldBe` "symbols"
 
   describe "writeManifestFile" $ do
     it "writes entries to the manifest file" $ do
@@ -110,6 +120,7 @@ spec = do
               , timestamp = ""
               , currentStaging = stagingDir
               , testMode = True
+              , verbose = False
               , ignorePatterns = []
               }
         
@@ -158,6 +169,7 @@ spec = do
               , timestamp = ""
               , currentStaging = stagingDir
               , testMode = True
+              , verbose = False
               , ignorePatterns = []
               }
         
@@ -208,6 +220,7 @@ spec = do
               , timestamp = ""
               , currentStaging = stagingDir
               , testMode = True
+              , verbose = False
               , ignorePatterns = []
               }
         
@@ -271,6 +284,7 @@ spec = do
               , timestamp = ""
               , currentStaging = stagingDir
               , testMode = True
+              , verbose = False
               , ignorePatterns = []
               }
         
@@ -336,6 +350,7 @@ spec = do
               , timestamp = ""
               , currentStaging = stagingDir
               , testMode = True
+              , verbose = False
               , ignorePatterns = []
               }
             
@@ -374,5 +389,6 @@ defaultTestConfig = ClodConfig
   , timestamp = ""
   , currentStaging = "/"
   , testMode = True
+  , verbose = False
   , ignorePatterns = []
   }

@@ -16,6 +16,7 @@ import Options.Applicative
 import System.Exit (exitFailure)
 import System.Directory (createDirectoryIfMissing, getCurrentDirectory, getTemporaryDirectory)
 import System.FilePath ((</>))
+import System.IO (stderr, hPutStrLn)
 import Data.Time (getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Hashable (hash)
@@ -95,6 +96,7 @@ main = do
             timestamp = "",  -- Will be set internally
             currentStaging = stagingDirPath,
             testMode = optTestMode options,
+            verbose = optVerbose options,
             ignorePatterns = []  -- Will be populated
           }
       
@@ -107,7 +109,7 @@ main = do
       
       case result of
         Left err -> do
-          putStrLn $ "Error: " ++ show err
+          hPutStrLn stderr $ "Error: " ++ show err
           exitFailure
         Right _ -> return ()
   where

@@ -95,6 +95,33 @@ clod provides a complete, end-to-end workflow for coding with Claude AI:
 
 clod includes special handling for certain file types to ensure optimal compatibility with Claude's Project Knowledge system.
 
+### Hidden Files and Directories
+
+Hidden files and directories (those starting with a `.` character) are transformed to ensure visibility in file browsers when uploading to Claude.
+
+#### How Hidden File Handling Works
+
+1. When clod processes hidden files or directories, it transforms them with a consistent format:
+   - `.gitignore` becomes `dot--gitignore`
+   - `.env` becomes `dot--env`
+   - `.config/settings.ini` becomes `dot--config-settings.ini`
+
+2. The original file path with the leading dot is preserved in the `_path_manifest.json` file, ensuring Claude writes back to the correct location with the proper hidden file format.
+
+3. In your conversations with Claude, you can refer to these files using either name:
+   - "Can you modify the .env file?"
+   - "Can you update the dot--env file?"
+
+4. When Claude writes the file back to your filesystem, it will use the original path with the leading dot.
+
+#### Benefits
+
+- Hidden files are visible in macOS Finder and Windows Explorer when selecting files to upload
+- Consistent naming convention makes hidden files easy to identify
+- No manual renaming is needed - transformation happens automatically
+- Your project structure remains clean with proper dot-prefixed files
+- Hidden directories within paths are also properly transformed
+
 ### SVG Files
 
 SVG files are automatically converted to XML files when processed by clod. This is because Claude's Project Knowledge system doesn't officially support the SVG file extension, but it can work with XML files (since SVGs are fundamentally XML files).
@@ -120,7 +147,7 @@ SVG files are automatically converted to XML files when processed by clod. This 
 - Claude can fully view and edit SVG content just like any other XML file
 - Your project structure remains clean with proper SVG extensions
 
-This feature allows you to leverage Claude's capabilities with SVG files while ensuring compatibility with the Project Knowledge system.
+These special handling features allow you to leverage Claude's capabilities with all types of files while ensuring compatibility with the Project Knowledge system.
 
 ## Example Workflow
 

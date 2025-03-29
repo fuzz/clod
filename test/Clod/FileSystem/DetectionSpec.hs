@@ -246,6 +246,7 @@ defaultConfig tmpDir = ClodConfig
   , lastRunFile = tmpDir </> ".clod" </> "last-run"
   , timestamp = "20250401-000000"
   , currentStaging = tmpDir </> "staging"
-  , testMode = True
+  , testMode = True,
+             verbose = False
   , ignorePatterns = []
   }

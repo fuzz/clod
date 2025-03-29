@@ -119,6 +119,7 @@ outputFormattingSpec = describe "Output formatting" $ do
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
+            verbose = False,
             ignorePatterns = []
           }
           
@@ -154,6 +155,7 @@ outputFormattingSpec = describe "Output formatting" $ do
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
+            verbose = False,
             ignorePatterns = []
           }
           
@@ -203,6 +205,7 @@ pathManifestSpec = describe "Path manifest generation" $ do
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
+            verbose = False,
             ignorePatterns = []
           }
       

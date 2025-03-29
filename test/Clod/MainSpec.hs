@@ -167,6 +167,7 @@ cliWorkflowSpec = describe "CLI workflow" $ do
               timestamp = "20250325",
               currentStaging = stagingDir,
               testMode = True,
+            verbose = False,
               ignorePatterns = []
             }
         

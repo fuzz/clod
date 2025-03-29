@@ -43,13 +43,20 @@ import Clod.Types (ClodM, FileReadCap(..), FileWriteCap(..), ClodError(..), isPa
 --
 -- -- Find all files in multiple directories
 -- files <- findAllFiles "/path/to/repo" ["src", "docs", "tests"]
+--
+-- -- Find all files in the root directory (without "./" prefix)
+-- files <- findAllFiles "/path/to/repo" [""]
 -- @
 findAllFiles :: FilePath -> [FilePath] -> ClodM [FilePath]
 findAllFiles basePath = fmap concat . mapM findFilesRecursive
   where
     findFilesRecursive :: FilePath -> ClodM [FilePath]
     findFilesRecursive file = do
-      let fullPath = basePath </> file
+      -- Special case for empty string or "." to handle root directory
+      -- without adding a "./" prefix to paths
+      let useBasePath = null file || file == "."
+          fullPath = if useBasePath then basePath else basePath </> file
+      
       isDir <- liftIO $ doesDirectoryExist fullPath
       
       case isDir of
@@ -62,8 +69,10 @@ findAllFiles basePath = fmap concat . mapM findFilesRecursive
           -- Recursively process subdirectories
           subFiles <- findAllFiles fullPath validContents
           
-          -- Prepend current path to subdirectory files
-          return $ map (file </>) subFiles
+          -- Prepend current path to subdirectory files, but only if not the root dir
+          return $ if useBasePath
+                  then subFiles  -- For root dir, don't add any prefix
+                  else map (file </>) subFiles  -- Otherwise add directory prefix
 
 -- | Safely remove a file, ignoring errors if it doesn't exist
 safeRemoveFile :: FilePath -> ClodM ()

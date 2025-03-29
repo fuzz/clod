@@ -39,7 +39,7 @@ module Clod.Core
 
 import System.Directory (createDirectoryIfMissing, doesFileExist, getModificationTime)
 import System.FilePath ((</>), splitDirectories)
-import System.IO (writeFile)
+import System.IO (writeFile, stdout, stderr, hPutStrLn)
 import Data.Version (showVersion)
 import Control.Monad (when, filterM)
 
@@ -85,7 +85,10 @@ copyToStaging readCap writeCap fullPath relPath = do
   -- Copy file with optimized name using capability
   safeCopyFile readCap writeCap fullPath destPath
   
-  liftIO $ putStrLn $ "Copied: " ++ relPath ++ " → " ++ unOptimizedName finalOptimizedName
+  -- Only output if verbose mode is enabled
+  config <- ask
+  when (verbose config) $ do
+    liftIO $ hPutStrLn stderr $ "Copied: " ++ relPath ++ " → " ++ unOptimizedName finalOptimizedName
   pure $ Right Success
   where
     -- Simplified version of createOptimizedName for demonstration
@@ -135,7 +138,8 @@ findModifiedOrAllFiles _ path useAllFiles = do
           if useAllFiles
             then do
               -- Get all files in the repo (using findAllFiles instead)
-              findAllFiles repoRoot ["."]
+              -- Use empty string instead of "." to avoid "./" prefix
+              findAllFiles repoRoot [""]
             else do
               -- Get modified and untracked files
               modified <- liftIO $ Git.listModifiedFiles repoRoot
@@ -145,11 +149,11 @@ findModifiedOrAllFiles _ path useAllFiles = do
     else do
       -- If not a git repo, use filesystem operations
       if useAllFiles
-        then findAllFiles path ["."]
+        then findAllFiles path [""]  -- Use empty string instead of "." to avoid "./" prefix
         else do
           -- Get files modified since last run
           config' <- ask
-          allFiles <- findAllFiles path ["."]
+          allFiles <- findAllFiles path [""]  -- Use empty string instead of "." to avoid "./" prefix
           
           -- Check if last run marker exists
           let lastRunFilePath = lastRunFile config'
@@ -174,18 +178,20 @@ findModifiedOrAllFiles _ path useAllFiles = do
 
 -- | Run the main Clod application
 runClodApp :: ClodConfig -> FilePath -> Bool -> Bool -> Bool -> IO (Either ClodError ())
-runClodApp config stagingDirArg verbose optAllFiles optModified = runClodM config $ do
-  when verbose $ do
-    -- Print version information only in verbose mode
-    liftIO $ putStrLn $ "clod version " ++ showVersion Meta.version ++ " (Haskell)"
-  
-  -- Execute main logic with capabilities
-  mainLogic stagingDirArg verbose optAllFiles optModified
+runClodApp config _ verboseFlag optAllFiles optModified = 
+  let configWithVerbose = config { verbose = verboseFlag }
+  in runClodM configWithVerbose $ do
+    when verboseFlag $ do
+      -- Print version information only in verbose mode
+      liftIO $ hPutStrLn stderr $ "clod version " ++ showVersion Meta.version ++ " (Haskell)"
+    
+    -- Execute main logic with capabilities
+    mainLogic optAllFiles optModified
     
 -- | Main application logic
-mainLogic :: FilePath -> Bool -> Bool -> Bool -> ClodM ()
-mainLogic stagingDirArg verbose optAllFiles optModified = do
-  config@ClodConfig{configDir, stagingDir, projectPath, lastRunFile} <- ask
+mainLogic :: Bool -> Bool -> ClodM ()
+mainLogic optAllFiles optModified = do
+  config@ClodConfig{configDir, stagingDir, projectPath, lastRunFile, verbose} <- ask
   
   -- Create directories
   liftIO $ createDirectoryIfMissing True configDir
@@ -193,9 +199,9 @@ mainLogic stagingDirArg verbose optAllFiles optModified = do
   
   -- Only show additional info in verbose mode
   when verbose $ do
-    liftIO $ putStrLn $ "Running with capabilities, safely restricting operations to: " ++ projectPath
-    liftIO $ putStrLn $ "Safe staging directory: " ++ stagingDirArg
-    liftIO $ putStrLn "AI safety guardrails active with capability-based security"
+    liftIO $ hPutStrLn stderr $ "Running with capabilities, safely restricting operations to: " ++ projectPath
+    liftIO $ hPutStrLn stderr $ "Safe staging directory: " ++ stagingDir
+    liftIO $ hPutStrLn stderr "AI safety guardrails active with capability-based security"
   
   -- Load .gitignore and .clodignore patterns
   gitIgnorePatterns <- readGitIgnore projectPath
@@ -214,9 +220,9 @@ mainLogic stagingDirArg verbose optAllFiles optModified = do
               then do
                 repoRootMaybe <- liftIO $ Git.getRepoRootPath projectPath
                 case repoRootMaybe of
-                  Just repoRoot -> findAllFiles repoRoot ["."]
-                  Nothing -> findAllFiles projectPath ["."] -- Fallback if we can't get repo root
-              else findAllFiles projectPath ["."]
+                  Just repoRoot -> findAllFiles repoRoot [""]  -- Use empty string to avoid "./" prefix
+                  Nothing -> findAllFiles projectPath [""]  -- Fallback if we can't get repo root
+              else findAllFiles projectPath [""]  -- Use empty string to avoid "./" prefix
   
   -- Process all files for the manifest
   let manifestPath = stagingDir </> "_path_manifest.json"
@@ -225,7 +231,7 @@ mainLogic stagingDirArg verbose optAllFiles optModified = do
   (manifestAdded, manifestSkipped) <- processFiles configWithPatterns manifestPath allFiles True
   
   when verbose $ do
-    liftIO $ putStrLn $ "Added " ++ show manifestAdded ++ " files to manifest, skipped " ++ show manifestSkipped
+    liftIO $ hPutStrLn stderr $ "Added " ++ show manifestAdded ++ " files to manifest, skipped " ++ show manifestSkipped
   
   -- Second pass: If using --modified flag, find and copy only modified files
   -- If using --all flag, also copy all files to the staging directory
@@ -241,11 +247,11 @@ mainLogic stagingDirArg verbose optAllFiles optModified = do
                         else return (0, 0)
   
   when verbose $ do
-    liftIO $ putStrLn $ "Processed " ++ show processed ++ " files, skipped " ++ show skipped ++ " files"
+    liftIO $ hPutStrLn stderr $ "Processed " ++ show processed ++ " files, skipped " ++ show skipped ++ " files"
   
   -- Update the last run marker to track when clod was last run
   liftIO $ System.IO.writeFile lastRunFile ""
   
   -- Output ONLY the staging directory path to stdout for piping to other tools
   -- This follows Unix principles - single line of output for easy piping
-  liftIO $ putStrLn stagingDir
+  liftIO $ hPutStrLn stdout stagingDir

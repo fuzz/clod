@@ -269,5 +269,6 @@ defaultTestConfig = ClodConfig
   , timestamp = ""
   , currentStaging = "/"
   , testMode = True
+  , verbose = False
   , ignorePatterns = []
   }

@@ -56,6 +56,7 @@ fileProcessingSpec = describe "File processing with ClodM" $ do
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
+            verbose = False,
             ignorePatterns = []
           }
       
@@ -96,6 +97,7 @@ fileProcessingSpec = describe "File processing with ClodM" $ do
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
+            verbose = False,
             ignorePatterns = []
           }
       
@@ -130,6 +132,7 @@ runClodAppSpec = describe "runClodApp" $ do
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
+            verbose = False,
             ignorePatterns = []
           }
           
@@ -161,6 +164,7 @@ runClodAppSpec = describe "runClodApp" $ do
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
+            verbose = False,
             ignorePatterns = []
           }
           
@@ -189,6 +193,7 @@ runClodAppSpec = describe "runClodApp" $ do
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
+            verbose = False,
             ignorePatterns = []
           }
       
@@ -236,6 +241,7 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
+            verbose = False,
             ignorePatterns = [IgnorePattern "node_modules/", IgnorePattern ".git/"]  -- Set patterns directly
           }
       

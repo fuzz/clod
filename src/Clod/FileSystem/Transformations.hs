@@ -40,10 +40,12 @@ import Clod.FileSystem.Operations (safeReadFile, safeWriteFile)
 --
 -- Currently handles:
 -- * SVG files - converted to XML extension for Claude compatibility
+-- * Hidden files (.dotfiles) - converted to "dot--filename" format
 -- * Path flattening and sanitization for improved compatibility
 --
 -- @
 -- transformFilename "logo.svg" -- returns "logo-svg.xml"
+-- transformFilename ".gitignore" -- returns "dot--gitignore"
 -- transformFilename "image.png" -- returns "image.png" (no change)
 -- @
 transformFilename :: String -> String -> String
@@ -53,6 +55,10 @@ transformFilename name original
       -- For SVG files, convert to XML extension
       let baseName = take (length name - 4) name
       in sanitizeFilename $ baseName ++ "-svg.xml"
+  -- Handle hidden files (those starting with a dot)
+  | not (null name) && head name == '.' =
+      -- Remove the leading dot and add the "dot--" prefix
+      "dot--" ++ tail name
   -- Handle empty filename
   | null name = "unnamed"
   -- Match test case explicitly to keep compatibility with tests

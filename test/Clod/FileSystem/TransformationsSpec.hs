@@ -42,6 +42,11 @@ spec = do
       transformFilename "main.js" "main.js" `shouldBe` "main.js"
       transformFilename "index.html" "index.html" `shouldBe` "index.html"
       
+    it "transforms hidden files by removing dot and adding 'dot--' prefix" $ do
+      transformFilename ".gitignore" ".gitignore" `shouldBe` "dot--gitignore"
+      transformFilename ".tool-versions" ".tool-versions" `shouldBe` "dot--tool-versions"
+      transformFilename ".config" ".config" `shouldBe` "dot--config"
+      
     it "sanitizes filenames with special characters" $ do
       transformFilename "file with spaces.txt" "file with spaces.txt" `shouldBe` "filewithtxt"
       transformFilename "#weird$chars%.js" "#weird$chars%.js" `shouldBe` "weirdchars.js"
@@ -207,5 +212,6 @@ defaultTestConfig = ClodConfig
   , timestamp = ""
   , currentStaging = "/"
   , testMode = True
+  , verbose = False
   , ignorePatterns = []
   }

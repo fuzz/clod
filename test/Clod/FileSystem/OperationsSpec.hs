@@ -55,6 +55,7 @@ spec = do
               , timestamp = ""
               , currentStaging = dir
               , testMode = True
+              , verbose = False
               , ignorePatterns = []
               }
         
@@ -64,6 +65,37 @@ spec = do
         case result of
           Left err -> expectationFailure $ "Error finding files: " ++ show err
           Right files -> sort files `shouldBe` ["subdir/file2.txt", "subdir2/file3.txt"]
+          
+    it "avoids './' prefix when finding files in root directory" $ do
+      -- Create a temp directory with files in the root
+      withSystemTempDirectory "clod-test" $ \dir -> do
+        -- Create files directly in root directory
+        BS.writeFile (dir </> "root1.txt") "test"
+        BS.writeFile (dir </> "root2.txt") "test"
+        
+        -- Run the function with empty string (new approach for root dir)
+        let config = ClodConfig 
+              { projectPath = dir
+              , stagingDir = dir
+              , configDir = dir
+              , lastRunFile = dir
+              , timestamp = ""
+              , currentStaging = dir
+              , testMode = True
+              , verbose = False
+              , ignorePatterns = []
+              }
+        
+        result <- runClodM config $ findAllFiles dir [""]
+        
+        -- Verify results don't have "./" prefix
+        case result of
+          Left err -> expectationFailure $ "Error finding files: " ++ show err
+          Right files -> do
+            sort files `shouldBe` ["root1.txt", "root2.txt"]
+            
+            -- Explicitly verify no file has "./" prefix
+            all (\f -> not (take 2 f == "./")) files `shouldBe` True
 
   describe "safeRemoveFile" $ do
     it "removes a file that exists" $ do
@@ -158,5 +190,6 @@ defaultTestConfig = ClodConfig
   , timestamp = ""
   , currentStaging = "/"
   , testMode = True
+  , verbose = False
   , ignorePatterns = []
   }

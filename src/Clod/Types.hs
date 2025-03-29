@@ -97,6 +97,7 @@ data ClodConfig = ClodConfig
   , timestamp      :: !String        -- ^ Timestamp for the current run
   , currentStaging :: !FilePath      -- ^ Path to the current staging directory
   , testMode       :: !Bool          -- ^ Whether we're running in test mode
+  , verbose        :: !Bool          -- ^ Whether to print verbose output
   , ignorePatterns :: ![IgnorePattern] -- ^ Patterns from .gitignore and .clodignore
   } deriving stock (Show, Eq, Generic)
     deriving anyclass (Typeable)

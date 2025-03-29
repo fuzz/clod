@@ -86,5 +86,6 @@ spec = do
       , timestamp = "20250401-120000"
       , currentStaging = dir </> "staging"
       , testMode = True
+      , verbose = False
       , ignorePatterns = []
       }

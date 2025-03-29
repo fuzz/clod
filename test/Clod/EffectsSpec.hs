@@ -33,6 +33,7 @@ spec = do
             , timestamp = ""
             , currentStaging = "/"
             , testMode = True
+            , verbose = False
             , ignorePatterns = []
             }
       
@@ -60,6 +61,7 @@ spec = do
             , timestamp = ""
             , currentStaging = "/"
             , testMode = True
+            , verbose = False
             , ignorePatterns = []
             }
       

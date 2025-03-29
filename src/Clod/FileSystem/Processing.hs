@@ -29,6 +29,8 @@ import Data.List (nubBy)
 import System.Directory (doesFileExist)
 import System.FilePath (takeDirectory, takeFileName, (</>))
 import qualified System.IO
+import System.IO (stderr, hPutStrLn)
+import Control.Monad (when)
 
 import qualified System.Directory as D (copyFile)
 
@@ -144,7 +146,8 @@ processFiles config manifestPath files includeInManifestOnly = do
           -- Skip any files in the staging directory
           if stagingDir config `L.isInfixOf` fullPath
             then do
-              liftIO $ putStrLn $ "Skipping: " ++ fullPath ++ " (in staging directory)"
+              when (verbose config) $ do
+                liftIO $ hPutStrLn stderr $ "Skipping: " ++ fullPath ++ " (in staging directory)"
               return (Nothing, 0)
             else do
               -- Process the file based on manifest-only flag
@@ -198,8 +201,9 @@ processFiles config manifestPath files includeInManifestOnly = do
                   -- Copy file with optimized name
                   liftIO $ D.copyFile fullPath (currentStaging cfg </> getOptimizedName optimizedName)
                   
-                  -- Report the copy operation
-                  liftIO $ putStrLn $ "Copied: " ++ relPath ++ " → " ++ getOptimizedName optimizedName
+                  -- Report the copy operation only when verbose flag is set (to stderr)
+                  when (verbose cfg) $ do
+                    liftIO $ hPutStrLn stderr $ "Copied: " ++ relPath ++ " → " ++ getOptimizedName optimizedName
                   
                   return (Just [entry], 0)
 
@@ -232,13 +236,36 @@ createOptimizedName relPath = OptimizedName finalOptimizedName
     dirPart = takeDirectory relPath
     fileName = takeFileName relPath
     
-    -- Create the optimized name by replacing slashes with dashes
-    optimizedName = case dirPart of
-      "." -> fileName
-      _   -> map (\c -> if c == '/' then '-' else c) dirPart ++ "-" ++ fileName
-    
-    -- Apply any special transformations needed for Claude compatibility
-    finalOptimizedName = transformFilename optimizedName fileName
+    -- Handle paths with no directory part (files in root)
+    finalOptimizedName = case dirPart of
+      "." -> transformFilename fileName fileName
+      _   -> 
+        -- Process the directory part to handle hidden directories
+        let dirParts = splitPath dirPart
+            -- Transform each directory segment, handling hidden directories
+            transformedDirParts = map transformDirPart dirParts
+            -- Join them with dashes
+            transformedDirPath = concat $ L.intersperse "-" transformedDirParts
+            -- Transform the filename
+            transformedFileName = transformFilename fileName fileName
+        in transformedDirPath ++ "-" ++ transformedFileName
+        
+    -- Transform a directory segment, handling hidden directories
+    transformDirPart :: String -> String
+    transformDirPart dir = 
+      -- Remove trailing slash if present
+      let cleanDir = if L.isSuffixOf "/" dir then init dir else dir
+      -- Apply hidden file transformation if needed
+      in if not (null cleanDir) && head cleanDir == '.'
+         then "dot--" ++ tail cleanDir
+         else cleanDir
+         
+    -- Split a path into its directory components
+    splitPath :: FilePath -> [String]
+    splitPath path = filter (not . null) $ map getSegment $ L.groupBy sameGroup path
+      where
+        sameGroup c1 c2 = c1 /= '/' && c2 /= '/'
+        getSegment seg = filter (/= '/') seg
 
 -- | Escape JSON special characters 
 escapeJSON :: String -> String

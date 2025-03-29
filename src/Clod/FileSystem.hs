@@ -33,10 +33,13 @@
 --
 -- * Replacing directory separators with dashes
 -- * Flattening the directory structure
+-- * Special handling for hidden files (e.g., .gitignore becomes dot--gitignore)
 -- * Special handling for certain file types (e.g., .svg files become .xml)
 --
 -- This ensures that all files can be easily distinguished in Claude's UI
--- while maintaining a mapping back to their original locations.
+-- while maintaining a mapping back to their original locations. Hidden files
+-- are transformed to be visible in file browsers while preserving their hidden
+-- status when written back to the filesystem.
 
 module Clod.FileSystem
   ( -- * Re-exports from FileSystem.Operations

@@ -110,6 +110,7 @@ main = do
         , timestamp = "20250401-000000"
         , currentStaging = outputDir
         , testMode = True
+        , verbose = True  -- Set verbose to True for this example
         , ignorePatterns = []
         }
       
