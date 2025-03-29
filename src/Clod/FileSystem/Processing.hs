@@ -16,28 +16,73 @@
 module Clod.FileSystem.Processing
   ( -- * File processing
     processFiles
-  , processFile
-  , processFileManifestOnly
+  , ManifestEntry(..)
   
     -- * Manifest operations
   , createOptimizedName
-  , addToManifest
+  , writeManifestFile
   , escapeJSON
   ) where
 
-import Control.Monad (forM, unless)
 import qualified Data.List as L
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.List (nubBy)
 import System.Directory (doesFileExist)
 import System.FilePath (takeDirectory, takeFileName, (</>))
-import Control.Arrow ()
+import qualified System.IO
 
 import qualified System.Directory as D (copyFile)
 
-import Clod.Types (OptimizedName(..), OriginalPath(..), ClodM, ClodConfig(..), FileResult(..), liftIO)
+import Clod.Types (OptimizedName(..), OriginalPath(..), ClodM, ClodConfig(..), liftIO)
 import Clod.IgnorePatterns (matchesIgnorePattern)
 import Clod.FileSystem.Detection (isTextFile)
 import Clod.FileSystem.Transformations (transformFilename)
+
+-- | A manifest entry consisting of an optimized name and original path
+data ManifestEntry = ManifestEntry 
+  { entryOptimizedName :: OptimizedName
+  , entryOriginalPath :: OriginalPath
+  } deriving (Show, Eq)
+
+-- | Read any existing entries from a manifest file
+readManifestEntries :: FilePath -> ClodM [ManifestEntry]
+readManifestEntries manifestPath = do
+  -- Check if manifest exists
+  exists <- liftIO $ doesFileExist manifestPath
+  if not exists
+    then return []
+    else do
+      -- Read the content (using strict IO to ensure file handle is closed)
+      content <- liftIO $ do
+        fileContent <- readFile manifestPath
+        length fileContent `seq` return fileContent
+      
+      -- Simple parsing to extract entries (basic approach)
+      let parseEntry line =
+            case break (== ':') line of
+              (optimizedPart, ':':restPart) -> do
+                let chars :: String
+                    chars = " \"," 
+                    cleanOptimized = filter (\c -> not (c `elem` chars)) optimizedPart
+                    cleanOriginal = filter (\c -> not (c `elem` chars)) restPart
+                if null cleanOptimized || null cleanOriginal
+                  then Nothing
+                  else Just $ ManifestEntry 
+                           (OptimizedName cleanOptimized) 
+                           (OriginalPath cleanOriginal)
+              _ -> Nothing
+              
+      -- Split by lines and parse each entry line
+      let possibleEntries = filter (\l -> ":" `L.isInfixOf` l) (lines content)
+          entries = mapMaybe parseEntry possibleEntries
+      
+      return entries
+      
+      where
+        mapMaybe f = map fromJust . filter isJust . map f
+        isJust (Just _) = True
+        isJust Nothing = False
+        fromJust (Just x) = x
+        fromJust Nothing = error "Impossible: fromJust Nothing"
 
 -- | Process a list of files for Claude integration
 --
@@ -63,37 +108,122 @@ processFiles :: ClodConfig    -- ^ Configuration for the Clod program
              -> Bool          -- ^ Whether to only include in manifest (no file copying)
              -> ClodM (Int, Int)  -- ^ (Processed count, Skipped count)
 processFiles config manifestPath files includeInManifestOnly = do
-  -- Track if the current entry is the first in the manifest
-  ref <- liftIO $ newIORef True
+  -- First collect all valid entries
+  fileResults <- mapM processOneFile files
   
-  -- Process files and count results
-  results <- forM files $ \file -> do
-    -- Get full path
-    let fullPath = projectPath config </> file
+  -- Extract successful entries and count results
+  let newEntries = concatMap (maybe [] id . fst) fileResults
+      processed = length newEntries
+      skipped = sum $ map snd fileResults
+  
+  -- Read any existing entries from the manifest, if it exists
+  existingEntries <- readManifestEntries manifestPath
+  
+  -- Combine existing and new entries, then deduplicate
+  let allEntries = existingEntries ++ newEntries
+      -- Use original path as deduplication key
+      uniqueEntries = nubBy (\a b -> entryOriginalPath a == entryOriginalPath b) allEntries
+  
+  -- Write all entries to the manifest file at once
+  writeManifestFile manifestPath uniqueEntries
+  
+  -- Return file counts
+  return (processed, skipped)
+  where
+    -- Process a single file and return Maybe (entries, skipped count)
+    processOneFile :: FilePath -> ClodM (Maybe [ManifestEntry], Int)
+    processOneFile file = do
+      -- Get full path
+      let fullPath = projectPath config </> file
+      
+      -- Skip if not a regular file
+      isFile <- liftIO $ doesFileExist fullPath
+      if not isFile
+        then return (Nothing, 0)
+        else do
+          -- Skip any files in the staging directory
+          if stagingDir config `L.isInfixOf` fullPath
+            then do
+              liftIO $ putStrLn $ "Skipping: " ++ fullPath ++ " (in staging directory)"
+              return (Nothing, 0)
+            else do
+              -- Process the file based on manifest-only flag
+              if includeInManifestOnly
+                then processForManifestOnly config fullPath file
+                else processWithCopy config fullPath file
     
-    -- Skip if not a regular file
-    isFile <- liftIO $ doesFileExist fullPath
-    if not isFile
-      then return (0, 0)
-      else do
-        -- Skip any files in the staging directory
-        if stagingDir config `L.isInfixOf` fullPath
-          then do
-            liftIO $ putStrLn $ "Skipping: " ++ fullPath ++ " (in staging directory)"
-            return (0, 0)
-          else do
-            -- Process the file normally (always copy, we're simplifying the logic)
-            result <- if includeInManifestOnly
-                     then processFileManifestOnly config manifestPath fullPath file ref
-                     else processFile config manifestPath fullPath file ref
-            case result of
-              Success -> return (1, 0)
-              Skipped _ -> do
-                -- Skip the verbose output unless we add a verbose flag later
-                return (0, 1)
+    -- Process for manifest only (no copying)
+    processForManifestOnly :: ClodConfig -> FilePath -> FilePath -> ClodM (Maybe [ManifestEntry], Int)
+    processForManifestOnly cfg fullPath relPath = do
+      -- Skip if matches ignore patterns
+      let patterns = ignorePatterns cfg
+      if not (null patterns) && matchesIgnorePattern patterns relPath
+        then return (Nothing, 1)
+        else do
+          -- Skip binary files
+          isText <- isTextFile fullPath
+          if not isText
+            then return (Nothing, 1)
+            else do
+              -- Create the manifest entry
+              let optimizedName = createOptimizedName relPath
+                  originalPath = OriginalPath relPath
+                  entry = ManifestEntry optimizedName originalPath
+              return (Just [entry], 0)
+    
+    -- Process with file copying
+    processWithCopy :: ClodConfig -> FilePath -> FilePath -> ClodM (Maybe [ManifestEntry], Int)
+    processWithCopy cfg fullPath relPath
+      -- Skip specifically excluded files
+      | relPath `elem` [".gitignore", "package-lock.json", "yarn.lock", ".clodignore"] = 
+          return (Nothing, 1)
+      | otherwise = do
+          -- Skip if matches ignore patterns
+          let patterns = ignorePatterns cfg
+          if not (null patterns) && matchesIgnorePattern patterns relPath
+            then return (Nothing, 1)
+            else do
+              -- Skip binary files
+              isText <- isTextFile fullPath
+              if not isText
+                then return (Nothing, 1)
+                else do
+                  -- Create the manifest entry
+                  let optimizedName = createOptimizedName relPath
+                      originalPath = OriginalPath relPath
+                      entry = ManifestEntry optimizedName originalPath
+                      -- Helper function to extract the name from OptimizedName
+                      getOptimizedName (OptimizedName name) = name
+                  
+                  -- Copy file with optimized name
+                  liftIO $ D.copyFile fullPath (currentStaging cfg </> getOptimizedName optimizedName)
+                  
+                  -- Report the copy operation
+                  liftIO $ putStrLn $ "Copied: " ++ relPath ++ " → " ++ getOptimizedName optimizedName
+                  
+                  return (Just [entry], 0)
+
+-- | Write all entries to the manifest file at once
+writeManifestFile :: FilePath -> [ManifestEntry] -> ClodM ()
+writeManifestFile manifestPath entries = do
+  -- Create the manifest content with all entries
+  let manifestLines = "{\n" : entryLines ++ ["\n}"]
+      entryLines = zipWith formatEntry [0..] entries
+      
+      -- Format a single entry (with comma for all but the last)
+      formatEntry idx entry =
+        let comma = if idx == length entries - 1 then "" else ","
+            OptimizedName optimizedName = entryOptimizedName entry
+            OriginalPath originalPath = entryOriginalPath entry
+            escapedOptimizedName = escapeJSON optimizedName
+            escapedOriginalPath = escapeJSON originalPath
+        in "  \"" ++ escapedOptimizedName ++ "\": \"" ++ escapedOriginalPath ++ "\"" ++ comma
   
-  -- Sum the file and skipped counts
-  return (sum (map fst results), sum (map snd results))
+  -- Write the complete manifest file at once, ensuring handles are closed promptly
+  content <- return $ unlines manifestLines
+  liftIO $ System.IO.withFile manifestPath System.IO.WriteMode $ \h -> do
+    System.IO.hPutStr h content
+    System.IO.hFlush h
 
 -- | Create an optimized filename for Claude UI
 createOptimizedName :: FilePath -> OptimizedName
@@ -109,90 +239,6 @@ createOptimizedName relPath = OptimizedName finalOptimizedName
     
     -- Apply any special transformations needed for Claude compatibility
     finalOptimizedName = transformFilename optimizedName fileName
-
--- | Add entry to path manifest
-addToManifest :: FilePath -> OriginalPath -> OptimizedName -> IORef Bool -> ClodM ()
-addToManifest manifestPath (OriginalPath relPath) (OptimizedName optimizedName) firstEntryRef = do
-  -- Use firstEntryRef to track whether a comma is needed
-  isFirst <- liftIO $ readIORef firstEntryRef
-  unless isFirst $
-    liftIO $ appendFile manifestPath ",\n"
-  liftIO $ writeIORef firstEntryRef False
-  
-  -- Escape JSON special characters
-  let escapedOptimizedName = escapeJSON optimizedName
-      escapedRelPath = escapeJSON relPath
-      manifestEntry = "  \"" ++ escapedOptimizedName ++ "\": \"" ++ escapedRelPath ++ "\""
-  
-  liftIO $ appendFile manifestPath manifestEntry
-
--- | Process a single file for manifest only (no file copying)
--- 
--- Uses a sequence of processing steps with short-circuiting on first error.
-processFileManifestOnly :: ClodConfig 
-                        -> FilePath   -- ^ Path to manifest file
-                        -> FilePath   -- ^ Full path to source file
-                        -> FilePath   -- ^ Relative path from project root
-                        -> IORef Bool -- ^ Reference to track first entry in manifest
-                        -> ClodM FileResult
-processFileManifestOnly config manifestPath fullPath relPath firstEntryRef = do
-  -- Check if file should be ignored according to ignore patterns
-  let patterns = ignorePatterns config
-  if not (null patterns) && matchesIgnorePattern patterns relPath
-    then return $ Skipped "matched .clodignore pattern"
-    else do
-      -- Skip binary files
-      isText <- isTextFile fullPath
-      if not isText
-        then return $ Skipped "binary file"
-        else do
-          -- Create optimized filename
-          let finalOptimizedName = createOptimizedName relPath
-              originalPath = OriginalPath relPath
-          
-          -- Add to path manifest (without copying the file)
-          addToManifest manifestPath originalPath finalOptimizedName firstEntryRef
-          
-          return Success
-
--- | Process a single file using Kleisli arrows for elegant composition
-processFile :: ClodConfig 
-            -> FilePath   -- ^ Path to manifest file
-            -> FilePath   -- ^ Full path to source file
-            -> FilePath   -- ^ Relative path from project root
-            -> IORef Bool -- ^ Reference to track first entry in manifest
-            -> ClodM FileResult
-processFile config manifestPath fullPath relPath firstEntryRef 
-  -- Skip specifically excluded files
-  | relPath `elem` [".gitignore", "package-lock.json", "yarn.lock", ".clodignore"] = 
-      return $ Skipped "excluded file"
-  | otherwise = do
-      -- Step 1: Check ignore patterns
-      let patterns = ignorePatterns config
-      if not (null patterns) && matchesIgnorePattern patterns relPath
-        then return $ Skipped "matched .clodignore pattern"
-        else do
-          -- Step 2: Check if binary file
-          isText <- isTextFile fullPath
-          if not isText
-            then return $ Skipped "binary file"
-            else do
-              -- Step 3: Process text file
-              -- Create optimized filename
-              let finalOptimizedName = createOptimizedName relPath
-                  originalPath = OriginalPath relPath
-                  -- Helper function to extract the name from OptimizedName
-                  getOptimizedName (OptimizedName name) = name
-              
-              -- Copy file with optimized name
-              liftIO $ D.copyFile fullPath (currentStaging config </> getOptimizedName finalOptimizedName)
-              
-              -- Add to path manifest
-              addToManifest manifestPath originalPath finalOptimizedName firstEntryRef
-              
-              liftIO $ putStrLn $ "Copied: " ++ relPath ++ " → " ++ getOptimizedName finalOptimizedName
-              
-              return Success
 
 -- | Escape JSON special characters 
 escapeJSON :: String -> String

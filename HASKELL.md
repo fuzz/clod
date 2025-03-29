@@ -54,6 +54,104 @@ This document contains learning points about working with Haskell from Claude Co
 - Temporary directories should be cleaned up when no longer needed.
 - File handles and other resources should be properly closed.
 
+## Testing Techniques
+
+- **Marking Tests as Pending**: When a test is no longer relevant due to architectural changes, mark it as pending:
+  ```haskell
+  it "some test that should be changed" $
+    pendingWith "This test is being updated after core refactoring"
+  ```
+  
+- **Test Counting with Pending Tests**: When using Hspec, pending tests are counted separately:
+  - When the test report shows `123 examples, 0 failures, 1 pending`, it means:
+    - 123 tests were executed and passed
+    - 1 additional test was marked as pending (not executed)
+    - The total is therefore 124 tests
+  - Fixing a previously pending test will show `123 examples, 0 failures` (all tests passing)
+
+- **Complex Test Fixtures**: When a test fixture is complex, break it into helper functions:
+  ```haskell
+  -- Helper for setting up a test environment
+  withTestEnvironment :: (FilePath -> IO ()) -> IO ()
+  withTestEnvironment runTest = 
+    withSystemTempDirectory "test-dir" $ \tmpDir -> do
+      -- Create test files
+      createDirectoryIfMissing True (tmpDir </> "src")
+      writeFile (tmpDir </> "src" </> "test.file") "test content"
+      -- Run the test with the prepared environment
+      runTest tmpDir
+  
+  -- Use it in tests
+  it "tests something" $
+    withTestEnvironment $ \tmpDir -> do
+      -- Your test code here
+  ```
+
+- **Generic Filesystem Test Helpers**: Create reusable functions for file-related tests:
+  ```haskell
+  -- Helper for finding files in a test directory
+  findAllFiles' :: FilePath -> IO [FilePath]
+  findAllFiles' root = do
+    allDirs <- listDirectories root
+    paths <- forM allDirs $ \dir -> do
+      entries <- getDirectoryContents dir
+      let validEntries = filter (`notElem` [".", ".."]) entries
+      return $ map (makeRelative root . (dir </>)) validEntries
+    return $ concat paths
+    
+  -- Helper for creating test files
+  createTestFiles :: FilePath -> [(FilePath, String)] -> IO ()
+  createTestFiles base files = forM_ files $ \(path, content) -> do
+    let fullPath = base </> path
+    createDirectoryIfMissing True (takeDirectory fullPath)
+    writeFile fullPath content
+  ```
+
+- **Resilient File Path Testing**: When testing file operations, make tests resilient to different file naming implementations:
+  ```haskell
+  -- Instead of checking for an exact filename:
+  doesFileExist (tmpDir </> "staging" </> "file.txt") `shouldBe` True
+  
+  -- Check for files containing a distinctive part of the filename:
+  allFiles <- getDirectoryContents (tmpDir </> "staging")
+  let matchingFiles = filter (\f -> "file" `isInfixOf` f && f `notElem` [".", ".."]) allFiles
+  (not (null matchingFiles)) `shouldBe` True
+  ```
+
+- **Debugging Output in Tests**: Add temporary debug output for diagnosing test failures:
+  ```haskell
+  it "respects ignore patterns" $ do
+    -- Test setup
+    withSystemTempDirectory "test-dir" $ \tmpDir -> do
+      -- Run test
+      result <- runApp tmpDir
+      
+      -- Debug output to understand what's happening
+      allFiles <- getDirectoryContents (tmpDir </> "output")
+      putStrLn $ "Files in output: " ++ show allFiles
+      
+      -- Check manifest contents if it exists
+      manifestExists <- doesFileExist (tmpDir </> "output" </> "manifest.json")
+      when manifestExists $ do
+        content <- readFile (tmpDir </> "output" </> "manifest.json")
+        putStrLn $ "Manifest content: " ++ take 500 content
+      
+      -- Assertions
+      result `shouldBe` Success
+  ```
+
+- **Exception-Catching in Tests**: Use explicit exception catching to enhance debugging:
+  ```haskell
+  import Control.Exception (catch, throwIO, SomeException)
+  
+  -- Add try/catch around assertions that might fail with details
+  (manifestContent `shouldContain` "expected_text") 
+    `catch` (\(e :: SomeException) -> do
+              putStrLn $ "Error in shouldContain: " ++ show e
+              putStrLn $ "Manifest content: " ++ manifestContent
+              throwIO e)
+  ```
+
 ## Testing
 
 - Tests should not rely on specific project state or external resources.
@@ -130,6 +228,93 @@ This document contains learning points about working with Haskell from Claude Co
 - For maintainable code, you can start with simpler monad transformers and later migrate to effects if needed
   - This avoids premature complexity while preserving the core security model
   - Simpler code is easier for both humans and AI to maintain
+
+## Debugging Techniques
+
+- **Isolated Incremental Testing**: When debugging complex functional code, isolate and test components incrementally:
+  ```haskell
+  -- Original complex function
+  complexProcess :: Config -> [Input] -> IO [Output]
+  
+  -- Broken into smaller, testable parts
+  step1 :: Config -> [Input] -> IO [IntermediateA]
+  step2 :: [IntermediateA] -> IO [IntermediateB]
+  step3 :: [IntermediateB] -> IO [Output]
+  
+  -- Compose them back together
+  complexProcess config inputs = do
+    resultA <- step1 config inputs
+    resultB <- step2 resultA
+    step3 resultB
+  ```
+
+- **Debug Output in Tests**: Add strategic debug output to tests without modifying production code:
+  ```haskell
+  it "should process files correctly" $ do
+    -- Setup test
+    withSystemTempDirectory "test-dir" $ \tmpDir -> do
+      -- Create test files
+      
+      -- Add debug output only in tests
+      result <- runTestM $ do
+        files <- findFiles "src"
+        liftIO $ putStrLn $ "Files found: " ++ show files
+        processFiles files
+        
+      -- More debugging after the operation
+      liftIO $ do
+        putStrLn $ "Result: " ++ show result
+        content <- readFile (tmpDir </> "output")
+        putStrLn $ "Output content: " ++ content
+        
+      -- Assertions (use shouldContain for partial matching)
+      result `shouldBe` Success
+  ```
+
+- **Strategic Tracing**: Add temporary trace output for debugging complex issues:
+  ```haskell
+  import Debug.Trace (trace)
+  
+  -- Add tracing to a key function while debugging
+  processFile :: FilePath -> IO Result
+  processFile path = do
+    let debugPath = trace ("Processing file: " ++ path) path
+    exists <- doesFileExist debugPath
+    if exists
+      then trace "File exists, continuing..." $ do
+        content <- readFile debugPath
+        trace ("Content length: " ++ show (length content)) (return ())
+        -- Process content
+      else trace "File doesn't exist!" $ return NotFound
+  ```
+
+- **Dealing with Ambiguous Types**: Use explicit type annotations to resolve ambiguities:
+  ```haskell
+  -- Ambiguous type in complex expression
+  result <- runAction config (processor inputs)
+  
+  -- Add type annotation to clarify
+  result <- (runAction config (processor inputs) :: IO (Either Error [Result]))
+  
+  -- Or use type application for parametric types
+  result <- runAction @IO @Error config (processor inputs)
+  ```
+
+- **Testing File Paths in Different Environments**: Be aware of path separator differences:
+  ```haskell
+  -- In Windows, paths use backslashes
+  -- In Unix-like systems, paths use forward slashes
+  
+  -- Use FilePath utilities for consistent handling
+  let relPath = makeRelative root path
+      -- Normalize for testing to handle platform differences
+      normalizedPath = normalise relPath
+      
+  -- For testing, consider normalizing paths for comparison
+  assertEqual "paths should match" 
+    (normalise expectedPath) 
+    (normalise actualPath)
+  ```
 
 ## Tips
 
@@ -350,6 +535,247 @@ This document contains learning points about working with Haskell from Claude Co
   -- Reuse it in multiple capability constructors
   fileReadCap dirs = FileReadCap { allowedDirs = dirs, policy = makePathPolicy dirs }
   fileWriteCap dirs = FileWriteCap { allowedDirs = dirs, policy = makePathPolicy dirs }
+  ```
+
+## JSON Generation and File Manifest Handling
+
+- **Functional JSON Generation**: When generating JSON files like manifest files, use a purely functional approach:
+  ```haskell
+  -- Instead of incrementally building JSON with appendFile:
+  addEntry :: FilePath -> Entry -> IORef Bool -> IO ()
+  addEntry file entry isFirstRef = do
+    isFirst <- readIORef isFirstRef
+    unless isFirst $
+      appendFile file ",\n"
+    writeIORef isFirstRef False
+    appendFile file (formatEntry entry)
+
+  -- Use a more functional approach that collects entries first:
+  writeJsonFile :: FilePath -> [Entry] -> IO ()
+  writeJsonFile file entries = do
+    let formattedEntries = zipWith formatEntry [0..] entries
+        json = "{\n" ++ intercalate ",\n" formattedEntries ++ "\n}"
+    writeFile file json
+    
+    -- Format a single entry with comma handling
+    formatEntry :: Int -> Entry -> String
+    formatEntry idx entry =
+      let comma = if idx == length entries - 1 then "" else ","
+      in "  \"" ++ key entry ++ "\": \"" ++ value entry ++ "\"" ++ comma
+  ```
+
+- **Avoiding File Locking Issues**: When reading and writing the same file, ensure proper handle closure:
+  ```haskell
+  -- Using strict IO to ensure file handles are closed promptly
+  readFileStrict :: FilePath -> IO String
+  readFileStrict path = do
+    contents <- readFile path
+    length contents `seq` return contents
+    
+  -- Use withFile for guaranteed handle closure
+  withFileStrict :: FilePath -> IOMode -> (Handle -> IO a) -> IO a
+  withFileStrict path mode action = 
+    withFile path mode $ \h -> do
+      result <- action h
+      hFlush h
+      return result
+  ```
+
+- **Deduplication**: Use `nubBy` with a custom equality function for more sophisticated deduplication:
+  ```haskell
+  -- Remove duplicates based on a specific field
+  import Data.List (nubBy)
+  
+  -- Deduplicate entries by a specific field
+  uniqueEntries :: [Entry] -> [Entry]
+  uniqueEntries = nubBy (\a b -> entryKey a == entryKey b)
+  ```
+
+- **Data Modeling**: Use newtype wrappers and records for JSON data:
+  ```haskell
+  -- Define clear types for manifest entries
+  data ManifestEntry = ManifestEntry 
+    { entryOptimizedName :: OptimizedName
+    , entryOriginalPath :: OriginalPath 
+    } deriving (Show, Eq)
+    
+  -- Use these in your JSON generation functions
+  writeManifestFile :: FilePath -> [ManifestEntry] -> IO ()
+  ```
+
+- **JSON String Escaping**: Implement proper string escaping for JSON:
+  ```haskell
+  -- Escape special characters in JSON strings
+  escapeJSON :: String -> String
+  escapeJSON = concatMap escapeChar
+    where
+      escapeChar '\\' = "\\\\"
+      escapeChar '"'  = "\\\""
+      escapeChar c    = [c]
+  ```
+
+- **Incremental vs. Complete Rewrite**: For manifest files that may be updated incrementally:
+  ```haskell
+  -- Two-step approach - read then write completely new content
+  processFiles config manifestPath files = do
+    -- First collect all valid entries
+    fileResults <- mapM processOneFile files
+    
+    -- Extract successful entries
+    let newEntries = concatMap (maybe [] id . fst) fileResults
+    
+    -- Read any existing entries from the manifest, if it exists
+    existingEntries <- readManifestEntries manifestPath
+    
+    -- Combine existing and new entries, then deduplicate
+    let allEntries = existingEntries ++ newEntries
+        uniqueEntries = nubBy (\a b -> entryOriginalPath a == entryOriginalPath b) allEntries
+    
+    -- Write all entries to the manifest file at once
+    writeManifestFile manifestPath uniqueEntries
+  ```
+
+- **Simple Safe Parsing**: For quick-and-dirty parsing of simple formats:
+  ```haskell
+  -- Simple parsing to extract entries (basic approach)
+  parseEntry line =
+    case break (== ':') line of
+      (optimizedPart, ':':restPart) -> do
+        let chars = " \"," 
+            cleanOptimized = filter (\c -> not (c `elem` chars)) optimizedPart
+            cleanOriginal = filter (\c -> not (c `elem` chars)) restPart
+        if null cleanOptimized || null cleanOriginal
+          then Nothing
+          else Just $ ManifestEntry 
+                   (OptimizedName cleanOptimized) 
+                   (OriginalPath cleanOriginal)
+      _ -> Nothing
+  ```
+
+- **Memory-Efficient Processing**: When processing many files:
+  ```haskell
+  -- Two-step processing for larger file sets
+  processFiles config manifestPath files includeInManifestOnly = do
+    -- First pass - collect entries just for manifest
+    manifestEntries <- if includeInManifestOnly
+                      then collectManifestEntries files
+                      else collectAndCopyFiles files
+                      
+    -- Write entries to manifest file, deduplicating as needed
+    writeManifestFile manifestPath manifestEntries
+  ```
+
+- **Caching Entry Results**: For expensive operations:
+  ```haskell
+  -- Cache file processing results
+  let processWithCache path = 
+        case Map.lookup path cache of
+          Just result -> return result
+          Nothing -> do
+            result <- processFile path
+            let newCache = Map.insert path result cache
+            return (newCache, result)
+  ```
+
+## Ignore Pattern Handling
+
+- **Hierarchical Pattern Structure**: When implementing ignore patterns like .gitignore or .clodignore:
+  ```haskell
+  -- Define a clear type for ignore patterns
+  newtype IgnorePattern = IgnorePattern String deriving (Show, Eq)
+  
+  -- Categorize patterns into inclusion and negation types
+  categorizePatterns :: [IgnorePattern] -> ([IgnorePattern], [IgnorePattern])
+  categorizePatterns = L.partition isInclusion
+    where 
+      isInclusion (IgnorePattern p) = not ("!" `L.isPrefixOf` p)
+  ```
+
+- **Pattern Matching**: Implement robust pattern matching for ignore patterns:
+  ```haskell
+  -- Pattern matcher for different types of patterns
+  matchesIgnorePattern :: [IgnorePattern] -> FilePath -> Bool
+  matchesIgnorePattern patterns filePath = 
+    -- Process patterns in reverse order (later patterns take precedence)
+    let (inclusions, negations) = categorizePatterns patterns
+        
+        -- Process negation patterns - extract the pattern without '!'
+        negationPatterns = map (\(IgnorePattern p) -> 
+                            IgnorePattern (drop 1 p)) negations
+        
+        -- Check if any inclusion pattern matches
+        includedByPattern = any (matchesPattern filePath) inclusions
+        
+        -- Check if any negation pattern matches
+        negatedByPattern = any (matchesPattern filePath) negationPatterns
+    in
+      -- Included by some pattern and not negated by any later pattern
+      includedByPattern && not negatedByPattern
+  ```
+
+- **Loading Multiple Ignore Files**: Support loading ignore patterns from multiple sources:
+  ```haskell
+  -- Load patterns from .gitignore and .clodignore
+  loadIgnorePatterns :: FilePath -> ClodM [IgnorePattern]
+  loadIgnorePatterns projectPath = do
+    gitIgnorePatterns <- readGitIgnore projectPath
+    clodIgnorePatterns <- readClodIgnore projectPath
+    let allPatterns = gitIgnorePatterns ++ clodIgnorePatterns
+    return allPatterns
+  ```
+
+- **Applying Ignore Patterns**: Apply ignore patterns consistently in file processing:
+  ```haskell
+  -- Check if a file should be ignored based on patterns
+  shouldBeIgnored :: [IgnorePattern] -> FilePath -> Bool
+  shouldBeIgnored patterns relPath = 
+    not (null patterns) && matchesIgnorePattern patterns relPath
+    
+  -- Use in processing pipeline
+  processFile readCap writeCap fullPath relPath = do
+    let steps = [ checkIgnorePatterns fullPath relPath
+                , checkFileExists readCap fullPath relPath
+                , checkIsTextFile readCap fullPath relPath
+                , copyToStaging readCap writeCap fullPath relPath
+                ]
+  ```
+
+- **Glob Pattern Handling**: Implement efficient matching for glob patterns:
+  ```haskell
+  -- Match glob patterns like "*.js" or "src/**/*.ts"
+  simpleGlobMatch :: String -> FilePath -> Bool
+  simpleGlobMatch pattern path = matchGlob pattern path
+    where
+      matchGlob ('*':'*':'/':rest) (c:cs) -- Directory wildcard: **/
+        | c == '/' = matchGlob ('*':'*':'/':rest) cs
+        | otherwise = matchGlob ('*':'*':'/':rest) (c:cs) || matchGlob rest (c:cs)
+      
+      matchGlob ('*':'.':ext) path -- File extension: *.ext
+        | takeExtension path == '.' : ext = True
+        | otherwise = False
+  ```
+
+- **Testing Ignore Patterns**: Create robust tests for ignore pattern functionality:
+  ```haskell
+  it "respects ignore patterns" $ do
+    withSystemTempDirectory "test-dir" $ \tmpDir -> do
+      -- Setup test files
+      createDirectoryIfMissing True (tmpDir </> "src")
+      createDirectoryIfMissing True (tmpDir </> "node_modules")
+      
+      -- Create ignore pattern files
+      writeFile (tmpDir </> ".gitignore") "node_modules/\n"
+      
+      -- Run application
+      result <- runApp tmpDir
+      
+      -- Check for processed files
+      srcFileExists <- doesFileExist (tmpDir </> "output" </> "src-file.txt")
+      nodeModuleFileExists <- doesFileExist (tmpDir </> "output" </> "node_modules-file.txt")
+      
+      -- Verify patterns were properly applied
+      srcFileExists `shouldBe` True
+      nodeModuleFileExists `shouldBe` False
   ```
 
 ## Path Handling and Filename Transformations

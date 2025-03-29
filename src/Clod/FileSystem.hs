@@ -56,10 +56,9 @@ module Clod.FileSystem
   
     -- * Re-exports from FileSystem.Processing
   , processFiles
-  , processFile
-  , processFileManifestOnly
+  , ManifestEntry(..)
   , createOptimizedName
-  , addToManifest
+  , writeManifestFile
   , escapeJSON
   
     -- * Re-exports from FileSystem.Transformations
@@ -78,8 +77,8 @@ import Clod.FileSystem.Detection (isModifiedSince, isTextFile, isTextContent,
                                 safeFileExists, safeIsTextFile)
 
 -- Re-export from FileSystem.Processing
-import Clod.FileSystem.Processing (processFiles, processFile, processFileManifestOnly, 
-                                  createOptimizedName, addToManifest, escapeJSON)
+import Clod.FileSystem.Processing (processFiles, ManifestEntry(..), 
+                                  createOptimizedName, writeManifestFile, escapeJSON)
 
 -- Re-export from FileSystem.Transformations
 import Clod.FileSystem.Transformations (transformFilename, flattenPath, 

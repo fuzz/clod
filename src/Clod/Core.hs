@@ -34,18 +34,21 @@ module Clod.Core
     
     -- * File processing with capabilities
   , processFile
+  , findModifiedOrAllFiles
   ) where
 
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, doesFileExist, getModificationTime)
 import System.FilePath ((</>), splitDirectories)
 import System.IO (writeFile)
 import Data.Version (showVersion)
-import Control.Monad (when)
+import Control.Monad (when, filterM)
 
 import Clod.Types
-import Clod.IgnorePatterns (matchesIgnorePattern)
+import Clod.IgnorePatterns (matchesIgnorePattern, readClodIgnore, readGitIgnore)
 import Clod.FileSystem.Detection (safeFileExists, safeIsTextFile)
-import Clod.FileSystem.Operations (safeCopyFile)
+import Clod.FileSystem.Operations (safeCopyFile, findAllFiles)
+import Clod.FileSystem.Processing (processFiles)
+import qualified Clod.Git.Internal as Git
 import qualified Paths_clod as Meta
 
 -- | Check if a file should be ignored based on ignore patterns
@@ -115,20 +118,74 @@ processFile readCap writeCap fullPath relPath = do
     Left reason -> Skipped reason
     Right _ -> Success
     
+-- | Find modified or all files for processing
+-- 
+-- This function uses Git and filesystem operations to find either
+-- all files or just modified files, depending on the user's choices.
+findModifiedOrAllFiles :: ClodConfig -> FilePath -> Bool -> ClodM [FilePath]
+findModifiedOrAllFiles _ path useAllFiles = do
+  isGitRepo <- liftIO $ Git.isGitRepo path
+  
+  if isGitRepo
+    then do
+      -- If this is a git repo, use git operations
+      repoRootMaybe <- liftIO $ Git.getRepoRootPath path
+      case repoRootMaybe of
+        Just repoRoot -> do
+          if useAllFiles
+            then do
+              -- Get all files in the repo (using findAllFiles instead)
+              findAllFiles repoRoot ["."]
+            else do
+              -- Get modified and untracked files
+              modified <- liftIO $ Git.listModifiedFiles repoRoot
+              untracked <- liftIO $ Git.listUntrackedFiles repoRoot
+              return $ modified ++ untracked
+        Nothing -> return []
+    else do
+      -- If not a git repo, use filesystem operations
+      if useAllFiles
+        then findAllFiles path ["."]
+        else do
+          -- Get files modified since last run
+          config' <- ask
+          allFiles <- findAllFiles path ["."]
+          
+          -- Check if last run marker exists
+          let lastRunFilePath = lastRunFile config'
+          lastRunExists <- liftIO $ doesFileExist lastRunFilePath
+          
+          if not lastRunExists
+            then return allFiles  -- If no last run marker, process all files
+            else do
+              -- Get the last run time from the marker file
+              lastRunTime <- liftIO $ getModificationTime lastRunFilePath
+              
+              -- Filter files that were modified since the last run
+              liftIO $ filterM (\f -> do
+                let fullPath = path </> f
+                fileExists <- doesFileExist fullPath
+                if not fileExists
+                  then return False
+                  else do
+                    modTime <- getModificationTime fullPath
+                    return (modTime > lastRunTime)
+                ) allFiles
+
 -- | Run the main Clod application
 runClodApp :: ClodConfig -> FilePath -> Bool -> Bool -> Bool -> IO (Either ClodError ())
-runClodApp config stagingDirArg verbose _ _ = runClodM config $ do
+runClodApp config stagingDirArg verbose optAllFiles optModified = runClodM config $ do
   when verbose $ do
     -- Print version information only in verbose mode
     liftIO $ putStrLn $ "clod version " ++ showVersion Meta.version ++ " (Haskell)"
   
   -- Execute main logic with capabilities
-  mainLogic stagingDirArg verbose
+  mainLogic stagingDirArg verbose optAllFiles optModified
     
 -- | Main application logic
-mainLogic :: FilePath -> Bool -> ClodM ()
-mainLogic stagingDirArg verbose = do
-  ClodConfig{configDir, stagingDir, projectPath, lastRunFile} <- ask
+mainLogic :: FilePath -> Bool -> Bool -> Bool -> ClodM ()
+mainLogic stagingDirArg verbose optAllFiles optModified = do
+  config@ClodConfig{configDir, stagingDir, projectPath, lastRunFile} <- ask
   
   -- Create directories
   liftIO $ createDirectoryIfMissing True configDir
@@ -139,6 +196,52 @@ mainLogic stagingDirArg verbose = do
     liftIO $ putStrLn $ "Running with capabilities, safely restricting operations to: " ++ projectPath
     liftIO $ putStrLn $ "Safe staging directory: " ++ stagingDirArg
     liftIO $ putStrLn "AI safety guardrails active with capability-based security"
+  
+  -- Load .gitignore and .clodignore patterns
+  gitIgnorePatterns <- readGitIgnore projectPath
+  clodIgnorePatterns <- readClodIgnore projectPath
+  let allPatterns = gitIgnorePatterns ++ clodIgnorePatterns
+  
+  -- Create a new config with the loaded patterns
+  let configWithPatterns = config { ignorePatterns = allPatterns }
+  
+  -- Find all eligible files in the repository
+  -- Check if this is a git repository
+  isGitRepo <- liftIO $ Git.isGitRepo projectPath
+  
+  -- Get all files to process - either all files or just modified ones
+  allFiles <- if isGitRepo
+              then do
+                repoRootMaybe <- liftIO $ Git.getRepoRootPath projectPath
+                case repoRootMaybe of
+                  Just repoRoot -> findAllFiles repoRoot ["."]
+                  Nothing -> findAllFiles projectPath ["."] -- Fallback if we can't get repo root
+              else findAllFiles projectPath ["."]
+  
+  -- Process all files for the manifest
+  let manifestPath = stagingDir </> "_path_manifest.json"
+  
+  -- First pass: Add all files to the manifest (manifest only mode)
+  (manifestAdded, manifestSkipped) <- processFiles configWithPatterns manifestPath allFiles True
+  
+  when verbose $ do
+    liftIO $ putStrLn $ "Added " ++ show manifestAdded ++ " files to manifest, skipped " ++ show manifestSkipped
+  
+  -- Second pass: If using --modified flag, find and copy only modified files
+  -- If using --all flag, also copy all files to the staging directory
+  modifiedOrAllFiles <- if optModified || optAllFiles
+                       then findModifiedOrAllFiles configWithPatterns projectPath optAllFiles
+                       else if not (null allFiles) -- Always process files if there are any
+                            then return allFiles 
+                            else return []
+  
+  -- Process modified/all files (with actual file copying)
+  (processed, skipped) <- if not (null modifiedOrAllFiles)
+                        then processFiles configWithPatterns manifestPath modifiedOrAllFiles False
+                        else return (0, 0)
+  
+  when verbose $ do
+    liftIO $ putStrLn $ "Processed " ++ show processed ++ " files, skipped " ++ show skipped ++ " files"
   
   -- Update the last run marker to track when clod was last run
   liftIO $ System.IO.writeFile lastRunFile ""
