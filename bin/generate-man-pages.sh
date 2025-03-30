@@ -14,12 +14,8 @@ fi
 cd "$(dirname "$0")/.."
 PROJECT_ROOT=$(pwd)
 
-# Create output directory - use argument if provided, otherwise use current directory
-if [ "$1" != "" ]; then
-    OUTPUT_DIR="$1"
-else
-    OUTPUT_DIR="$PROJECT_ROOT"
-fi
+# Use argument if provided, otherwise use current directory
+OUTPUT_DIR="${1:-.}"
 
 # Make sure man section directories exist
 mkdir -p "$OUTPUT_DIR/man1"
@@ -117,7 +113,7 @@ Remove missing entries from the database:
 EOF
 fi
 
-# Generate the man page in the build directory
+# Generate the man page
 pandoc -s -t man "$PROJECT_ROOT/man/clod.1.md" -o "$OUTPUT_DIR/man1/clod.1"
 
 # Generate clod(7) - Project instructions and safeguards if it doesn't exist
@@ -148,7 +144,7 @@ EOF
   } >> "$PROJECT_ROOT/man/clod.7.md"
 fi
 
-# Generate man page from combined markdown in the build directory
+# Generate man page from combined markdown
 pandoc -s -t man "$PROJECT_ROOT/man/clod.7.md" -o "$OUTPUT_DIR/man7/clod.7"
 
 # Generate clod(8) - Complete workflow guide if it doesn't exist
@@ -173,7 +169,7 @@ EOF
   cat "$PROJECT_ROOT/HUMAN.md" >> "$PROJECT_ROOT/man/clod.8.md"
 fi
 
-# Generate man page in the build directory
+# Generate man page
 pandoc -s -t man "$PROJECT_ROOT/man/clod.8.md" -o "$OUTPUT_DIR/man8/clod.8"
 
 echo "Man page source files are in $PROJECT_ROOT/man/"

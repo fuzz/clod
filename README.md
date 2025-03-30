@@ -195,16 +195,32 @@ pnpm-lock.yaml
 yarn.lock
 ```
 
+## Development Utilities
+
+The Clod package includes a testing utility:
+
+### magictest
+
+A simple utility to test the libmagic dependency:
+
+```bash
+cabal run magictest -- /path/to/file
+```
+
+The `magictest` tool uses the libmagic library to analyze a file and determine its MIME type and encoding. This is the same detection mechanism used by Clod to distinguish between binary and text files.
+
+Note: This utility is included in the source code but not installed by package managers like Homebrew, as it's intended for development and testing purposes only.
+
 ## Architecture
 
 Clod uses a clean, pragmatic architecture with a focus on reliability and maintainability:
 
-- **Traditional Monad Stack**: Uses a ReaderT/ExceptT/IO monad stack for excellent type inference and readable error messages
+- **Clean Monad Stack**: Uses a ReaderT/ExceptT/IO pattern for clear error handling
 - **Capability-Based Security**: Runtime checking of file access permissions based on explicitly allowed directories
 - **Modular Design**: Clear separation of concerns between different subsystems
 - **Safety First**: Designed to prevent accidental access to unauthorized files
 
-The architecture prioritizes pragmatic results over theoretical purity, focusing on delivering a reliable, easy-to-understand system that "just works."
+The architecture focuses on reliability and maintainability, delivering a system that works effectively with clear error messages.
 
 ## Project Structure
 

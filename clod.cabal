@@ -36,7 +36,7 @@ maintainer:          cyborg@bionicfuzz.com
 homepage:            https://github.com/fuzz/clod
 bug-reports:         https://github.com/fuzz/clod/issues
 category:            Development
-build-type:          Custom
+build-type:          Simple
 
 extra-source-files:
   README.md
@@ -46,11 +46,9 @@ extra-source-files:
   HASKELL_PATTERNS.md
   INSTALLING.md
   CAPABILITY_SECURITY.md
-  CLOD.md
   CRITICAL.md
   MAN_PAGES.md
   PROJECT_ARCHITECTURE.md
-  RELEASE_CHECKLIST.md
   SERIALIZATION.md
   SPEC.md
   TEST_SAFETY.md
@@ -69,20 +67,6 @@ extra-source-files:
 
 extra-doc-files:
   CHANGELOG.md
-
-data-files:
-  build/man/man1/clod.1
-  build/man/man7/clod.7
-  build/man/man8/clod.8
-
-custom-setup
-  setup-depends:     
-    base >= 4.7 && < 5,
-    Cabal >= 2.0.0.2 && < 3.12,
-    directory >= 1.3 && < 1.4,
-    filepath >= 1.4 && < 1.5,
-    process >= 1.6 && < 1.7
-
 source-repository head
   type:              git
   location:          https://github.com/fuzz/clod
@@ -122,8 +106,6 @@ library
     mtl >= 2.2 && < 2.4,
     transformers >= 0.5 && < 0.6,
     unix >= 2.7 && < 2.8,
-    polysemy >= 1.7 && < 1.8,
-    polysemy-plugin >= 0.4 && < 0.5,
     deepseq >= 1.4 && < 1.5,
     lens >= 5.0 && < 5.3,
     cryptohash-sha256 >= 0.11 && < 0.12,
@@ -220,33 +202,6 @@ test-suite clod-test
     deepseq >= 1.4 && < 1.5,
     lens >= 5.0 && < 5.3,
     mtl >= 2.2 && < 2.4
-  default-language:  Haskell2010
-  default-extensions: 
-    OverloadedStrings
-    TypeOperators
-    FlexibleContexts
-    GADTs
-    DataKinds
-    ScopedTypeVariables
-    TypeApplications
-    RecordWildCards
-  ghc-options:       -Wall -threaded -rtsopts -with-rtsopts=-N
-  
-executable effects-example
-  hs-source-dirs:    examples
-  main-is:           EffectsExample.hs
-  build-depends:     
-    base >= 4.7 && < 5,
-    clod,
-    directory >= 1.3 && < 1.4,
-    filepath >= 1.4 && < 1.5,
-    text >= 1.2 && < 1.3,
-    bytestring >= 0.10 && < 0.12,
-    process >= 1.6 && < 1.7,
-    polysemy >= 1.7 && < 1.8,
-    polysemy-plugin >= 0.4 && < 0.5,
-    deepseq >= 1.4 && < 1.5,
-    lens >= 5.0 && < 5.3
   default-language:  Haskell2010
   default-extensions: 
     OverloadedStrings
