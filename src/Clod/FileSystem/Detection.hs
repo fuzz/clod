@@ -19,49 +19,81 @@ module Clod.FileSystem.Detection
   , isModifiedSince
   , safeFileExists
   , safeIsTextFile
-  , isMimeTypeText
+  , isTextDescription
   , needsTransformation
   ) where
 
 import Control.Exception (try, SomeException)
 import Control.Monad.Except (throwError)
 import Control.Monad.IO.Class (liftIO)
-import Data.List (isPrefixOf, isInfixOf)
+import Control.Monad.Reader (asks)
+import Data.List (isPrefixOf)
 import Data.Time.Clock (UTCTime)
 import System.Directory (doesFileExist, getModificationTime, canonicalizePath)
 import System.FilePath ((</>), takeFileName, takeExtension)
+import qualified Data.Text as T
+import qualified Dhall
+import qualified Paths_clod as Paths
 
-import Clod.Types (ClodM, FileReadCap(..), ClodError(..), isPathAllowed)
+import Clod.Types (ClodM, FileReadCap(..), ClodError(..), isPathAllowed, ClodConfig(..))
 import qualified Magic.Init as Magic
 import qualified Magic.Operations as Magic
-import qualified Magic.Types as Magic
 
--- | Check if a file is a text file using libmagic
+-- | Type to represent text patterns from Dhall
+newtype TextPatterns = TextPatterns
+  { textPatterns :: [T.Text]
+  } deriving (Show, Eq)
+
+instance Dhall.FromDhall TextPatterns where
+  autoWith _ = Dhall.record $
+    TextPatterns <$> Dhall.field "textPatterns" Dhall.auto
+
+-- | Get the resource path for patterns
+getResourcePath :: ClodM FilePath
+getResourcePath = do
+  clodDir <- asks configDir
+  
+  -- First check if there's a custom pattern file in the clod directory
+  let customPath = clodDir </> "resources" </> "text_patterns.dhall"
+  customExists <- liftIO $ doesFileExist customPath
+  
+  if customExists
+    then return customPath
+    else liftIO $ Paths.getDataFileName $ "resources" </> "text_patterns.dhall"
+
+-- | Load text patterns for determining text files
+loadTextPatterns :: ClodM TextPatterns
+loadTextPatterns = do
+  patternsPath <- getResourcePath
+  result <- liftIO $ try $ Dhall.inputFile Dhall.auto patternsPath
+  case result of
+    Right patterns -> return patterns
+    Left (e :: SomeException) -> 
+      throwError $ ConfigError $ "Failed to load text patterns: " ++ show e
+
+-- | Check if a file is a text file using libmagic with enhanced detection
 isTextFile :: FilePath -> ClodM Bool
 isTextFile file = do
   exists <- liftIO $ doesFileExist file
   if not exists
     then return False
     else do
+      -- Detect the file type using libmagic
       result <- liftIO $ try $ do
-        magic <- Magic.magicOpen [Magic.MagicMimeType]
+        magic <- Magic.magicOpen []
         Magic.magicLoadDefault magic
-        mime <- Magic.magicFile magic file
-        return $ isMimeTypeText mime
+        Magic.magicFile magic file
+      
       case result of
         Left (_ :: SomeException) -> return False
-        Right isText -> return isText
+        Right description -> isTextDescription description
 
--- | Helper to determine if a MIME type represents text content
-isMimeTypeText :: String -> Bool
-isMimeTypeText mime =
-  "text/" `isPrefixOf` mime ||
-  mime == "application/json" ||
-  mime == "application/xml" ||
-  mime == "application/javascript" ||
-  mime == "application/x-shell" ||
-  mime == "application/x-shellscript" ||
-  "script" `isInfixOf` mime
+-- | Helper to determine if a file description indicates text content
+isTextDescription :: String -> ClodM Bool
+isTextDescription desc = do
+  patterns <- loadTextPatterns
+  let lowerDesc = T.toLower $ T.pack desc
+  return $ any (\pattern -> pattern `T.isInfixOf` lowerDesc) (textPatterns patterns)
 
 -- | Special handling for files that need transformation
 needsTransformation :: FilePath -> Bool

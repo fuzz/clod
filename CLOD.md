@@ -38,6 +38,27 @@ calculateChecksum content =
   in Checksum (show hexHash)
 ```
 
+The `checksumFile` function safely calculates checksums for text files:
+
+```haskell
+-- | Calculate the checksum of a file
+checksumFile :: FileReadCap -> FilePath -> ClodM Checksum
+checksumFile readCap path = do
+  -- Check if file exists
+  fileExists <- safeFileExists readCap path
+  if not fileExists
+    then throwError $ FileSystemError path (createError "File does not exist")
+    else do
+      -- Check if it's a text file
+      isText <- safeIsTextFile readCap path
+      if not isText
+        then throwError $ ChecksumError "Cannot checksum binary file"
+        else do
+          -- Read file content and calculate checksum
+          content <- safeReadFile readCap path
+          return $ calculateChecksum content
+```
+
 ### Database Structure
 
 The database structure enables efficient queries:
@@ -87,7 +108,7 @@ fromSerializable sdb = ClodDatabase
 - `Clod.Core`: Main application logic
 - `Clod.FileSystem`: File system operations
   - `Clod.FileSystem.Checksums`: Checksum-based file tracking
-  - `Clod.FileSystem.Detection`: File type detection
+  - `Clod.FileSystem.Detection`: File type detection (using magic library)
   - `Clod.FileSystem.Operations`: File operations
   - `Clod.FileSystem.Processing`: File processing
   - `Clod.FileSystem.Transformations`: Text transformations
@@ -95,7 +116,8 @@ fromSerializable sdb = ClodDatabase
 - `Clod.IgnorePatterns`: Pattern matching for ignored files
 - `Clod.Capability`: Capability-based security
 - `Clod.Config`: Configuration management
-- `Clod.Git`: Git-related functionality (legacy)
+
+Note: Prior versions of Clod included Git functionality (in modules like `Clod.Git`), but these have been removed in favor of the checksums-based approach.
 
 ### Command-Line Interface
 
@@ -104,7 +126,12 @@ Clod provides several command-line options:
 - `--verbose`: Enable verbose output
 - `--staging`: Specify a custom staging directory
 - `--flush`: Flush stale entries from the database
+  - Removes file entries from the database that no longer exist on disk
+  - Useful for cleaning up the database after files have been deleted
 - `--last`: Use the previous staging directory
+  - Returns the path of the most recent staging directory stored in the database
+  - Exits immediately after outputting the path
+  - Useful for scripts that need to access the previous run's output
 - `--all-files`: Process all files, not just new or modified ones
 - `--modified`: Process only modified files
 - `--quiet`: Suppress non-essential output
@@ -115,17 +142,37 @@ Clod provides several command-line options:
 
 Clod stores file tracking information in a Dhall-formatted database file:
 
-```
+```dhall
 -- Clod Database
 -- Format: Dhall
 -- Generated: 2023-10-15 14:30:45 UTC
 
-{ serializedFiles = [("/path/to/file.txt", { entryPath = "/path/to/file.txt", entryChecksum = "abc123...", entryLastModified = "2023-10-15 14:25:30 UTC", entryOptimizedName = "file.txt" })],
-  serializedChecksums = [("abc123...", "/path/to/file.txt")],
-  serializedLastStagingDir = "/path/to/staging",
-  serializedLastRunTime = "2023-10-15 14:30:45 UTC"
+{ serializedFiles = [
+    { _1 = "/path/to/file.txt"
+    , _2 = { entryPath = "/path/to/file.txt"
+           , entryChecksum = { unChecksum = "abc123..." }
+           , entryLastModified = { date = "2023-10-15"
+                                 , time = "14:25:30.123456"
+                                 , timeZone = "UTC" 
+                                 }
+           , entryOptimizedName = { unOptimizedName = "file.txt" }
+           }
+    }
+  ]
+, serializedChecksums = [
+    { _1 = "abc123..."
+    , _2 = "/path/to/file.txt"
+    }
+  ]
+, serializedLastStagingDir = Some "/path/to/staging"
+, serializedLastRunTime = { date = "2023-10-15"
+                          , time = "14:30:45.789012"
+                          , timeZone = "UTC"
+                          }
 }
 ```
+
+Note: The Dhall format is strongly typed, which means empty lists need explicit type annotations (e.g., `[] : List { _1 : Text, _2 : Text }`) and composite types like `UTCTime` are represented as records with fields for date, time, and timezone components.
 
 ## File Change Detection
 
@@ -159,16 +206,52 @@ detectFileChanges readCap db filePaths projectRoot = do
 
 ## Binary File Detection
 
-Clod employs multiple strategies for reliable binary file detection:
+Clod employs the `magic` library for reliable binary file detection. This is an improvement over heuristic approaches as it:
 
-1. Extension-based detection using configured lists of text and binary extensions
-2. Magic byte detection using a database of binary file signatures
-3. Content analysis:
-   - Null byte detection
-   - Control character ratio analysis
-   - UTF-8 validity checking
+1. Uses the same detection mechanism as the Unix `file` command
+2. Identifies files by examining their content signatures
+3. Provides accurate MIME type classification
+4. Works consistently across different platforms
 
-The strategy uses a combination of these approaches for maximum reliability.
+The implementation in `Clod.FileSystem.Detection` provides these key functions:
+
+```haskell
+-- | Check if a file is a text file using libmagic
+safeIsTextFile :: FileReadCap -> FilePath -> ClodM Bool
+safeIsTextFile readCap path = do
+  -- Verify file is within allowed directories first
+  allowed <- liftIO $ isPathAllowed (allowedReadDirs readCap) path
+  if not allowed
+    then throwError $ CapabilityError $ 
+      "Access denied: Cannot read file outside allowed directories: " ++ path
+    else do
+      -- Get the MIME type from the magic library
+      mimeType <- liftIO $ getMimeType path
+      -- Check if it's a text MIME type
+      return $ isMimeTypeText mimeType
+
+-- | Helper to determine if a file description indicates text content
+isTextDescription :: String -> Bool
+isTextDescription desc =
+  let lowerDesc = map toLower desc
+      textPatterns = 
+        [ "text"
+        , "ascii"
+        , "unicode"
+        , "utf"
+        , "json"
+        , "xml"
+        , "yaml"
+        , "source"
+        , "script"
+        , "html"
+        , "css"
+        -- plus additional patterns for common text formats
+        ]
+  in any (`isInfixOf` lowerDesc) textPatterns
+```
+
+This approach is more reliable than previous methods that relied on heuristics like control character analysis or null byte detection, and also more comprehensive than simply checking MIME type prefixes, as it recognizes many text formats (JSON, YAML, etc.) that don't use the "text/" MIME type prefix.
 
 ## Capability-Based Security
 
@@ -201,11 +284,50 @@ Clod creates staging directories with the following structure:
 staging-dir/
 ├── file1.txt
 ├── file2.txt
-├── manifest.json
+├── _path_manifest.json
 └── ...
 ```
 
-The `--last` flag allows reusing the previous staging directory instead of creating a new one.
+The `--last` flag functionality allows using the previous staging directory:
+
+1. When running Clod with the `--last` flag, it:
+   - Retrieves the previous staging directory path from the database
+   - Prints the path to stdout
+   - Exits with a special error code
+   - No files are processed when using this flag
+
+2. The implementation in `Clod.Core` handles this flag:
+
+```haskell
+-- | Part of the mainLogic function
+when lastMode $ do
+  case dbLastStagingDir database of
+    Just prevStaging -> do
+      when verbose $ liftIO $ hPutStrLn stderr $ 
+        "Using previous staging directory: " ++ prevStaging
+      -- Output the previous staging directory and exit
+      liftIO $ hPutStrLn stdout prevStaging
+      throwError $ ConfigError "Using last staging directory as requested"
+        
+    Nothing -> do
+      when verbose $ liftIO $ hPutStrLn stderr 
+        "No previous staging directory available, proceeding with new staging"
+```
+
+3. Each time Clod runs, it updates the database with the current staging directory:
+
+```haskell
+-- Create updated database with the current staging directory
+databaseWithStaging = finalDatabase { 
+    dbLastStagingDir = Just stagingDir,
+    dbLastRunTime = dbLastRunTime finalDatabase 
+  }
+
+-- Save the updated database
+saveDatabase databaseFile databaseWithStaging
+```
+
+This approach ensures the database always contains the most recent staging directory for use with the `--last` flag.
 
 ## Future Development
 

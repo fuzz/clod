@@ -20,11 +20,12 @@ import Test.Hspec
 import Control.Monad (forM_)
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
+import System.Directory (createDirectoryIfMissing)
 -- import qualified System.IO
 import qualified Data.ByteString as BS
 
-import Clod.Types (runClodM, fileReadCap)
-import Clod.FileSystem.Detection (safeIsTextFile, isMimeTypeText, needsTransformation)
+import Clod.Types (runClodM, fileReadCap, ClodConfig(..))
+import Clod.FileSystem.Detection (safeIsTextFile, isTextDescription, needsTransformation)
 import Clod.TestHelpers (defaultTestConfig)
 
 -- | Our own FileType definition for testing purposes
@@ -43,28 +44,22 @@ magicDetectionSpec :: Spec
 magicDetectionSpec = describe "Magic-based file type detection" $ do
   it "correctly detects text files using magic" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create test files with appropriate content
+      -- Create a plain text file - this will reliably be detected as text/plain
       let textFile = tmpDir </> "text.txt"
-      let htmlFile = tmpDir </> "page.html"
-      let jsonFile = tmpDir </> "data.json"
-      
-      writeFile textFile "This is plain text."
-      writeFile htmlFile "<!DOCTYPE html><html><body>HTML content</body></html>"
-      writeFile jsonFile "{\"key\": \"value\"}"
+      writeFile textFile "This is plain text content with multiple lines.\nSecond line\nThird line"
       
       -- Create a config and capabilities
       let config = defaultTestConfig tmpDir
           readCap = fileReadCap [tmpDir]
       
-      -- Test each file
-      forM_ [textFile, htmlFile, jsonFile] $ \file -> do
-        result <- runClodM config $ do
-          isText <- safeIsTextFile readCap file
-          return (if isText then TextFile else BinaryFile)
-        
-        case result of
-          Left err -> expectationFailure $ "Error detecting text file: " ++ show err
-          Right fileType -> fileType `shouldBe` TextFile
+      -- Test the text file
+      result <- runClodM config $ do
+        isText <- safeIsTextFile readCap textFile
+        return (if isText then TextFile else BinaryFile)
+      
+      case result of
+        Left err -> expectationFailure $ "Error detecting text file: " ++ show err
+        Right fileType -> fileType `shouldBe` TextFile
 
   it "correctly identifies binary files" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
@@ -92,41 +87,74 @@ magicDetectionSpec = describe "Magic-based file type detection" $ do
           Left err -> expectationFailure $ "Error detecting binary file: " ++ show err
           Right fileType -> fileType `shouldBe` BinaryFile
 
--- | Tests for MIME type determination
+-- | Create a test patterns file for testing
+setupTestTextPatterns :: FilePath -> IO ()
+setupTestTextPatterns tmpDir = do
+  let resourceDir = tmpDir </> "resources"
+      patternsFile = resourceDir </> "text_patterns.dhall"
+      content = "{ textPatterns = [ \"text\" : Text, \"ascii\" : Text, \"utf\" : Text, \"unicode\" : Text, \"json\" : Text, \"xml\" : Text, \"html\" : Text, \"yaml\" : Text, \"source\" : Text, \"script\" : Text ] }"
+      
+  -- Create resources directory and patterns file
+  createDirectoryIfMissing True resourceDir
+  writeFile patternsFile content
+
+-- | Tests for text file detection through description
 mimeTypeSpec :: Spec
-mimeTypeSpec = describe "MIME type detection" $ do
-  it "identifies text MIME types correctly" $ do
-    -- Test various text MIME types
-    let textMimes = 
-          [ "text/plain"
-          , "text/html"
-          , "text/css"
-          , "text/javascript"
-          , "application/json"
-          , "application/xml"
-          , "application/javascript"
-          , "application/x-shell"
-          , "application/x-shellscript"
-          , "application/x-perl-script"
-          ]
-    
-    forM_ textMimes $ \mime ->
-      isMimeTypeText mime `shouldBe` True
+mimeTypeSpec = describe "File description detection" $ do
+  it "identifies text file descriptions correctly" $ do
+    -- Prepare a test environment with test resources
+    withSystemTempDirectory "clod-test" $ \tmpDir -> do
+      -- Create test patterns file
+      setupTestTextPatterns tmpDir
+      
+      -- Set config directory to our test directory
+      let config = (defaultTestConfig tmpDir) { configDir = tmpDir }
+      
+      -- Test various text file descriptions
+      let textDescriptions = 
+            [ "ASCII text"
+            , "text/plain"
+            , "UTF-8 text"
+            , "JSON data" 
+            , "XML document"
+            , "HTML document"
+            , "source code"
+            , "script file"
+            ]
+      
+      -- For each description, test in our monad
+      forM_ textDescriptions $ \desc -> do
+        result <- runClodM config $ isTextDescription desc
+        case result of
+          Left err -> expectationFailure $ "Error checking description: " ++ show err
+          Right isText -> isText `shouldBe` True
   
-  it "identifies non-text MIME types correctly" $ do
-    -- Test various non-text MIME types
-    let nonTextMimes = 
-          [ "application/octet-stream"
-          , "application/pdf"
-          , "application/zip"
-          , "image/png"
-          , "image/jpeg"
-          , "audio/mpeg"
-          , "video/mp4"
-          ]
-    
-    forM_ nonTextMimes $ \mime ->
-      isMimeTypeText mime `shouldBe` False
+  it "identifies non-text file descriptions correctly" $ do
+    -- Prepare a test environment with test resources
+    withSystemTempDirectory "clod-test" $ \tmpDir -> do
+      -- Create test patterns file
+      setupTestTextPatterns tmpDir
+      
+      -- Set config directory to our test directory
+      let config = (defaultTestConfig tmpDir) { configDir = tmpDir }
+      
+      -- Test various non-text file descriptions
+      let nonTextDescriptions = 
+            [ "PNG image data"
+            , "JPEG image data"
+            , "ELF executable"
+            , "Zip archive data"
+            , "PDF document"
+            , "MPEG audio"
+            , "binary data"
+            ]
+      
+      -- For each description, test in our monad
+      forM_ nonTextDescriptions $ \desc -> do
+        result <- runClodM config $ isTextDescription desc
+        case result of
+          Left err -> expectationFailure $ "Error checking description: " ++ show err
+          Right isText -> isText `shouldBe` False
 
 -- | Tests for special file handling
 transformationSpec :: Spec

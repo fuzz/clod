@@ -59,15 +59,61 @@ This document contains general learning points about working with Haskell from C
   wrapper <- Dhall.inputFile Dhall.auto (T.pack configPath) :: IO SerializableWrapper
   let config = fromSerializable wrapper
   
-  -- Save to Dhall format
+  -- Save to Dhall format (manual approach for complex types)
   let wrapper = toSerializable config
-  let dhallText = "-- Configuration\n" ++ 
-                "-- Format: Dhall\n" ++
-                "-- Generated: " ++ show (getCurrentTime) ++ "\n\n" ++
-                "{ serializedEntries = " ++ show (serializedEntries wrapper) ++ 
-                ", serializedOptions = " ++ show (serializedOptions wrapper) ++ 
-                "}\n"
-  writeFile configPath dhallText
+  
+  -- When manually constructing Dhall expressions, be careful with types
+  -- Especially for records containing lists - they need annotations
+  let dhallText = T.pack $ 
+    "{ serializedEntries = " ++
+    -- For empty lists, always provide type annotation
+    (if null (serializedEntries wrapper)
+     then "[] : List { _1 : Text, _2 : Int }"
+     else "[\n  " ++ intercalate ",\n  " 
+          [formatEntry (k, v) | (k, v) <- serializedEntries wrapper] ++ "\n]") ++
+    ", serializedOptions = " ++ 
+    (if null (serializedOptions wrapper)
+     then "[] : List { _1 : Text, _2 : Bool }"
+     else formatOptions (serializedOptions wrapper)) ++
+    "}\n"
+  
+  -- Write to temp file first for atomic updates
+  TextIO.writeFile (configPath ++ ".tmp") dhallText
+  renameFile (configPath ++ ".tmp") configPath
+  
+  -- Helper to format entries
+  formatEntry (k, v) = "{ _1 = \"" ++ k ++ "\", _2 = " ++ show v ++ " }"
+  ```
+
+- When working with composite types like dates or times, ensure the Dhall format matches exactly:
+  ```haskell
+  -- Format UTCTime for Dhall (as a record with date, time, timeZone fields)
+  formatUTCTimeDhall :: UTCTime -> String
+  formatUTCTimeDhall time =
+    let timeStr = show time
+        (dateStr, timeWithZone) = span (/= ' ') timeStr
+        timeStr' = drop 1 $ takeWhile (/= 'U') (drop 1 timeWithZone)
+    in "{ date = \"" ++ dateStr ++ 
+       "\", time = \"" ++ timeStr' ++ 
+       "\", timeZone = \"UTC\" }"
+  ```
+
+- Dhall serialization can be challenging for complex types. For testing purposes or when debugging serialization issues, consider simplified approaches:
+  ```haskell
+  -- Simplified serialization for testing or debugging
+  loadDatabase :: FilePath -> ClodM ClodDatabase
+  loadDatabase dbPath = do
+    fileExists <- liftIO $ doesFileExist dbPath
+    if not fileExists
+      then do
+        -- Create a new database
+        db <- initializeDatabase
+        saveDatabase dbPath db
+        return db
+      else do
+        -- For testing, return empty database instead of parsing
+        db <- initializeDatabase
+        return db
   ```
 
 ## Module Organization and Package Structure

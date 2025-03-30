@@ -33,6 +33,12 @@ for Claude's UI.
 **--verbose**, **-v**
 : Enable verbose output
 
+**--flush**, **-f**
+: Remove missing entries from the database
+
+**--last**, **-l**
+: Reuse the previous staging directory
+
 **--help**
 : Show help information
 
@@ -49,6 +55,12 @@ Process all files:
 
 Run in test mode with an optional test directory:
     clod --test --staging-dir /path/to/test/dir
+    
+Reuse the previous staging directory:
+    clod --last
+    
+Remove missing entries from the database:
+    clod --flush
 
 # ENVIRONMENT VARIABLES
 
@@ -63,8 +75,8 @@ Run in test mode with an optional test directory:
 **.clodignore**
 : Pattern file similar to .gitignore for excluding files
 
-**.clod/last-run-marker**
-: File that marks when clod was last run
+**.clod/database.dhall**
+: Database of file checksums and metadata
 
 # SEE ALSO
 

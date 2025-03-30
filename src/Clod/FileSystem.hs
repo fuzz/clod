@@ -53,7 +53,7 @@ module Clod.FileSystem
     -- * Re-exports from FileSystem.Detection
   , isModifiedSince
   , isTextFile
-  , isMimeTypeText
+  , isTextDescription
   , needsTransformation
   , safeFileExists
   , safeIsTextFile
@@ -77,7 +77,7 @@ import Clod.FileSystem.Operations (findAllFiles, safeRemoveFile, copyFile,
                                  safeReadFile, safeWriteFile, safeCopyFile)
 
 -- Re-export from FileSystem.Detection
-import Clod.FileSystem.Detection (isModifiedSince, isTextFile, isMimeTypeText,
+import Clod.FileSystem.Detection (isModifiedSince, isTextFile, isTextDescription,
                                 needsTransformation, safeFileExists, safeIsTextFile)
 
 -- Re-export from FileSystem.Processing
