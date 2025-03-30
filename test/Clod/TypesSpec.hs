@@ -80,12 +80,15 @@ spec = do
   where
     defaultConfig dir = ClodConfig 
       { projectPath = dir
-      , stagingDir = dir </> "staging"
-      , configDir = dir </> "config"
-      , lastRunFile = dir </> ".clod-last-run"
-      , timestamp = "20250401-120000"
-      , currentStaging = dir </> "staging"
-      , testMode = True
-      , verbose = False
-      , ignorePatterns = []
+       stagingDir = dir </> "staging"
+       configDir = dir </> "config"
+       databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+       timestamp = "20250401-120000"
+       currentStaging = dir </> "staging"
+       testMode = True
+       verbose = False
+       ignorePatterns = []
       }

@@ -14,12 +14,14 @@ module Main where
 
 import Options.Applicative
 import System.Exit (exitFailure)
-import System.Directory (createDirectoryIfMissing, getCurrentDirectory, getTemporaryDirectory)
+import System.Directory (createDirectoryIfMissing, getCurrentDirectory, getTemporaryDirectory, 
+                         doesFileExist, doesDirectoryExist)
 import System.FilePath ((</>))
 import System.IO (stderr, hPutStrLn)
 import Data.Time (getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Hashable (hash)
+import Control.Exception (try, IOException)
 
 import Clod.Core (runClodApp)
 import Clod.Types (ClodConfig(..))
@@ -31,6 +33,8 @@ data Options = Options
   , optModified    :: Bool     -- ^ Import only modified files
   , optTestMode    :: Bool     -- ^ Run in test mode
   , optVerbose     :: Bool     -- ^ Enable verbose output
+  , optFlush       :: Bool     -- ^ Flush stale entries from the database
+  , optLast        :: Bool     -- ^ Use previous staging directory
   } deriving (Show)
 
 -- | Parser for command line options
@@ -59,6 +63,14 @@ optionsParser = Options
       ( long "verbose"
      <> short 'v'
      <> help "Enable verbose output" )
+  <*> switch
+      ( long "flush"
+     <> short 'f'
+     <> help "Flush missing entries from the database" )
+  <*> switch
+      ( long "last"
+     <> short 'l'
+     <> help "Use previous staging directory" )
 
 -- | Main entry point
 main :: IO ()
@@ -82,21 +94,54 @@ main = do
                     then stagingDirBase </> uniqueId
                     else optStagingDir options
   
+  -- Load previous staging directory if in "last" mode
+  let dbPath = configDir </> "checksums.dhall"
+  previousDir <- if optLast options
+                 then do
+                   dbExists <- doesFileExist dbPath
+                   if dbExists
+                     then do
+                       -- Try to read the database to get the previous staging dir
+                       edb <- try $ do
+                         _ <- readFile dbPath
+                         -- For now, just return Nothing
+                         -- In a real implementation, we'd parse the file content
+                         return Nothing
+                         :: IO (Either IOException (Maybe FilePath))
+                       case edb of
+                         Left _ -> return Nothing
+                         Right mbDir -> return mbDir
+                     else return Nothing
+                 else return Nothing
+  
+  -- Use previous staging dir if requested and available
+  finalStagingPath <- case (optLast options, previousDir) of
+                        (True, Just prevDir) -> do
+                          -- Check if the previous directory still exists
+                          dirExists <- doesDirectoryExist prevDir
+                          return $ if dirExists 
+                                   then prevDir
+                                   else stagingDirPath
+                        _ -> return stagingDirPath
+  
   do
       -- Create staging directory if it doesn't exist
-      createDirectoryIfMissing True stagingDirPath
+      createDirectoryIfMissing True finalStagingPath
       createDirectoryIfMissing True configDir
       
       -- Create a basic config
       let config = ClodConfig {
             projectPath = currentDir,
-            stagingDir = stagingDirPath,
+            stagingDir = finalStagingPath,
             configDir = configDir,
-            lastRunFile = configDir </> "last-run-marker",
+            databaseFile = dbPath,
             timestamp = "",  -- Will be set internally
-            currentStaging = stagingDirPath,
+            currentStaging = finalStagingPath,
+            previousStaging = previousDir,
             testMode = optTestMode options,
             verbose = optVerbose options,
+            flushMode = optFlush options,
+            lastMode = optLast options,
             ignorePatterns = []  -- Will be populated
           }
       

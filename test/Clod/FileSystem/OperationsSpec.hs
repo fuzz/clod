@@ -49,14 +49,17 @@ spec = do
         -- Run the function
         let config = ClodConfig 
               { projectPath = dir
-              , stagingDir = dir
-              , configDir = dir
-              , lastRunFile = dir
-              , timestamp = ""
-              , currentStaging = dir
-              , testMode = True
-              , verbose = False
-              , ignorePatterns = []
+               stagingDir = dir
+               configDir = dir
+               databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+               timestamp = ""
+               currentStaging = dir
+               testMode = True
+               verbose = False
+               ignorePatterns = []
               }
         
         result <- runClodM config $ findAllFiles dir ["subdir", "subdir2"]
@@ -76,14 +79,17 @@ spec = do
         -- Run the function with empty string (new approach for root dir)
         let config = ClodConfig 
               { projectPath = dir
-              , stagingDir = dir
-              , configDir = dir
-              , lastRunFile = dir
-              , timestamp = ""
-              , currentStaging = dir
-              , testMode = True
-              , verbose = False
-              , ignorePatterns = []
+               stagingDir = dir
+               configDir = dir
+               databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+               timestamp = ""
+               currentStaging = dir
+               testMode = True
+               verbose = False
+               ignorePatterns = []
               }
         
         result <- runClodM config $ findAllFiles dir [""]
@@ -184,12 +190,15 @@ spec = do
 defaultTestConfig :: ClodConfig
 defaultTestConfig = ClodConfig
   { projectPath = "/"
-  , stagingDir = "/"
-  , configDir = "/"
-  , lastRunFile = "/"
-  , timestamp = ""
-  , currentStaging = "/"
-  , testMode = True
-  , verbose = False
-  , ignorePatterns = []
+   stagingDir = "/"
+   configDir = "/"
+   databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+   timestamp = ""
+   currentStaging = "/"
+   testMode = True
+   verbose = False
+   ignorePatterns = []
   }

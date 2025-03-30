@@ -8,6 +8,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE InstanceSigs #-}
 
 -- |
 -- Module      : Clod.Types
@@ -35,6 +36,11 @@ module Clod.Types
   , FileResult(..)
   , ClodError(..)
   , ClodM
+  , FileEntry(..)
+  , ClodDatabase(..)
+  , SerializableClodDatabase(..)
+  , toSerializable
+  , fromSerializable
   
     -- * Type conversions and runners
   , runClodM
@@ -51,14 +57,13 @@ module Clod.Types
   , IgnorePattern(..)
   , OptimizedName(..)
   , OriginalPath(..)
+  , Checksum(..)
   
     -- * Capability types
   , FileReadCap(..)
   , FileWriteCap(..)
-  , GitCap(..)
   , fileReadCap
   , fileWriteCap
-  , gitCap
   
     -- * Path validation
   , isPathAllowed
@@ -72,6 +77,10 @@ import GHC.Generics (Generic)
 import Data.Typeable (Typeable)
 import Data.List (isPrefixOf)
 import System.Directory (canonicalizePath)
+import Data.Time.Clock (UTCTime)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Dhall (FromDhall, ToDhall)
 
 -- | Newtype for ignore patterns to prevent mixing with other string types
 newtype IgnorePattern = IgnorePattern { unIgnorePattern :: String }
@@ -82,22 +91,33 @@ newtype IgnorePattern = IgnorePattern { unIgnorePattern :: String }
 newtype OptimizedName = OptimizedName { unOptimizedName :: String }
   deriving (Show, Eq, Ord) via String
   deriving (IsString, Semigroup, Monoid) via String
+  deriving (Generic)
+
+instance FromDhall OptimizedName
+instance ToDhall OptimizedName
 
 -- | Newtype for original filepath in the repository
 newtype OriginalPath = OriginalPath { unOriginalPath :: String }
   deriving (Show, Eq, Ord) via String
   deriving (IsString, Semigroup, Monoid) via String
+  deriving (Generic)
+
+instance FromDhall OriginalPath
+instance ToDhall OriginalPath
 
 -- | Configuration for the clod program
 data ClodConfig = ClodConfig
-  { projectPath    :: !FilePath      -- ^ Root path of the git repository
+  { projectPath    :: !FilePath      -- ^ Root path of the project
   , stagingDir     :: !FilePath      -- ^ Directory where files will be staged for Claude
   , configDir      :: !FilePath      -- ^ Directory for configuration files
-  , lastRunFile    :: !FilePath      -- ^ File that marks when clod was last run
+  , databaseFile   :: !FilePath      -- ^ Path to the checksums database file
   , timestamp      :: !String        -- ^ Timestamp for the current run
   , currentStaging :: !FilePath      -- ^ Path to the current staging directory
+  , previousStaging :: !(Maybe FilePath) -- ^ Path to the previous staging directory, if any
   , testMode       :: !Bool          -- ^ Whether we're running in test mode
   , verbose        :: !Bool          -- ^ Whether to print verbose output
+  , flushMode      :: !Bool          -- ^ Whether to flush stale entries from the database
+  , lastMode       :: !Bool          -- ^ Whether to use the previous staging directory
   , ignorePatterns :: ![IgnorePattern] -- ^ Patterns from .gitignore and .clodignore
   } deriving stock (Show, Eq, Generic)
     deriving anyclass (Typeable)
@@ -117,13 +137,68 @@ data FileResult
 -- These represent the different categories of errors that can occur during
 -- file processing, allowing for specific error handling for each case.
 data ClodError 
-  = GitError !String                   -- ^ Error related to Git operations (e.g., cannot find repo)
-  | FileSystemError !FilePath !IOError -- ^ Error related to filesystem operations
+  = FileSystemError !FilePath !IOError -- ^ Error related to filesystem operations
   | ConfigError !String                -- ^ Error related to configuration (e.g., invalid settings)
   | PatternError !String               -- ^ Error related to pattern matching (e.g., invalid pattern)
-  | CapabilityError !String           -- ^ Error related to capability validation
+  | CapabilityError !String            -- ^ Error related to capability validation
+  | DatabaseError !String              -- ^ Error related to checksums database
+  | ChecksumError !String              -- ^ Error related to checksum calculation
   deriving stock (Show, Eq, Generic)
   deriving anyclass (Typeable)
+
+-- | Newtype for file checksums to prevent mixing with other string types
+newtype Checksum = Checksum { unChecksum :: String }
+  deriving (Show, Eq, Ord) via String
+  deriving (IsString, Semigroup, Monoid) via String
+  deriving (Generic)
+
+instance FromDhall Checksum
+instance ToDhall Checksum
+
+-- | File entry in the checksum database
+data FileEntry = FileEntry
+  { entryPath         :: !FilePath       -- ^ Original path
+  , entryChecksum     :: !Checksum       -- ^ File content checksum
+  , entryLastModified :: !UTCTime        -- ^ Last modified time
+  , entryOptimizedName :: !OptimizedName -- ^ Name in staging directory
+  } deriving stock (Show, Eq, Generic)
+    deriving anyclass (Typeable, FromDhall, ToDhall)
+
+-- | Main database structure
+data ClodDatabase = ClodDatabase
+  { dbFiles          :: !(Map FilePath FileEntry)  -- ^ All tracked files by path
+  , dbChecksums      :: !(Map String FilePath)     -- ^ Mapping from checksum to path (for rename detection)
+  , dbLastStagingDir :: !(Maybe FilePath)          -- ^ Previous staging directory
+  , dbLastRunTime    :: !UTCTime                  -- ^ Time of last run
+  } deriving stock (Show, Eq, Generic)
+    deriving anyclass (Typeable)
+
+-- | Serialization-friendly version of ClodDatabase
+data SerializableClodDatabase = SerializableClodDatabase
+  { serializedFiles          :: ![(FilePath, FileEntry)]  -- ^ All tracked files as pairs
+  , serializedChecksums      :: ![(String, FilePath)]     -- ^ Checksums as pairs
+  , serializedLastStagingDir :: !(Maybe FilePath)          -- ^ Previous staging directory
+  , serializedLastRunTime    :: !UTCTime                  -- ^ Time of last run
+  } deriving stock (Show, Eq, Generic)
+    deriving anyclass (Typeable, FromDhall, ToDhall)
+
+-- | Convert to serializable form
+toSerializable :: ClodDatabase -> SerializableClodDatabase
+toSerializable db = SerializableClodDatabase
+  { serializedFiles = Map.toList (dbFiles db)
+  , serializedChecksums = Map.toList (dbChecksums db)
+  , serializedLastStagingDir = dbLastStagingDir db
+  , serializedLastRunTime = dbLastRunTime db
+  }
+
+-- | Convert from serializable form
+fromSerializable :: SerializableClodDatabase -> ClodDatabase
+fromSerializable sdb = ClodDatabase
+  { dbFiles = Map.fromList (serializedFiles sdb)
+  , dbChecksums = Map.fromList (serializedChecksums sdb)
+  , dbLastStagingDir = serializedLastStagingDir sdb
+  , dbLastRunTime = serializedLastRunTime sdb
+  }
 
 -- | The Clod monad
 --
@@ -151,11 +226,6 @@ data FileWriteCap = FileWriteCap
   { allowedWriteDirs :: [FilePath] -- ^ Directories where writing is permitted
   } deriving (Show, Eq)
 
--- | Capability for Git operations
-data GitCap = GitCap 
-  { allowedRepos :: [FilePath] -- ^ Git repositories where operations are permitted
-  } deriving (Show, Eq)
-
 -- | Create a file read capability for specified directories
 fileReadCap :: [FilePath] -> FileReadCap
 fileReadCap dirs = FileReadCap { allowedReadDirs = dirs }
@@ -163,10 +233,6 @@ fileReadCap dirs = FileReadCap { allowedReadDirs = dirs }
 -- | Create a file write capability for specified directories
 fileWriteCap :: [FilePath] -> FileWriteCap
 fileWriteCap dirs = FileWriteCap { allowedWriteDirs = dirs }
-
--- | Create a Git capability for specified repositories
-gitCap :: [FilePath] -> GitCap
-gitCap dirs = GitCap { allowedRepos = dirs }
 
 -- | Check if a path is within allowed directories
 -- This improved version handles path traversal attacks by comparing canonical paths

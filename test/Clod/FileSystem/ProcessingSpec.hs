@@ -69,11 +69,11 @@ spec = do
         let manifestPath = tmpDir </> "manifest.json"
             entry1 = ManifestEntry 
               { entryOptimizedName = OptimizedName "src-main.js"
-              , entryOriginalPath = OriginalPath "src/main.js"
+               entryOriginalPath = OriginalPath "src/main.js"
               }
             entry2 = ManifestEntry
               { entryOptimizedName = OptimizedName "src-utils.js"
-              , entryOriginalPath = OriginalPath "src/utils.js"
+               entryOriginalPath = OriginalPath "src/utils.js"
               }
             entries = [entry1, entry2]
             config = defaultTestConfig
@@ -114,14 +114,17 @@ spec = do
         -- Create config
         let config = ClodConfig 
               { projectPath = sourceDir
-              , stagingDir = stagingDir
-              , configDir = dir
-              , lastRunFile = dir </> "lastrun"
-              , timestamp = ""
-              , currentStaging = stagingDir
-              , testMode = True
-              , verbose = False
-              , ignorePatterns = []
+               stagingDir = stagingDir
+               configDir = dir
+               databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+               timestamp = ""
+               currentStaging = stagingDir
+               testMode = True
+               verbose = False
+               ignorePatterns = []
               }
         
         -- Run processFiles with the new file
@@ -163,14 +166,17 @@ spec = do
         -- Create config
         let config = ClodConfig 
               { projectPath = sourceDir
-              , stagingDir = stagingDir
-              , configDir = dir
-              , lastRunFile = dir </> "lastrun"
-              , timestamp = ""
-              , currentStaging = stagingDir
-              , testMode = True
-              , verbose = False
-              , ignorePatterns = []
+               stagingDir = stagingDir
+               configDir = dir
+               databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+               timestamp = ""
+               currentStaging = stagingDir
+               testMode = True
+               verbose = False
+               ignorePatterns = []
               }
         
         -- Run processFiles with an empty list
@@ -214,14 +220,17 @@ spec = do
         -- Create config
         let config = ClodConfig 
               { projectPath = sourceDir
-              , stagingDir = stagingDir
-              , configDir = dir
-              , lastRunFile = dir </> "lastrun"
-              , timestamp = ""
-              , currentStaging = stagingDir
-              , testMode = True
-              , verbose = False
-              , ignorePatterns = []
+               stagingDir = stagingDir
+               configDir = dir
+               databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+               timestamp = ""
+               currentStaging = stagingDir
+               testMode = True
+               verbose = False
+               ignorePatterns = []
               }
         
         -- Run processFiles with both files
@@ -278,14 +287,17 @@ spec = do
         -- Create config
         let config = ClodConfig 
               { projectPath = sourceDir
-              , stagingDir = stagingDir
-              , configDir = dir
-              , lastRunFile = dir </> "lastrun"
-              , timestamp = ""
-              , currentStaging = stagingDir
-              , testMode = True
-              , verbose = False
-              , ignorePatterns = []
+               stagingDir = stagingDir
+               configDir = dir
+               databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+               timestamp = ""
+               currentStaging = stagingDir
+               testMode = True
+               verbose = False
+               ignorePatterns = []
               }
         
         -- First add all files to manifest without copying
@@ -344,14 +356,17 @@ spec = do
         -- Create config
         let config = ClodConfig 
               { projectPath = sourceDir
-              , stagingDir = stagingDir
-              , configDir = dir
-              , lastRunFile = dir </> "lastrun"
-              , timestamp = ""
-              , currentStaging = stagingDir
-              , testMode = True
-              , verbose = False
-              , ignorePatterns = []
+               stagingDir = stagingDir
+               configDir = dir
+               databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+               timestamp = ""
+               currentStaging = stagingDir
+               testMode = True
+               verbose = False
+               ignorePatterns = []
               }
             
         -- Run processFiles with both files
@@ -383,12 +398,15 @@ spec = do
 defaultTestConfig :: ClodConfig
 defaultTestConfig = ClodConfig
   { projectPath = "/"
-  , stagingDir = "/"
-  , configDir = "/"
-  , lastRunFile = "/"
-  , timestamp = ""
-  , currentStaging = "/"
-  , testMode = True
-  , verbose = False
-  , ignorePatterns = []
+   stagingDir = "/"
+   configDir = "/"
+   databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+   timestamp = ""
+   currentStaging = "/"
+   testMode = True
+   verbose = False
+   ignorePatterns = []
   }

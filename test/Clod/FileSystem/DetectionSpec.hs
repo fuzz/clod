@@ -188,9 +188,9 @@ extensionBasedDetectionSpec = describe "Extension-based detection" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
       -- Create sample source code files
       let files = [ (tmpDir </> "source.js", "// JavaScript file\nconsole.log('hello');")
-                  , (tmpDir </> "source.py", "# Python file\nprint('hello')")
-                  , (tmpDir </> "source.hs", "-- Haskell file\nmain = putStrLn \"hello\"")
-                  , (tmpDir </> "source.c", "// C file\n#include <stdio.h>\nint main() { printf(\"hello\"); return 0; }")
+                   (tmpDir </> "source.py", "# Python file\nprint('hello')")
+                   (tmpDir </> "source.hs", "-- Haskell file\nmain = putStrLn \"hello\"")
+                   (tmpDir </> "source.c", "// C file\n#include <stdio.h>\nint main() { printf(\"hello\"); return 0; }")
                   ]
                   
       -- Create the files
@@ -215,8 +215,8 @@ extensionBasedDetectionSpec = describe "Extension-based detection" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
       -- Create special case files (these might be detected differently based on extension)
       let files = [ (tmpDir </> "executable.exe", "This pretends to be an executable")
-                  , (tmpDir </> "archive.zip", "This pretends to be a zip file")
-                  , (tmpDir </> "image.jpg", "This pretends to be a JPG")
+                   (tmpDir </> "archive.zip", "This pretends to be a zip file")
+                   (tmpDir </> "image.jpg", "This pretends to be a JPG")
                   ]
                   
       -- Create the files
@@ -241,12 +241,15 @@ extensionBasedDetectionSpec = describe "Extension-based detection" $ do
 defaultConfig :: FilePath -> ClodConfig
 defaultConfig tmpDir = ClodConfig
   { projectPath = tmpDir
-  , stagingDir = tmpDir </> "staging"
-  , configDir = tmpDir </> ".clod"
-  , lastRunFile = tmpDir </> ".clod" </> "last-run"
-  , timestamp = "20250401-000000"
-  , currentStaging = tmpDir </> "staging"
-  , testMode = True,
+   stagingDir = tmpDir </> "staging"
+   configDir = tmpDir </> ".clod"
+   databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+   timestamp = "20250401-000000"
+   currentStaging = tmpDir </> "staging"
+   testMode = True,
              verbose = False
-  , ignorePatterns = []
+   ignorePatterns = []
   }

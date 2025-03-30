@@ -24,7 +24,8 @@ import System.Process (callProcess)
 
 import Clod.Types
 import Clod.FileSystem.Operations (safeReadFile, safeWriteFile)
-import Clod.Git (safeGetModifiedFiles)
+-- Git module has been replaced with checksum-based tracking
+-- import Clod.Git (safeGetModifiedFiles)
 
 -- | Test specification for capability-based security
 spec :: Spec
@@ -265,7 +266,10 @@ defaultTestConfig = ClodConfig
   { projectPath = "/"
   , stagingDir = "/"
   , configDir = "/"
-  , lastRunFile = "/"
+  , databaseFile = "/.clod/database.dhall"
+  , previousStaging = Nothing
+  , flushMode = False
+  , lastMode = False
   , timestamp = ""
   , currentStaging = "/"
   , testMode = True

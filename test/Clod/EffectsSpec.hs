@@ -29,7 +29,10 @@ spec = do
             { projectPath = "/"
             , stagingDir = "/"
             , configDir = "/"
-            , lastRunFile = "/"
+            , databaseFile = "/.clod/database.dhall"
+            , previousStaging = Nothing
+            , flushMode = False
+            , lastMode = False
             , timestamp = ""
             , currentStaging = "/"
             , testMode = True
@@ -55,14 +58,17 @@ spec = do
     it "propagates uncaught errors" $ do
       let config = ClodConfig 
             { projectPath = "/"
-            , stagingDir = "/"
-            , configDir = "/"
-            , lastRunFile = "/"
-            , timestamp = ""
-            , currentStaging = "/"
-            , testMode = True
-            , verbose = False
-            , ignorePatterns = []
+             stagingDir = "/"
+             configDir = "/"
+             databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+             timestamp = ""
+             currentStaging = "/"
+             testMode = True
+             verbose = False
+             ignorePatterns = []
             }
       
       -- Create a monad that throws an error but doesn't catch it

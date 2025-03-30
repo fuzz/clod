@@ -109,9 +109,9 @@ spec = do
     it "handles nested patterns with proper precedence" $ do
       -- Simulate patterns from different .gitignore files with varying specificity
       let patterns = [ IgnorePattern "*.log"              -- from root .gitignore
-                     , IgnorePattern "src/temp/"          -- from root .gitignore
-                     , IgnorePattern "src/temp/*.log"     -- from src/.gitignore 
-                     , IgnorePattern "!src/temp/debug.log" -- from src/temp/.gitignore
+                      IgnorePattern "src/temp/"          -- from root .gitignore
+                      IgnorePattern "src/temp/*.log"     -- from src/.gitignore 
+                      IgnorePattern "!src/temp/debug.log" -- from src/temp/.gitignore
                      ]
       
       -- Regular log file should be ignored
@@ -220,12 +220,15 @@ isValidPattern _ = True
 defaultConfig :: FilePath -> ClodConfig
 defaultConfig tmpDir = ClodConfig
   { projectPath = tmpDir
-  , stagingDir = tmpDir </> "staging"
-  , configDir = tmpDir </> ".clod"
-  , lastRunFile = tmpDir </> ".clod" </> "last-run"
-  , timestamp = "20250401-000000"
-  , currentStaging = tmpDir </> "staging"
-  , testMode = True,
+   stagingDir = tmpDir </> "staging"
+   configDir = tmpDir </> ".clod"
+   databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+   timestamp = "20250401-000000"
+   currentStaging = tmpDir </> "staging"
+   testMode = True,
              verbose = False
-  , ignorePatterns = []
+   ignorePatterns = []
   }

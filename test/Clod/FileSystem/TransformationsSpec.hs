@@ -206,12 +206,15 @@ spec = do
 defaultTestConfig :: ClodConfig
 defaultTestConfig = ClodConfig
   { projectPath = "/"
-  , stagingDir = "/"
-  , configDir = "/"
-  , lastRunFile = "/"
-  , timestamp = ""
-  , currentStaging = "/"
-  , testMode = True
-  , verbose = False
-  , ignorePatterns = []
+   stagingDir = "/"
+   configDir = "/"
+   databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+   timestamp = ""
+   currentStaging = "/"
+   testMode = True
+   verbose = False
+   ignorePatterns = []
   }

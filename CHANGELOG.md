@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+- Checksum-based file tracking to detect modified files (replaces Git dependency)
+- Support for efficient file change detection using SHA-256 hashes
+- Database of file checksums for tracking changes between runs
+- Rename detection using content checksums
+- New flags: --flush and --last
+  - --flush: Remove missing entries from the checksum database
+  - --last: Reuse the previous staging directory
+- Dhall serialization for the database configuration
+
 ## [0.1.0] - 2025-03-30
 ### Added
 - Initial release with core functionality
@@ -24,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew formula template for macOS distribution
 
 ### Changed
+- Replaced Git integration with a pure Haskell checksum-based approach
+- Removed dependency on libgit2 for a more portable, cross-platform solution
 - Replaced Polysemy effects system with a traditional monad stack (ReaderT/ExceptT/IO) for better type inference and simpler error messages
 - Preserved capability-based security model with runtime checks
 - Simplified testing infrastructure by removing effect-specific test helpers

@@ -50,6 +50,11 @@ open `clod` to view it on macOS. Any other output should go to stderr but,
 except in the case of actual errors, it should only output when the verbose
 flag is passed.
 
+## First run vs subsequent runs
+
+The first run (no database exists) copies all files to the staging
+directory. Subsequent runs copy only modified files.
+
 ## Examples
 
 A user goes to a new project directory and runs clod. All of their files should
@@ -57,3 +62,5 @@ be copied to the staging directory along with the manifest file. Without
 changing anything a user runs clod again--the only thing that should be copied
 to the staging directory is the manifest file, which should contain a complete
 mapping of all eligible files.
+
+

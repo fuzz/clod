@@ -120,12 +120,15 @@ spec = do
 defaultConfig :: FilePath -> ClodConfig
 defaultConfig tmpDir = ClodConfig
   { projectPath = tmpDir
-  , stagingDir = tmpDir </> "staging"
-  , configDir = tmpDir </> ".clod"
-  , lastRunFile = tmpDir </> ".clod" </> "last-run"
-  , timestamp = "20250401-000000"
-  , currentStaging = tmpDir </> "staging"
-  , testMode = True,
+   stagingDir = tmpDir </> "staging"
+   configDir = tmpDir </> ".clod"
+   databaseFile = tmpDir </> ".clod" </> "database.dhall",
+  previousStaging = Nothing,
+  flushMode = False,
+  lastMode = False,
+   timestamp = "20250401-000000"
+   currentStaging = tmpDir </> "staging"
+   testMode = True,
              verbose = False
-  , ignorePatterns = []
+   ignorePatterns = []
   }

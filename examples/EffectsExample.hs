@@ -106,11 +106,14 @@ main = do
         { projectPath = currentDir
         , stagingDir = outputDir
         , configDir = currentDir </> ".clod"
-        , lastRunFile = currentDir </> ".clod" </> "last-run"
+        , databaseFile = currentDir </> ".clod" </> "checksums.dhall"
         , timestamp = "20250401-000000"
         , currentStaging = outputDir
+        , previousStaging = Nothing
         , testMode = True
         , verbose = True  -- Set verbose to True for this example
+        , flushMode = False
+        , lastMode = False
         , ignorePatterns = []
         }
       

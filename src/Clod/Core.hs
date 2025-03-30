@@ -21,7 +21,7 @@
 --
 -- === Main Features
 --
--- * Track modified files since last run
+-- * Track modified files using a checksum database
 -- * Respect .gitignore and .clodignore patterns
 -- * Handle binary vs. text files
 -- * Optimize filenames for Claude's UI
@@ -34,21 +34,27 @@ module Clod.Core
     
     -- * File processing with capabilities
   , processFile
-  , findModifiedOrAllFiles
+  , findAllFiles
   ) where
 
-import System.Directory (createDirectoryIfMissing, doesFileExist, getModificationTime)
-import System.FilePath ((</>), splitDirectories)
-import System.IO (writeFile, stdout, stderr, hPutStrLn)
+import System.Directory (createDirectoryIfMissing, getModificationTime)
+import System.FilePath ((</>))
+import System.IO (stdout, stderr, hPutStrLn)
 import Data.Version (showVersion)
-import Control.Monad (when, filterM)
+import Control.Monad (when, unless, filterM, forM_)
+-- import Data.List (sortOn)
+-- import Data.Time.Clock (getCurrentTime)
+-- import qualified Data.Map.Strict as Map
 
 import Clod.Types
 import Clod.IgnorePatterns (matchesIgnorePattern, readClodIgnore, readGitIgnore)
 import Clod.FileSystem.Detection (safeFileExists, safeIsTextFile)
 import Clod.FileSystem.Operations (safeCopyFile, findAllFiles)
-import Clod.FileSystem.Processing (processFiles)
-import qualified Clod.Git.Internal as Git
+import Clod.FileSystem.Processing (processFiles, writeManifestFile, createOptimizedName)
+import Clod.FileSystem.Checksums (FileStatus(Unchanged), detectFileChanges,
+                              loadDatabase, saveDatabase, updateDatabase, 
+                              cleanupStagingDirectories, flushMissingEntries,
+                              checksumFile)
 import qualified Paths_clod as Meta
 
 -- | Check if a file should be ignored based on ignore patterns
@@ -80,7 +86,7 @@ copyToStaging :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM (E
 copyToStaging readCap writeCap fullPath relPath = do
   stagingPath <- currentStaging <$> ask
   let finalOptimizedName = createOptimizedName relPath
-      destPath = stagingPath </> unOptimizedName finalOptimizedName
+      destPath = stagingPath </> (unOptimizedName finalOptimizedName)
   
   -- Copy file with optimized name using capability
   safeCopyFile readCap writeCap fullPath destPath
@@ -88,15 +94,8 @@ copyToStaging readCap writeCap fullPath relPath = do
   -- Only output if verbose mode is enabled
   config <- ask
   when (verbose config) $ do
-    liftIO $ hPutStrLn stderr $ "Copied: " ++ relPath ++ " → " ++ unOptimizedName finalOptimizedName
+    liftIO $ hPutStrLn stderr $ "Copied: " ++ relPath ++ " → " ++ (unOptimizedName finalOptimizedName)
   pure $ Right Success
-  where
-    -- Simplified version of createOptimizedName for demonstration
-    createOptimizedName :: FilePath -> OptimizedName
-    createOptimizedName path = OptimizedName $ last (splitDirectories path)
-    
-    unOptimizedName :: OptimizedName -> String
-    unOptimizedName (OptimizedName name) = name
 
 -- | Process a file using capability-based security
 processFile :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM FileResult
@@ -107,8 +106,8 @@ processFile readCap writeCap fullPath relPath = do
               , copyToStaging readCap writeCap fullPath relPath
               ]
 
-      -- Process steps sequentially, stopping on first error
-      processSteps [] = pure $ Right Success
+  -- Process steps sequentially, stopping on first error
+  let processSteps [] = pure $ Right Success
       processSteps (step:remaining) = do
         result <- step
         case result of
@@ -120,61 +119,6 @@ processFile readCap writeCap fullPath relPath = do
   pure $ case result of
     Left reason -> Skipped reason
     Right _ -> Success
-    
--- | Find modified or all files for processing
--- 
--- This function uses Git and filesystem operations to find either
--- all files or just modified files, depending on the user's choices.
-findModifiedOrAllFiles :: ClodConfig -> FilePath -> Bool -> ClodM [FilePath]
-findModifiedOrAllFiles _ path useAllFiles = do
-  isGitRepo <- liftIO $ Git.isGitRepo path
-  
-  if isGitRepo
-    then do
-      -- If this is a git repo, use git operations
-      repoRootMaybe <- liftIO $ Git.getRepoRootPath path
-      case repoRootMaybe of
-        Just repoRoot -> do
-          if useAllFiles
-            then do
-              -- Get all files in the repo (using findAllFiles instead)
-              -- Use empty string instead of "." to avoid "./" prefix
-              findAllFiles repoRoot [""]
-            else do
-              -- Get modified and untracked files
-              modified <- liftIO $ Git.listModifiedFiles repoRoot
-              untracked <- liftIO $ Git.listUntrackedFiles repoRoot
-              return $ modified ++ untracked
-        Nothing -> return []
-    else do
-      -- If not a git repo, use filesystem operations
-      if useAllFiles
-        then findAllFiles path [""]  -- Use empty string instead of "." to avoid "./" prefix
-        else do
-          -- Get files modified since last run
-          config' <- ask
-          allFiles <- findAllFiles path [""]  -- Use empty string instead of "." to avoid "./" prefix
-          
-          -- Check if last run marker exists
-          let lastRunFilePath = lastRunFile config'
-          lastRunExists <- liftIO $ doesFileExist lastRunFilePath
-          
-          if not lastRunExists
-            then return allFiles  -- If no last run marker, process all files
-            else do
-              -- Get the last run time from the marker file
-              lastRunTime <- liftIO $ getModificationTime lastRunFilePath
-              
-              -- Filter files that were modified since the last run
-              liftIO $ filterM (\f -> do
-                let fullPath = path </> f
-                fileExists <- doesFileExist fullPath
-                if not fileExists
-                  then return False
-                  else do
-                    modTime <- getModificationTime fullPath
-                    return (modTime > lastRunTime)
-                ) allFiles
 
 -- | Run the main Clod application
 runClodApp :: ClodConfig -> FilePath -> Bool -> Bool -> Bool -> IO (Either ClodError ())
@@ -191,7 +135,7 @@ runClodApp config _ verboseFlag optAllFiles optModified =
 -- | Main application logic
 mainLogic :: Bool -> Bool -> ClodM ()
 mainLogic optAllFiles optModified = do
-  config@ClodConfig{configDir, stagingDir, projectPath, lastRunFile, verbose} <- ask
+  config@ClodConfig{configDir, stagingDir, projectPath, databaseFile, verbose, flushMode, lastMode} <- ask
   
   -- Create directories
   liftIO $ createDirectoryIfMissing True configDir
@@ -211,46 +155,100 @@ mainLogic optAllFiles optModified = do
   -- Create a new config with the loaded patterns
   let configWithPatterns = config { ignorePatterns = allPatterns }
   
-  -- Find all eligible files in the repository
-  -- Check if this is a git repository
-  isGitRepo <- liftIO $ Git.isGitRepo projectPath
+  -- Load or initialize the checksums database
+  database <- loadDatabase databaseFile
+
+  -- Clean up previous staging directory if needed (and not in last mode)
+  unless lastMode $ cleanupStagingDirectories
   
-  -- Get all files to process - either all files or just modified ones
-  allFiles <- if isGitRepo
-              then do
-                repoRootMaybe <- liftIO $ Git.getRepoRootPath projectPath
-                case repoRootMaybe of
-                  Just repoRoot -> findAllFiles repoRoot [""]  -- Use empty string to avoid "./" prefix
-                  Nothing -> findAllFiles projectPath [""]  -- Fallback if we can't get repo root
-              else findAllFiles projectPath [""]  -- Use empty string to avoid "./" prefix
+  -- Find all eligible files in the project
+  allFiles <- findAllFiles projectPath [""]  -- Use empty string to avoid "./" prefix
+  
+  -- Create capabilities for file operations
+  let readCap = fileReadCap [projectPath]
+      writeCap = fileWriteCap [stagingDir]
+
+  -- Flush missing files from database if in flush mode
+  databaseUpdated <- if flushMode
+                     then flushMissingEntries readCap database projectPath
+                     else return database
   
   -- Process all files for the manifest
   let manifestPath = stagingDir </> "_path_manifest.json"
   
-  -- First pass: Add all files to the manifest (manifest only mode)
-  (manifestAdded, manifestSkipped) <- processFiles configWithPatterns manifestPath allFiles True
+  -- Detect file changes by comparing checksums with database
+  (changedFiles, renamedFiles) <- detectFileChanges readCap databaseUpdated allFiles projectPath
+  
+  -- Filter files based on options
+  let 
+    -- Get paths of changed files
+    changedPaths = if optAllFiles
+                  then allFiles
+                  else map fst $ filter (\(_, status) -> status /= Unchanged) changedFiles
+
+    -- Determine which files to process (potentially all, or just modified)
+    filesToProcess = if optModified || optAllFiles
+                    then changedPaths
+                    else if not (null changedPaths) 
+                         then changedPaths
+                         else []
+  
+  -- First pass: Add all files to the manifest
+  -- Create database entries for all files
+  let processFile' path = do
+        let fullPath = projectPath </> path
+        checksum <- checksumFile readCap fullPath
+        modTime <- liftIO $ getModificationTime fullPath
+        let optName = createOptimizedName path
+        return (path, checksum, modTime, optName)
+  
+  -- Create entries for all text files
+  entries <- filterM (\path -> safeIsTextFile readCap (projectPath </> path)) allFiles >>= 
+             mapM processFile'
+  
+  -- Create manifest entries
+  let manifestEntries = map (\(path, _, _, optName) -> 
+                        (optName, OriginalPath path)) entries
+  
+  -- Write the manifest file
+  _ <- writeManifestFile writeCap manifestPath manifestEntries
   
   when verbose $ do
-    liftIO $ hPutStrLn stderr $ "Added " ++ show manifestAdded ++ " files to manifest, skipped " ++ show manifestSkipped
+    liftIO $ hPutStrLn stderr $ "Added " ++ show (length entries) ++ " files to manifest"
   
-  -- Second pass: If using --modified flag, find and copy only modified files
-  -- If using --all flag, also copy all files to the staging directory
-  modifiedOrAllFiles <- if optModified || optAllFiles
-                       then findModifiedOrAllFiles configWithPatterns projectPath optAllFiles
-                       else if not (null allFiles) -- Always process files if there are any
-                            then return allFiles 
-                            else return []
+  -- Second pass: Only copy changed files to staging
+  if null filesToProcess
+    then when verbose $ do
+      liftIO $ hPutStrLn stderr "No files changed since last run"
+    else do
+      -- Process files that have changed (copy to staging)
+      (processed, skipped) <- processFiles configWithPatterns manifestPath filesToProcess False
+      
+      when verbose $ do
+        liftIO $ hPutStrLn stderr $ "Processed " ++ show processed ++ " files, skipped " ++ show skipped ++ " files"
+      
+      -- Report renamed files if verbose
+      when (verbose && not (null renamedFiles)) $ do
+        liftIO $ hPutStrLn stderr "Detected renamed files:"
+        forM_ renamedFiles $ \(newPath, oldPath) -> do
+          liftIO $ hPutStrLn stderr $ "  " ++ oldPath ++ " → " ++ newPath
   
-  -- Process modified/all files (with actual file copying)
-  (processed, skipped) <- if not (null modifiedOrAllFiles)
-                        then processFiles configWithPatterns manifestPath modifiedOrAllFiles False
-                        else return (0, 0)
+  -- Update database with all processed files
+  let 
+    -- Create updated database from entries
+    finalDatabase = foldr 
+      (\(path, checksum, modTime, optName) db -> 
+        updateDatabase db path checksum modTime optName) 
+      databaseUpdated entries
+      
+    -- Set the last staging directory
+    databaseWithStaging = finalDatabase { 
+        dbLastStagingDir = Just stagingDir,
+        dbLastRunTime = dbLastRunTime finalDatabase 
+      }
   
-  when verbose $ do
-    liftIO $ hPutStrLn stderr $ "Processed " ++ show processed ++ " files, skipped " ++ show skipped ++ " files"
-  
-  -- Update the last run marker to track when clod was last run
-  liftIO $ System.IO.writeFile lastRunFile ""
+  -- Save the updated database
+  saveDatabase databaseFile databaseWithStaging
   
   -- Output ONLY the staging directory path to stdout for piping to other tools
   -- This follows Unix principles - single line of output for easy piping

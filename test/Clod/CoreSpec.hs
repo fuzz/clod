@@ -26,8 +26,8 @@ import Data.List (isInfixOf)
 
 import Clod.Core
 import Clod.Types 
-  ( ClodConfig(..), FileResult(..), FileReadCap(..), IgnorePattern(..)
-  , runClodM, isPathAllowed, fileReadCap, fileWriteCap
+  ( ClodConfig(..), FileResult(..), FileReadCap(..), IgnorePattern(..),
+    runClodM, isPathAllowed, fileReadCap, fileWriteCap
   )
 
 -- | Test specification for Core module
@@ -52,7 +52,10 @@ fileProcessingSpec = describe "File processing with ClodM" $ do
             projectPath = tmpDir,
             stagingDir = tmpDir </> "staging",
             configDir = tmpDir </> ".clod", 
-            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            databaseFile = tmpDir </> ".clod" </> "database.dhall",
+            previousStaging = Nothing,
+            flushMode = False,
+            lastMode = False,
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
@@ -93,7 +96,10 @@ fileProcessingSpec = describe "File processing with ClodM" $ do
             projectPath = tmpDir,
             stagingDir = tmpDir </> "staging",
             configDir = tmpDir </> ".clod", 
-            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            databaseFile = tmpDir </> ".clod" </> "database.dhall",
+            previousStaging = Nothing,
+            flushMode = False,
+            lastMode = False,
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
@@ -128,7 +134,10 @@ runClodAppSpec = describe "runClodApp" $ do
             projectPath = tmpDir,
             stagingDir = tmpDir </> "staging",
             configDir = tmpDir </> ".clod", 
-            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            databaseFile = tmpDir </> ".clod" </> "database.dhall",
+            previousStaging = Nothing,
+            flushMode = False,
+            lastMode = False,
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
@@ -160,7 +169,10 @@ runClodAppSpec = describe "runClodApp" $ do
             projectPath = tmpDir,
             stagingDir = tmpDir </> "staging",
             configDir = tmpDir </> ".clod", 
-            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            databaseFile = tmpDir </> ".clod" </> "database.dhall",
+            previousStaging = Nothing,
+            flushMode = False,
+            lastMode = False,
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
@@ -189,7 +201,10 @@ runClodAppSpec = describe "runClodApp" $ do
             projectPath = tmpDir,
             stagingDir = tmpDir </> "staging",
             configDir = tmpDir </> ".clod", 
-            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            databaseFile = tmpDir </> ".clod" </> "database.dhall",
+            previousStaging = Nothing,
+            flushMode = False,
+            lastMode = False,
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
@@ -237,7 +252,10 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
             projectPath = tmpDir,
             stagingDir = tmpDir </> "staging",
             configDir = tmpDir </> ".clod", 
-            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            databaseFile = tmpDir </> ".clod" </> "database.dhall",
+            previousStaging = Nothing,
+            flushMode = False,
+            lastMode = False,
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,

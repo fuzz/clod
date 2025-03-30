@@ -36,10 +36,10 @@ import qualified Options.Applicative as Opt
 -- | Mock Options type that matches Main module's Options type
 data Options = Options
   { optStagingDir  :: String  -- ^ Directory where files will be staged
-  , optAllFiles    :: Bool    -- ^ Import all files
-  , optModified    :: Bool    -- ^ Import only modified files
-  , optTestMode    :: Bool    -- ^ Run in test mode
-  , optVerbose     :: Bool    -- ^ Enable verbose output
+   optAllFiles    :: Bool    -- ^ Import all files
+   optModified    :: Bool    -- ^ Import only modified files
+   optTestMode    :: Bool    -- ^ Run in test mode
+   optVerbose     :: Bool    -- ^ Enable verbose output
   } deriving (Show, Eq)
 
 -- | Mock parser for options that matches Main module's optionsParser
@@ -163,7 +163,10 @@ cliWorkflowSpec = describe "CLI workflow" $ do
               projectPath = projectDir,
               stagingDir = stagingDir,
               configDir = projectDir </> ".clod",
-              lastRunFile = projectDir </> ".clod" </> "last-run-marker",
+              databaseFile = tmpDir </> ".clod" </> "database.dhall",
+            previousStaging = Nothing,
+            flushMode = False,
+            lastMode = False,
               timestamp = "20250325",
               currentStaging = stagingDir,
               testMode = True,

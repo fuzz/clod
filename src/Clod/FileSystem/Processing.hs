@@ -31,10 +31,12 @@ import System.FilePath (takeDirectory, takeFileName, (</>))
 import qualified System.IO
 import System.IO (stderr, hPutStrLn)
 import Control.Monad (when)
+import Control.Monad.Except (throwError)
 
 import qualified System.Directory as D (copyFile)
 
-import Clod.Types (OptimizedName(..), OriginalPath(..), ClodM, ClodConfig(..), liftIO)
+import Clod.Types (OptimizedName(..), OriginalPath(..), ClodM, ClodConfig(..), 
+                  liftIO, FileWriteCap(..), fileWriteCap, isPathAllowed, ClodError(..))
 import Clod.IgnorePatterns (matchesIgnorePattern)
 import Clod.FileSystem.Detection (isTextFile)
 import Clod.FileSystem.Transformations (transformFilename)
@@ -126,8 +128,12 @@ processFiles config manifestPath files includeInManifestOnly = do
       -- Use original path as deduplication key
       uniqueEntries = nubBy (\a b -> entryOriginalPath a == entryOriginalPath b) allEntries
   
+  -- Create a FileWriteCap for the staging directory
+  let writeCap = fileWriteCap [takeDirectory manifestPath]
+  
   -- Write all entries to the manifest file at once
-  writeManifestFile manifestPath uniqueEntries
+  let manifestPairs = map (\e -> (entryOptimizedName e, entryOriginalPath e)) uniqueEntries
+  writeManifestFile writeCap manifestPath manifestPairs
   
   -- Return file counts
   return (processed, skipped)
@@ -208,26 +214,29 @@ processFiles config manifestPath files includeInManifestOnly = do
                   return (Just [entry], 0)
 
 -- | Write all entries to the manifest file at once
-writeManifestFile :: FilePath -> [ManifestEntry] -> ClodM ()
-writeManifestFile manifestPath entries = do
+writeManifestFile :: FileWriteCap -> FilePath -> [(OptimizedName, OriginalPath)] -> ClodM ()
+writeManifestFile writeCap manifestPath entries = do
   -- Create the manifest content with all entries
   let manifestLines = "{\n" : entryLines ++ ["\n}"]
       entryLines = zipWith formatEntry [0..] entries
       
       -- Format a single entry (with comma for all but the last)
-      formatEntry idx entry =
+      formatEntry idx (optimizedName, originalPath) =
         let comma = if idx == length entries - 1 then "" else ","
-            OptimizedName optimizedName = entryOptimizedName entry
-            OriginalPath originalPath = entryOriginalPath entry
-            escapedOptimizedName = escapeJSON optimizedName
-            escapedOriginalPath = escapeJSON originalPath
+            escapedOptimizedName = escapeJSON (unOptimizedName optimizedName)
+            escapedOriginalPath = escapeJSON (unOriginalPath originalPath)
         in "  \"" ++ escapedOptimizedName ++ "\": \"" ++ escapedOriginalPath ++ "\"" ++ comma
   
-  -- Write the complete manifest file at once, ensuring handles are closed promptly
-  content <- return $ unlines manifestLines
-  liftIO $ System.IO.withFile manifestPath System.IO.WriteMode $ \h -> do
-    System.IO.hPutStr h content
-    System.IO.hFlush h
+  -- Check if path is allowed by capability
+  allowed <- liftIO $ isPathAllowed (allowedWriteDirs writeCap) manifestPath
+  if not allowed
+    then throwError $ CapabilityError $ "Access denied: Cannot write manifest file outside allowed directories: " ++ manifestPath
+    else do
+      -- Write the complete manifest file at once, ensuring handles are closed promptly
+      let content = unlines manifestLines
+      liftIO $ System.IO.withFile manifestPath System.IO.WriteMode $ \h -> do
+        System.IO.hPutStr h content
+        System.IO.hFlush h
 
 -- | Create an optimized filename for Claude UI
 createOptimizedName :: FilePath -> OptimizedName

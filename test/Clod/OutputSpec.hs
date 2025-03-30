@@ -115,7 +115,10 @@ outputFormattingSpec = describe "Output formatting" $ do
             projectPath = tmpDir,
             stagingDir = tmpDir </> "staging",
             configDir = tmpDir </> ".clod", 
-            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            databaseFile = tmpDir </> ".clod" </> "database.dhall",
+            previousStaging = Nothing,
+            flushMode = False,
+            lastMode = False,
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
@@ -151,7 +154,10 @@ outputFormattingSpec = describe "Output formatting" $ do
             projectPath = tmpDir,
             stagingDir = tmpDir </> "staging",
             configDir = tmpDir </> ".clod", 
-            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            databaseFile = tmpDir </> ".clod" </> "database.dhall",
+            previousStaging = Nothing,
+            flushMode = False,
+            lastMode = False,
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,
@@ -189,8 +195,8 @@ pathManifestSpec = describe "Path manifest generation" $ do
       
       -- Create test files with expected optimized names
       let originalPaths = [ tmpDir </> "src" </> "index.js"
-                          , tmpDir </> "src" </> "components" </> "Button.jsx"
-                          , tmpDir </> "README.md"
+                           tmpDir </> "src" </> "components" </> "Button.jsx"
+                           tmpDir </> "README.md"
                           ]
                           
                                  
@@ -201,7 +207,10 @@ pathManifestSpec = describe "Path manifest generation" $ do
             projectPath = tmpDir,
             stagingDir = tmpDir </> "staging",
             configDir = tmpDir </> ".clod", 
-            lastRunFile = tmpDir </> ".clod" </> "last-run-marker",
+            databaseFile = tmpDir </> ".clod" </> "database.dhall",
+            previousStaging = Nothing,
+            flushMode = False,
+            lastMode = False,
             timestamp = "20250325",
             currentStaging = tmpDir </> "staging",
             testMode = True,

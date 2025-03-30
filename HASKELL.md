@@ -1,21 +1,89 @@
 # Haskell Development Notes
 
-This document contains learning points about working with Haskell from Claude Code sessions.
+This document contains general learning points about working with Haskell from Claude Code sessions. Project-specific information has been moved to CLOD.md.
+
+## Hashing and Cryptography
+
+- Implementing checksums in Haskell using cryptographic hash functions:
+  ```haskell
+  import qualified Crypto.Hash.SHA256 as SHA256
+  import qualified Data.ByteString.Base16 as Base16
+  
+  -- Calculate SHA-256 checksum of a ByteString
+  calculateChecksum :: BS.ByteString -> String
+  calculateChecksum content =
+    let hash = SHA256.hash content
+        hexHash = Base16.encode hash
+    in show hexHash
+  ```
+
+## Serialization with Dhall
+
+- Dhall provides type-safe configuration with an expressive type system
+- For simple types, deriving Dhall instances is straightforward:
+  ```haskell
+  data Config = Config
+    { configPath :: !FilePath
+    , configValue :: !Int
+    , configEnabled :: !Bool
+    } deriving stock (Show, Eq, Generic)
+      deriving anyclass (FromDhall, ToDhall)
+  ```
+
+- For more complex serialization needs, create a dedicated serialization type:
+  ```haskell
+  -- | Serialization-friendly version of ComplexType
+  data SerializableWrapper = SerializableWrapper
+    { serializedEntries :: ![(String, Int)]  -- Convert Map to list for serialization
+    , serializedOptions :: ![(String, Bool)]
+    } deriving stock (Show, Eq, Generic)
+      deriving anyclass (FromDhall, ToDhall)
+      
+  -- Convert to/from serializable form
+  toSerializable :: ComplexType -> SerializableWrapper
+  toSerializable complex = SerializableWrapper
+    { serializedEntries = Map.toList (entries complex)
+    , serializedOptions = Map.toList (options complex)
+    }
+  
+  fromSerializable :: SerializableWrapper -> ComplexType
+  fromSerializable wrapper = ComplexType
+    { entries = Map.fromList (serializedEntries wrapper)
+    , options = Map.fromList (serializedOptions wrapper)
+    }
+  ```
+
+- Serializing to and from Dhall using the standard API:
+  ```haskell
+  -- Load from Dhall file
+  wrapper <- Dhall.inputFile Dhall.auto (T.pack configPath) :: IO SerializableWrapper
+  let config = fromSerializable wrapper
+  
+  -- Save to Dhall format
+  let wrapper = toSerializable config
+  let dhallText = "-- Configuration\n" ++ 
+                "-- Format: Dhall\n" ++
+                "-- Generated: " ++ show (getCurrentTime) ++ "\n\n" ++
+                "{ serializedEntries = " ++ show (serializedEntries wrapper) ++ 
+                ", serializedOptions = " ++ show (serializedOptions wrapper) ++ 
+                "}\n"
+  writeFile configPath dhallText
+  ```
 
 ## Module Organization and Package Structure
 
-- Haskell projects typically follow a hierarchical module structure (e.g., `Clod.Git.LibGit`).
+- Haskell projects typically follow a hierarchical module structure (e.g., `App.Module.Submodule`).
 - The standard pattern is to create facade modules that re-export functionality from specialized modules.
 - When refactoring, maintain backward compatibility by keeping public APIs stable.
-- When adding new functionality (like the `LibGit` module), integrate it through the facade module.
+- When adding new functionality, integrate it through the appropriate facade module.
 
 ## Cabal Configuration
 
-- Use `other-modules: Paths_clod` to expose the auto-generated Paths module.
+- Use `other-modules: Paths_<package>` to expose the auto-generated Paths module.
 - The `exposed-modules` field should list all modules intended to be public.
 - Use `extra-source-files` for including resource files, templates, etc.
 - Package dependencies should be specified with version ranges.
-- System dependencies (like libgit2) should be documented in the README.
+- System dependencies should be documented in the README.
 
 ## Functional Programming Patterns
 
@@ -28,13 +96,13 @@ This document contains learning points about working with Haskell from Claude Co
 ## Version Number Management
 
 - Use the auto-generated `Paths_<package>` module to access the version from the cabal file.
-- Import it as qualified: `import qualified Paths_clod as Meta`.
+- Import it as qualified: `import qualified Paths_<package> as Meta`.
 - Access the version with `showVersion Meta.version`.
 - This ensures the displayed version stays in sync with the package version.
 
 ## FFI and Foreign Libraries
 
-- When integrating with C libraries like libgit2, use bracket patterns for resource management.
+- When integrating with C libraries, use bracket patterns for resource management.
 - Be explicit about types when converting between C and Haskell types to avoid ambiguity.
 - Wrap low-level FFI calls in higher-level, type-safe APIs.
 - Document system dependencies and installation requirements for FFI libraries.
@@ -212,7 +280,7 @@ This document contains learning points about working with Haskell from Claude Co
   - Easier to integrate with third-party libraries
   
 - When migrating from effects to monad transformers:
-  1. Create a monad stack type alias (e.g., `type ClodM a = ReaderT Config (ExceptT Error IO) a`)
+  1. Create a monad stack type alias (e.g., `type AppM a = ReaderT Config (ExceptT Error IO) a`)
   2. Replace effect handlers with direct monad operations:
      - `Member (Reader Config) r => ask` becomes just `ask`
      - `Member (Error MyError) r => throw` becomes `throwError`
@@ -355,7 +423,7 @@ This document contains learning points about working with Haskell from Claude Co
   - Compose Kleisli arrows with `>>>` to create processing pipelines
   - Use `runKleisli` to execute the composed pipeline with an initial input
 - **Type safety**: Prefer explicit types over type inference for public API functions to improve documentation and stability.
-- **Type synonym constraints**: When working with type synonyms like `ClodM` in type signatures for higher-order functions (especially with Kleisli arrows), always check if the type synonym requires parameters. Many type errors occur because type synonyms aren't fully applied.
+- **Type synonym constraints**: When working with type synonyms like `AppM` in type signatures for higher-order functions (especially with Kleisli arrows), always check if the type synonym requires parameters. Many type errors occur because type synonyms aren't fully applied.
 - **Graceful degradation**: When advanced type-level features cause compatibility issues, have fallback implementations ready that use simpler types but preserve the core logic.
 - **Progressive enhancement**: Start with simple working code, then gradually introduce more sophisticated type-level abstractions. This helps isolate type errors and makes the code evolution more manageable.
 - **Type-level programming benefits for human-AI collaboration**: 
@@ -679,7 +747,7 @@ This document contains learning points about working with Haskell from Claude Co
 
 ## Ignore Pattern Handling
 
-- **Hierarchical Pattern Structure**: When implementing ignore patterns like .gitignore or .clodignore:
+- **Hierarchical Pattern Structure**: When implementing ignore patterns like .gitignore or custom ignore patterns:
   ```haskell
   -- Define a clear type for ignore patterns
   newtype IgnorePattern = IgnorePattern String deriving (Show, Eq)
@@ -715,12 +783,12 @@ This document contains learning points about working with Haskell from Claude Co
 
 - **Loading Multiple Ignore Files**: Support loading ignore patterns from multiple sources:
   ```haskell
-  -- Load patterns from .gitignore and .clodignore
-  loadIgnorePatterns :: FilePath -> ClodM [IgnorePattern]
+  -- Load patterns from multiple ignore files
+  loadIgnorePatterns :: FilePath -> AppM [IgnorePattern]
   loadIgnorePatterns projectPath = do
-    gitIgnorePatterns <- readGitIgnore projectPath
-    clodIgnorePatterns <- readClodIgnore projectPath
-    let allPatterns = gitIgnorePatterns ++ clodIgnorePatterns
+    mainIgnorePatterns <- readMainIgnore projectPath
+    customIgnorePatterns <- readCustomIgnore projectPath
+    let allPatterns = mainIgnorePatterns ++ customIgnorePatterns
     return allPatterns
   ```
 
@@ -926,18 +994,18 @@ This document contains learning points about working with Haskell from Claude Co
       pure defaultFileTypes
   ```
 
-- **Robust Binary Detection**: Combine multiple strategies for reliable binary file detection:
+- **Multiple Detection Strategies**: Combine different approaches for reliable binary file detection:
   ```haskell
   -- Use multiple detection strategies for reliable results
-  isTextContent :: FilePath -> BS.ByteString -> Bool
-  isTextContent file content = unsafePerformIO $ do
+  isTextFile :: FilePath -> BS.ByteString -> Bool
+  isTextFile file content = unsafePerformIO $ do
     -- Load file types and binary signatures
     fileTypes <- loadFileTypes
     signatures <- loadBinarySignatures
-    return $ isTextContentPure file content fileTypes signatures
+    return $ isTextFilePure file content fileTypes signatures
   
-  isTextContentPure :: FilePath -> BS.ByteString -> FileTypes -> BinarySignatures -> Bool
-  isTextContentPure file content fileTypes binarySigs = 
+  isTextFilePure :: FilePath -> BS.ByteString -> FileTypes -> BinarySignatures -> Bool
+  isTextFilePure file content fileTypes signatures = 
     let 
       -- Take a sample from the beginning of the file
       sample = BS.take sampleSize content

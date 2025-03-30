@@ -3,7 +3,7 @@
 [![Hackage](https://img.shields.io/hackage/v/clod.svg)](https://hackage.haskell.org/package/clod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Clod is a utility for preparing and uploading files to Claude AI's Project Knowledge feature. It tracks file changes, respects `.gitignore` and `.clodignore` patterns, and optimizes filenames for Claude's UI. By efficiently handling file selection and staging, it can significantly reduce AI development costs by 50% or more.
+Clod is a utility for preparing and uploading files to Claude AI's Project Knowledge feature. It tracks file changes using checksums, respects `.gitignore` and `.clodignore` patterns, and optimizes filenames for Claude's UI. By efficiently handling file selection and staging, it can significantly reduce AI development costs by 50% or more.
 
 See [HUMAN.md](HUMAN.md) for a complete workflow guide to using `clod` with Claude AI.
 
@@ -11,7 +11,8 @@ For information about the capability-based security model, see [CAPABILITIES.md]
 
 ## Features
 
-- Track modified files since last run
+- Track modified files using checksums for accuracy
+- Detect renamed files by matching content checksums
 - Respect `.gitignore` and `.clodignore` patterns
 - Handle binary vs. text files automatically
 - Use system temporary directories for staging files
@@ -55,10 +56,6 @@ When you install clod with `cabal install`, both the main `clod` program and the
 ### Prerequisites
 
 - GHC (Glasgow Haskell Compiler) 9.0 or newer
-- libgit2 (required for Git operations)
-  - On macOS: `brew install libgit2`
-  - On Linux: `apt-get install libgit2-dev` or equivalent for your distribution
-  - On Windows: Install from source or use package manager
 
 **Cross-Platform Support:** Clod works on macOS, Linux, and Windows. A wrapper script (`clod-open`) is included for opening the staging directory automatically in the appropriate file browser for each platform. Additionally, the `--print-path` option makes it easy to use clod with any command that accepts a directory path.
 
@@ -94,6 +91,8 @@ cld
 - `--test`, `-t`: Run in test mode (no prompts, useful for CI)
 - `--staging-dir DIR`, `-d DIR`: Specify a directory for test mode (only used with --test)
 - `--verbose`, `-v`: Enable verbose output
+- `--flush`, `-f`: Flush stale entries from the checksums database
+- `--last`, `-l`: Reuse the previous staging directory
 - `--help`: Show help information
 - `--version`: Show version information
 
@@ -214,14 +213,13 @@ The architecture prioritizes pragmatic results over theoretical purity, focusing
     - `Clod/FileSystem/Operations.hs`: Basic file operations
     - `Clod/FileSystem/Processing.hs`: File processing and manifest generation
     - `Clod/FileSystem/Transformations.hs`: Special file format transformations
-  - `Clod/Git.hs`: Git integration facade
-    - `Clod/Git/Repository.hs`: Repository operations
-    - `Clod/Git/Status.hs`: Status checking operations
-    - `Clod/Git/Internal.hs`: Internal file processing functions
-    - `Clod/Git/LibGit.hs`: libgit2 integration using hlibgit2
+    - `Clod/FileSystem/Checksums.hs`: Checksum-based file tracking
   - `Clod/IgnorePatterns.hs`: Pattern matching
   - `Clod/Output.hs`: User interface
   - `Clod/Types.hs`: Core types and monad stack
+  - `Clod/Effects.hs`: Effect system support
+  - `Clod/Capability.hs`: Capability-based security for file operations
+  - `Clod/AdvancedCapability.hs`: Advanced capability patterns
 - `test/`: Test suite
 - `.clod/`: Configuration and state (created during execution)
 
