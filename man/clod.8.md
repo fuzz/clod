@@ -177,7 +177,7 @@ Here's a typical workflow using clod:
 
 5. **Next Iteration**:
    ```bash
-   clod  # Now only shows files modified since last run
+   clod  # Automatically processes only modified files on subsequent runs
    ```
    - Upload the new files from the staging directory
    - **Important**: Before starting a new conversation, manually delete the previous versions of these files from Project Knowledge

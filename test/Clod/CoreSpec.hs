@@ -108,7 +108,7 @@ runClodAppSpec = describe "runClodApp" $ do
       let config = defaultTestConfig tmpDir
           
       -- Run initialization function
-      result <- runClodApp config "" False False True
+      result <- runClodApp config "" False False
       
       -- Should succeed
       result `shouldSatisfy` isRight
@@ -131,7 +131,7 @@ runClodAppSpec = describe "runClodApp" $ do
           dbPath = tmpDir </> ".clod" </> "database.dhall"
           
       -- Run application
-      result <- runClodApp config "" False False True
+      result <- runClodApp config "" False False
       
       -- Should succeed
       result `shouldSatisfy` isRight
@@ -194,7 +194,7 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
           }
       
       -- Call Core.runClodApp directly, which should use the ignorePatterns in the config
-      result <- runClodApp config "" False True False
+      result <- runClodApp config "" False True
       
       -- Check if it worked
       case result of

@@ -29,8 +29,7 @@ import Clod.Types (ClodConfig(..))
 -- | Command line options for Clod
 data Options = Options
   { optStagingDir  :: String   -- ^ Directory where files will be staged (test mode only)
-  , optAllFiles    :: Bool     -- ^ Import all files
-  , optModified    :: Bool     -- ^ Import only modified files
+  , optAllFiles    :: Bool     -- ^ Import all files (otherwise imports only modified files)
   , optTestMode    :: Bool     -- ^ Run in test mode
   , optVerbose     :: Bool     -- ^ Enable verbose output
   , optFlush       :: Bool     -- ^ Flush stale entries from the database
@@ -51,10 +50,6 @@ optionsParser = Options
       ( long "all"
      <> short 'a'
      <> help "Import all files (respecting .gitignore)" )
-  <*> switch
-      ( long "modified"
-     <> short 'm'
-     <> help "Import only modified files" )
   <*> switch
       ( long "test"
      <> short 't'
@@ -150,7 +145,6 @@ main = do
                   (optStagingDir options)
                   (optVerbose options)
                   (optAllFiles options)
-                  (optModified options)
       
       case result of
         Left err -> do

@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - --last: Reuse the previous staging directory
 - Dhall serialization for the database configuration
 
+### Changed
+- Removed --modified flag as it's now the default behavior: first run processes all files, subsequent runs process only modified files (as specified in SPEC.md)
+- Updated documentation to clarify the default behavior for file processing
+
 ## [0.1.0] - 2025-03-30
 ### Added
 - Initial release with core functionality

@@ -21,9 +21,6 @@ for Claude's UI.
 **--all**, **-a**
 : Process all files (respecting .gitignore and .clodignore)
 
-**--modified**, **-m**
-: Process only modified files (default)
-
 **--test**, **-t**
 : Run in test mode (no prompts, useful for CI)
 
@@ -47,10 +44,10 @@ for Claude's UI.
 
 # EXAMPLES
 
-Process modified files since last run:
+Run clod (first run processes all files, subsequent runs process only modified files):
     clod
 
-Process all files:
+Force processing of all files:
     clod --all
 
 Run in test mode with an optional test directory:

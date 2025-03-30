@@ -130,8 +130,8 @@ processFile readCap writeCap fullPath relPath = do
     Right _ -> Success
 
 -- | Run the main Clod application
-runClodApp :: ClodConfig -> FilePath -> Bool -> Bool -> Bool -> IO (Either ClodError ())
-runClodApp config _ verboseFlag optAllFiles optModified = 
+runClodApp :: ClodConfig -> FilePath -> Bool -> Bool -> IO (Either ClodError ())
+runClodApp config _ verboseFlag optAllFiles = 
   let configWithVerbose = config { verbose = verboseFlag }
   in runClodM configWithVerbose $ do
     when verboseFlag $ do
@@ -139,11 +139,11 @@ runClodApp config _ verboseFlag optAllFiles optModified =
       liftIO $ hPutStrLn stderr $ "clod version " ++ showVersion Meta.version ++ " (Haskell)"
     
     -- Execute main logic with capabilities
-    mainLogic optAllFiles optModified
+    mainLogic optAllFiles
     
 -- | Main application logic
-mainLogic :: Bool -> Bool -> ClodM ()
-mainLogic optAllFiles optModified = do
+mainLogic :: Bool -> ClodM ()
+mainLogic optAllFiles = do
   config@ClodConfig{configDir, stagingDir, projectPath, databaseFile, verbose, flushMode, lastMode} <- ask
   
   -- Create directories
@@ -203,19 +203,19 @@ mainLogic optAllFiles optModified = do
   -- Detect file changes by comparing checksums with database
   (changedFiles, renamedFiles) <- detectFileChanges readCap databaseUpdated allFiles projectPath
   
-  -- Filter files based on options
+  -- Filter files based on database existence
   let 
+    dbExists = not $ null $ dbFiles databaseUpdated
+    
     -- Get paths of changed files
-    changedPaths = if optAllFiles
+    changedPaths = if not dbExists || optAllFiles
                   then allFiles
                   else map fst $ filter (\(_, status) -> status /= Unchanged) changedFiles
 
-    -- Determine which files to process (potentially all, or just modified)
-    filesToProcess = if optModified || optAllFiles
-                    then changedPaths
-                    else if not (null changedPaths) 
-                         then changedPaths
-                         else []
+    -- Determine which files to process
+    -- First run (no database): process all files
+    -- Subsequent runs: process only modified files
+    filesToProcess = changedPaths
   
   -- First pass: Add all files to the manifest
   -- Create database entries for all files
