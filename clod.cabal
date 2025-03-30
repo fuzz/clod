@@ -49,8 +49,7 @@ extra-source-files:
   project-instructions.md,
   LICENSE,
   resources/default_clodignore,
-  bin/generate-man-pages.sh,
-  bin/cld
+  bin/generate-man-pages.sh
   
 extra-doc-files:
   CHANGELOG.md

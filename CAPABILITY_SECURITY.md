@@ -1,246 +1,192 @@
 # Capability-Based Security
 
-This document details the capability-based security patterns used in the project for secure file and resource access management.
+This document details the capability-based security patterns used in Clod for secure file and resource access management.
 
 ## Core Concept
 
 Capability-based security restricts operations based on explicit capability tokens rather than implicit permissions. A capability is an unforgeable token that grants specific permissions to perform operations.
 
-## Implementation Principles
+The key principles are:
+1. **Default Denial**: By default, no file access is permitted
+2. **Explicit Capabilities**: Each operation requires an explicit capability token
+3. **Restricted Paths**: Capabilities only allow operations within specific directory trees
+4. **Capability Verification**: All operations verify capabilities before execution
 
-1. Define capabilities as tokens that grant specific permissions
-2. Require these tokens as parameters for potentially unsafe operations
-3. Check permissions at runtime before performing operations
-4. Design test cases to verify capability restrictions work correctly
+## Implementation Approaches
 
-## File System Capabilities
+Clod implements two capability-based security approaches:
 
-### Core Capabilities
+### 1. Standard Runtime Capability System
+
+The standard system is implemented in `Clod.Types` and used throughout the application:
 
 ```haskell
 -- Grant permission to read from specific directories
-data FileReadCap = FileReadCap
-  { allowedReadDirs :: [FilePath]   -- Directories from which reading is allowed
-  , validateReadPath :: FilePath -> IO Bool  -- Function to validate paths
-  }
+data FileReadCap = FileReadCap 
+  { allowedReadDirs :: [FilePath] -- Directories where reading is permitted
+  } deriving (Show, Eq)
 
 -- Grant permission to write to specific directories
-data FileWriteCap = FileWriteCap
-  { allowedWriteDirs :: [FilePath]  -- Directories to which writing is allowed
-  , validateWritePath :: FilePath -> IO Bool  -- Function to validate paths
-  }
+data FileWriteCap = FileWriteCap 
+  { allowedWriteDirs :: [FilePath] -- Directories where writing is permitted
+  } deriving (Show, Eq)
 
--- Grant permission to transform file contents
-data FileTransformCap = FileTransformCap
-  { transformFn :: BS.ByteString -> BS.ByteString  -- Transformation function
-  }
+-- Create capabilities
+fileReadCap :: [FilePath] -> FileReadCap
+fileReadCap dirs = FileReadCap { allowedReadDirs = dirs }
+
+fileWriteCap :: [FilePath] -> FileWriteCap
+fileWriteCap dirs = FileWriteCap { allowedWriteDirs = dirs }
 ```
 
-### Path Validation
+### 2. Advanced Type-Level Capability System
+
+The advanced system in `Clod.AdvancedCapability` uses type-level programming to enforce permissions at compile-time:
+
+```haskell
+-- Permission types for capabilities
+data Permission = Read | Write | Execute | All
+
+-- A path with type-level permission information
+data TypedPath (p :: Permission) where
+  TypedPath :: FilePath -> TypedPath p
+
+-- Capability token that grants permissions
+data Capability (p :: Permission) = Capability 
+  { allowedDirs :: [FilePath]  -- Directories this capability grants access to
+  }
+
+-- Create a capability token for the given permission and directories
+createCapability :: forall p. [FilePath] -> Capability p
+createCapability dirs = Capability { allowedDirs = dirs }
+```
+
+## Path Validation
+
+Both implementations use similar path validation logic to prevent path traversal attacks:
 
 ```haskell
 -- Check if a path is within allowed directories
 isPathAllowed :: [FilePath] -> FilePath -> IO Bool
 isPathAllowed allowedDirs path = do
-  -- Get canonical path to resolve symlinks and normalize
+  -- Get canonical paths to resolve any `.`, `..`, or symlinks
   canonicalPath <- canonicalizePath path
-  let normalizedPath = normalise canonicalPath
-  
-  -- Check if path is within any of the allowed directories
-  results <- forM allowedDirs $ \dir -> do
-    canonicalDir <- canonicalizePath dir
-    let normalizedDir = normalise canonicalDir
-    return $ normalizedDir `isPrefixOf` normalizedPath
-  
-  -- Path is allowed if it's within at least one allowed directory
-  return $ or results
+  -- Check if the canonical path is within any of the allowed directories
+  checks <- mapM (\dir -> do
+                   canonicalDir <- canonicalizePath dir
+                   -- A path is allowed if:
+                   -- 1. It equals an allowed directory exactly, or
+                   -- 2. It's a proper subdirectory (dir is a prefix and has a path separator)
+                   let isAllowed = canonicalDir == canonicalPath || 
+                                  (canonicalDir `isPrefixOf` canonicalPath && 
+                                   length canonicalPath > length canonicalDir &&
+                                   isPathSeparator (canonicalPath !! length canonicalDir))
+                   return isAllowed) allowedDirs
+  -- Return result
+  return (or checks)
+  where
+    isPathSeparator c = c == '/' || c == '\\'
 ```
 
-### Secure Operations
+## Secure Operations
+
+All file system operations require appropriate capabilities:
 
 ```haskell
--- Secure file reading with capability check
-safeReadFile :: FileReadCap -> FilePath -> IO (Either Error BS.ByteString)
+-- Safe file reading that checks capabilities
+safeReadFile :: FileReadCap -> FilePath -> ClodM BS.ByteString
 safeReadFile cap path = do
-  -- Verify file is within allowed directories
-  allowed <- validateReadPath cap path
-  if not allowed
-    then return $ Left $ SecurityError $ 
-      "Access denied: Cannot read file outside allowed directories: " ++ path
+  allowed <- liftIO $ isPathAllowed (allowedReadDirs cap) path
+  if allowed
+    then liftIO $ BS.readFile path
     else do
-      -- Perform the operation once validated
-      try $ BS.readFile path
+      canonicalPath <- liftIO $ canonicalizePath path
+      throwError $ CapabilityError $ 
+        "Access denied: Cannot read file outside allowed directories: " ++ canonicalPath
 
--- Secure file writing with capability check
-safeWriteFile :: FileWriteCap -> FilePath -> BS.ByteString -> IO (Either Error ())
+-- Safe file writing that checks capabilities
+safeWriteFile :: FileWriteCap -> FilePath -> BS.ByteString -> ClodM ()
 safeWriteFile cap path content = do
-  -- Verify file is within allowed directories
-  allowed <- validateWritePath cap path
-  if not allowed
-    then return $ Left $ SecurityError $ 
-      "Access denied: Cannot write file outside allowed directories: " ++ path
+  allowed <- liftIO $ isPathAllowed (allowedWriteDirs cap) path
+  if allowed
+    then liftIO $ BS.writeFile path content
     else do
-      -- Create directory if it doesn't exist
-      createDirectoryIfMissing True (takeDirectory path)
-      -- Perform the operation once validated
-      try $ BS.writeFile path content
+      canonicalPath <- liftIO $ canonicalizePath path
+      throwError $ CapabilityError $ 
+        "Access denied: Cannot write file outside allowed directories: " ++ canonicalPath
+
+-- Safe file copying that checks capabilities for both read and write
+safeCopyFile :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM ()
+safeCopyFile readCap writeCap src dest = do
+  srcAllowed <- liftIO $ isPathAllowed (allowedReadDirs readCap) src
+  destAllowed <- liftIO $ isPathAllowed (allowedWriteDirs writeCap) dest
+  if srcAllowed && destAllowed
+    then liftIO $ copyFile src dest
+    else throwError $ CapabilityError $ 
+      "Access denied: Path restrictions violated"
 ```
 
-## Applying Capabilities in the Application
+## Type-Level Operations (Advanced System)
 
-### Capability Construction
+The advanced system provides type-safe file operations:
 
 ```haskell
--- Create a read capability with specific allowed directories
-makeReadCap :: [FilePath] -> IO FileReadCap
-makeReadCap dirs = do
-  -- Canonicalize all directories for consistent path comparison
-  canonicalDirs <- mapM canonicalizePath dirs
-  return $ FileReadCap
-    { allowedReadDirs = canonicalDirs
-    , validateReadPath = isPathAllowed canonicalDirs
-    }
+-- Read a file with the given capability
+readFile :: forall p m. (MonadIO m, PermissionFor 'Read p) 
+         => Capability p -> TypedPath p -> m BS.ByteString
+readFile _ (TypedPath path) = liftIO $ BS.readFile path
 
--- Create a write capability with specific allowed directories
-makeWriteCap :: [FilePath] -> IO FileWriteCap
-makeWriteCap dirs = do
-  -- Canonicalize all directories for consistent path comparison
-  canonicalDirs <- mapM canonicalizePath dirs
-  return $ FileWriteCap
-    { allowedWriteDirs = canonicalDirs
-    , validateWritePath = isPathAllowed canonicalDirs
-    }
+-- Write to a file with the given capability
+writeFile :: forall p m. (MonadIO m, PermissionFor 'Write p) 
+          => Capability p -> TypedPath p -> BS.ByteString -> m ()
+writeFile _ (TypedPath path) content = liftIO $ BS.writeFile path content
+
+-- Check if a path is allowed by this capability and create a typed path if it is
+withPath :: forall p m a. (MonadIO m) 
+         => Capability p -> FilePath -> (Maybe (TypedPath p) -> m a) -> m a
+withPath cap path f = do
+  allowed <- liftIO $ isPathAllowed (allowedDirs cap) path
+  f $ if allowed then Just (TypedPath path) else Nothing
 ```
 
-### Usage in Application Logic
+## Using Capabilities in the Application
+
+Capabilities are typically created at the application entry point and passed down to functions that need them:
 
 ```haskell
-runApp :: Config -> IO Result
+runApp :: Config -> IO ()
 runApp config = do
   -- Create capabilities with appropriate permissions
-  readCap <- makeReadCap [config.sourceDir]
-  writeCap <- makeWriteCap [config.outputDir]
+  let readCap = fileReadCap [config.sourceDir]
+  let writeCap = fileWriteCap [config.outputDir]
   
   -- Use capabilities in operations
-  result <- processFiles readCap writeCap config.files
-  return result
-
--- Processing logic that requires capabilities
-processFiles :: FileReadCap -> FileWriteCap -> [FilePath] -> IO Result
-processFiles readCap writeCap files = do
-  forM_ files $ \file -> do
-    -- Use capability-protected operations
-    contentResult <- safeReadFile readCap file
-    case contentResult of
-      Left err -> logError $ "Cannot read file: " ++ show err
-      Right content -> do
-        -- Process content and write output
-        let processedContent = processContent content
-        writeResult <- safeWriteFile writeCap (outputPath file) processedContent
-        case writeResult of
-          Left err -> logError $ "Cannot write file: " ++ show err
-          Right _ -> return ()
-  return Success
-```
-
-## Detailed Security Error Messages
-
-```haskell
--- Provide specific reasons for access denials
-throw $ SecurityError $ "Access denied: Source path violates restrictions: " ++ 
-  canonicalPath ++ " is not within allowed directories: " ++ 
-  show (allowedReadDirs readCap)
-```
-
-## Testing Capability Restrictions
-
-```haskell
-it "respects read capability restrictions" $ do
-  withSystemTempDirectory "test-dir" $ \tmpDir -> do
-    -- Create test directories
-    let sourceDir = tmpDir </> "source"
-        outputDir = tmpDir </> "output"
-        illegalDir = tmpDir </> "illegal"
-    
-    -- Create directories and test files
-    createDirectoryIfMissing True sourceDir
-    createDirectoryIfMissing True outputDir
-    createDirectoryIfMissing True illegalDir
-    
-    -- Create test files
-    writeFile (sourceDir </> "test.txt") "test content"
-    writeFile (illegalDir </> "illegal.txt") "illegal content"
-    
-    -- Create capabilities with restricted access
-    readCap <- makeReadCap [sourceDir]
-    writeCap <- makeWriteCap [outputDir]
-    
-    -- Test legal access (should succeed)
-    readResult1 <- safeReadFile readCap (sourceDir </> "test.txt")
-    isRight readResult1 `shouldBe` True
-    
-    -- Test illegal access (should fail with security error)
-    readResult2 <- safeReadFile readCap (illegalDir </> "illegal.txt")
-    isLeft readResult2 `shouldBe` True
-    case readResult2 of
-      Left (SecurityError _) -> return () -- Expected error type
-      Left other -> expectationFailure $ "Expected SecurityError but got: " ++ show other
-      Right _ -> expectationFailure "Expected access to be denied"
-```
-
-## Benefits of Capability-Based Security
-
-1. **Explicit Permission Model**: Makes security boundaries explicit in the code
-2. **Least Privilege**: Operations only have access to what they explicitly need
-3. **Composable Security**: Capabilities can be combined and passed selectively
-4. **Testable**: Security restrictions can be verified through automated tests
-5. **Audit Trail**: Clear visibility into what operations can access what resources
-
-## Implementation in Different Paradigms
-
-### Monad Transformers Approach
-
-```haskell
--- Using ReaderT for capabilities
-type AppM a = ReaderT AppCapabilities (ExceptT Error IO) a
-
-data AppCapabilities = AppCapabilities
-  { readCap :: FileReadCap
-  , writeCap :: FileWriteCap
-  }
-
--- Use capabilities from the reader environment
-readFileSecurely :: FilePath -> AppM BS.ByteString
-readFileSecurely path = do
-  cap <- asks readCap
-  result <- liftIO $ safeReadFile cap path
+  result <- runClodM config $ do
+    processFiles readCap writeCap config.files
+  
   case result of
-    Left err -> throwError err
-    Right content -> return content
+    Left err -> putStrLn $ "Error: " ++ show err
+    Right _ -> putStrLn "Processing complete"
 ```
 
-### Effect Systems Approach
+## Security Benefits
 
-```haskell
--- Define file system effect with capability constraints
-data FileSystem m a where
-  ReadFile :: FileReadCap -> FilePath -> FileSystem m BS.ByteString
-  WriteFile :: FileWriteCap -> FilePath -> BS.ByteString -> FileSystem m ()
+This capability-based approach provides several important security benefits:
 
--- Generate effect functions
-makeSem ''FileSystem
+1. **Path Traversal Prevention**: Files outside allowed directories cannot be accessed, even with path traversal attacks
+2. **Explicit Permission Model**: The code clearly indicates which operations are permitted and where
+3. **Principle of Least Privilege**: Components only get access to the specific directories they need
+4. **Transparent Intentions**: Code that needs file access must explicitly request capabilities
+5. **Compile-Time Checks**: The advanced system catches permission errors at compile time with type-level constraints
+6. **Composable Security**: Capabilities can be restricted and combined
+7. **Testable**: Security restrictions can be verified through automated tests
 
--- Interpreter that checks capabilities
-runFileSystem :: Member (Embed IO) r => Sem (FileSystem ': r) a -> Sem r a
-runFileSystem = interpret $ \case
-  ReadFile cap path -> do
-    result <- embed $ safeReadFile cap path
-    case result of
-      Left err -> throw err
-      Right content -> return content
-  WriteFile cap path content -> do
-    result <- embed $ safeWriteFile cap path content
-    case result of
-      Left err -> throw err
-      Right () -> return ()
-```
+## Future Directions
+
+For future versions of Clod, we're considering:
+
+1. **More Granular Capabilities**: Adding more specialized capabilities (e.g., for specific operations)
+2. **Enhanced Type-Level Guarantees**: Extending the type-level verification of capabilities
+3. **Better Error Messages**: Improving error messages for capability violations
+4. **Capability Composition**: Making it easier to compose and transform capabilities
+5. **Effect Integration**: Deeper integration with algebraic effects systems

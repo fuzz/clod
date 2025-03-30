@@ -34,17 +34,20 @@ When installing clod through a package manager or Hackage, the man pages are aut
 
 No additional configuration is required to use these man pages - they're automatically accessible through the `man` command.
 
-## Using the Wrapper
+## Opening the Staging Directory (macOS)
 
-Clod includes a wrapper executable (`cld`) that runs clod and automatically opens the staging directory in your file browser. When you install clod with `cabal install`, both the main program and the wrapper are installed automatically.
+On macOS, you can directly open the staging directory using the `open` command with the output from clod:
 
 ```bash
-# Use the wrapper to run clod and automatically open the staging directory
-cld [options]
+# Run clod and open the staging directory in Finder
+open `clod`
 
-# Run the wrapper without opening the staging directory
-cld --no-open [options]
+# For scripts, you can capture the output and open it
+STAGING_DIR=$(clod)
+open "$STAGING_DIR"
 ```
+
+For other platforms, you can use similar commands appropriate for your operating system, or create a simple wrapper script if needed.
 
 ## Viewing Man Pages
 
@@ -65,9 +68,9 @@ man clod  # Shows the main command reference (section 1)
 ## Prerequisites
 
 - GHC (Glasgow Haskell Compiler) 9.0 or newer
-- libgit2 (required for Git operations)
-  - On macOS: `brew install libgit2`
-  - On Linux: `apt-get install libgit2-dev` or equivalent for your distribution
+- libmagic (required for file type detection)
+  - On macOS: `brew install libmagic`
+  - On Linux: `apt-get install libmagic-dev` or equivalent for your distribution
   - On Windows: Install from source or use package manager
 - pandoc (required for generating man pages)
   - On macOS: `brew install pandoc`

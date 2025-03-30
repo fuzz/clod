@@ -51,13 +51,14 @@ brew install fuzz/tap/clod
 
 When installing from Hackage, the man pages are included in the package.
 
-When you install clod with `cabal install`, both the main `clod` program and the `cld` wrapper are installed automatically. The wrapper automatically opens the staging directory in your file browser after running clod.
+The `clod` program is installed automatically when using `cabal install`.
 
 ### Prerequisites
 
 - GHC (Glasgow Haskell Compiler) 9.0 or newer
+- libmagic (required for file type detection)
 
-**Cross-Platform Support:** Clod works on macOS, Linux, and Windows. A wrapper script (`clod-open`) is included for opening the staging directory automatically in the appropriate file browser for each platform. Additionally, the `--print-path` option makes it easy to use clod with any command that accepts a directory path.
+**Cross-Platform Support:** Clod works on macOS, Linux, and Windows. The program outputs the path to the staging directory, making it easy to open with your system's file browser or use with any command that accepts a directory path.
 
 Supported file browsers:
 * macOS: `open`
@@ -80,8 +81,8 @@ clod --all
 # Run in test mode with an optional test directory
 clod --test
 
-# Use the wrapper to process files and automatically open the staging directory
-cld
+# On macOS, process files and open the staging directory in Finder
+open `clod`
 ```
 
 ### Command-Line Options
@@ -96,24 +97,25 @@ cld
 - `--help`: Show help information
 - `--version`: Show version information
 
-### Wrapper Executable: `cld`
+### Opening the Staging Directory
 
-Clod comes with a wrapper executable that runs clod and automatically opens the staging directory:
+Clod outputs the path to the staging directory, which you can use to open it directly in your file browser:
 
 ```bash
-# Process files and open the directory in your system's file browser
-cld [all regular clod options]
+# On macOS, process files and open the directory in Finder
+open `clod [options]`
 
-# Process files without opening the directory
-cld --no-open [all regular clod options]
+# For scripts, you can capture the output and open it with your preferred application
+STAGING_DIR=$(clod [options])
+
+# Open with the appropriate command for your platform
+# macOS
+open "$STAGING_DIR"
+# Linux
+xdg-open "$STAGING_DIR"  # or gio, gnome-open, kde-open
+# Windows
+explorer.exe "$STAGING_DIR"
 ```
-
-The wrapper automatically detects your platform and uses the appropriate command to open the staging directory:
-- macOS: `open`
-- Linux: `xdg-open`, `gio`, `gnome-open`, or `kde-open`
-- Windows: `explorer.exe`
-
-When you install clod with `cabal install`, both the main program and the wrapper executable are installed automatically.
 
 ### First Run
 
