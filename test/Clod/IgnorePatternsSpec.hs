@@ -17,6 +17,7 @@ import Test.Hspec
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Control.Monad.IO.Class ()
+import System.Directory (doesFileExist)
 
 import Clod.IgnorePatterns
 import Clod.Types (IgnorePattern(..), runClodM, fileReadCap)
@@ -181,6 +182,53 @@ spec = do
             patternStrs `shouldContain` ["*.log"]
             patternStrs `shouldContain` ["src/temp"]
             length patterns `shouldBe` 3  -- Should not include comment
+            
+    it "returns empty list when .clodignore file exists but is empty" $ do
+      withSystemTempDirectory "clod-test" $ \tmpDir -> do
+        -- Create an empty .clodignore file
+        let clodIgnorePath = tmpDir </> ".clodignore"
+        System.IO.writeFile clodIgnorePath ""
+        
+        -- Create a config for the test directory
+        let config = defaultTestConfig tmpDir
+        
+        -- Run with ClodM monad
+        result <- runClodM config $ readClodIgnore tmpDir
+        
+        -- Verify the result
+        case result of
+          Left err -> expectationFailure $ "Failed to read empty .clodignore: " ++ show err
+          Right patterns -> do
+            patterns `shouldBe` []  -- Should return empty list
+            
+    it "creates a default .clodignore file when one doesn't exist" $ do
+      withSystemTempDirectory "clod-test" $ \tmpDir -> do
+        -- Create a config for the test directory (don't create .clodignore)
+        let config = defaultTestConfig tmpDir
+            clodIgnorePath = tmpDir </> ".clodignore"
+        
+        -- Ensure the file doesn't already exist
+        fileExists <- doesFileExist clodIgnorePath
+        fileExists `shouldBe` False
+        
+        -- Run with ClodM monad
+        result <- runClodM config $ readClodIgnore tmpDir
+        
+        -- Verify the result
+        case result of
+          Left err -> expectationFailure $ "Failed to handle non-existent .clodignore: " ++ show err
+          Right patterns -> do
+            -- We should have patterns from the default file
+            patterns `shouldNotBe` []
+            
+        -- Check that the file was created
+        fileExists' <- doesFileExist clodIgnorePath
+        fileExists' `shouldBe` True
+        
+        -- Read the file content and check for expected patterns
+        content <- readFile clodIgnorePath
+        content `shouldContain` "*.dll"
+        content `shouldContain` "node_modules"
     
     it "correctly reads .gitignore file using ClodM" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do

@@ -48,7 +48,7 @@ extra-source-files:
   guardrails.md,
   project-instructions.md,
   LICENSE,
-  resources/default_clodignore,
+  resources/default_clodignore.dhall,
   bin/generate-man-pages.sh
   
 extra-doc-files:

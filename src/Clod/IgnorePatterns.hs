@@ -66,6 +66,7 @@ import Data.Char (toLower)
 import qualified Data.Map.Strict as Map
 import System.Directory (doesDirectoryExist, doesFileExist, getDirectoryContents)
 import System.FilePath (splitDirectories, takeExtension, takeFileName, takeDirectory, (</>))
+import qualified Paths_clod
 
 import Clod.Types (ClodM, IgnorePattern(..))
 import Clod.Config (clodIgnoreFile)
@@ -107,10 +108,41 @@ categorizePatterns = L.partition isInclusion
   where 
     isInclusion (IgnorePattern p) = not ("!" `L.isPrefixOf` p)
 
+-- | Create a default .clodignore file using the template in resources
+--
+-- This function creates a new .clodignore file in the specified directory
+-- using the default patterns from resources/default_clodignore.dhall.
+--
+-- @
+-- createDefaultClodIgnore "/path/to/repo" ".clodignore"
+-- @
+createDefaultClodIgnore :: FilePath -> String -> ClodM ()
+createDefaultClodIgnore projectPath ignoreFileName = do
+  let ignorePath = projectPath </> ignoreFileName
+  
+  -- Get the path to the default template
+  defaultPath <- liftIO $ Paths_clod.getDataFileName "resources/default_clodignore.dhall"
+  
+  -- Read the default template
+  defaultContent <- liftIO $ readFile defaultPath
+  
+  -- Create a default .clodignore file by parsing the default patterns from the dhall file
+  -- This is a simplified version that extracts the patterns from the Dhall comments
+  let lines' = lines defaultContent
+      patternLines = filter isPatternLine lines'
+      cleanedPatterns = map (filter (/= ' ') . filter (/= ',') . filter (/= '"') . filter (/= ':') . drop 2) patternLines
+      fileContent = "# Default .clodignore file for Claude uploader\n# Add patterns to ignore files when uploading to Claude\n\n" ++
+                    unlines cleanedPatterns
+  
+  -- Write the file
+  liftIO $ writeFile ignorePath fileContent
+  where
+    isPatternLine line = ", \"" `L.isInfixOf` line || " : Text" `L.isSuffixOf` line
+
 -- | Read and parse .clodignore file
 -- 
 -- This function reads patterns from a .clodignore file in the specified directory.
--- If the file doesn't exist, an empty list is returned.
+-- If the file doesn't exist, a default one is created using the template in resources/default_clodignore.dhall.
 -- Comments (lines starting with '#') and empty lines are ignored.
 --
 -- Uses the CLODIGNORE environment variable or defaults to ".clodignore".
@@ -127,7 +159,12 @@ readClodIgnore projectPath = do
     then do
       content <- liftIO $ readFile ignorePath
       return $ map IgnorePattern $ filter isValidPattern $ lines content
-    else return []
+    else do
+      -- Create a default .clodignore file if one doesn't exist
+      createDefaultClodIgnore projectPath ignoreFileName
+      -- Now read the newly created file
+      content <- liftIO $ readFile ignorePath
+      return $ map IgnorePattern $ filter isValidPattern $ lines content
   where
     isValidPattern line = not (null line) && not ("#" `L.isPrefixOf` line)
 
