@@ -211,8 +211,38 @@ bsToString = map (toEnum . fromIntegral) . BS.unpack
 - Use `other-modules: Paths_<package>` to expose auto-generated Paths module
 - List all public modules in `exposed-modules` field
 - Include resource files in `extra-source-files`
+- Use `data-files` for files that should be installed with the package
+- Prefer custom `Setup.hs` for special build/install requirements
 - Specify package dependencies with version ranges
 - Document system dependencies in README
+
+### Custom Setup Scripts
+
+```haskell
+-- Setup.hs for custom build steps
+import Distribution.Simple
+import Distribution.Simple.Setup
+import Distribution.Simple.LocalBuildInfo
+import Distribution.PackageDescription
+
+main = defaultMainWithHooks simpleUserHooks
+  { postBuild = \args flags pkg lbi -> do
+      -- Run standard post-build first
+      postBuild simpleUserHooks args flags pkg lbi
+      -- Then run custom actions
+      customAction args flags pkg lbi
+  }
+
+-- Custom build/install actions
+customAction :: Args -> BuildFlags -> PackageDescription -> LocalBuildInfo -> IO ()
+customAction _ _ pkg lbi = do
+  -- Access package configuration
+  let pkgName = unPackageName $ pkgName $ package pkg
+      buildDir = buildDir lbi
+  
+  -- Execute custom build steps
+  -- ...
+```
 
 ## Version Number Management
 
@@ -235,3 +265,42 @@ version = showVersion Meta.version
 - Use type applications for parametric types
 - Normalize paths for cross-platform compatibility
 - Add explicit type annotations for complex expressions
+- Integrate with standard system conventions (man pages, config directories)
+- Use Cabal's installation system rather than custom scripts for deployable artifacts
+
+## Documentation Integration
+
+```haskell
+-- In cabal file
+data-files:
+  doc/*.md,           -- Source files
+  templates/*.txt     -- Templates
+
+-- In Setup.hs
+import Distribution.PackageDescription
+import Distribution.Simple.LocalBuildInfo
+import Distribution.Simple.BuildPaths (autogenModulesDir)
+import Distribution.Simple.Utils (installOrdinaryFiles)
+
+-- Generate documentation during build
+postBuild _ _ pkg lbi = do
+  let dataDirName = dataDir lbi
+      docSrcDir = dataDirName </> "doc"
+      docDestDir = buildDir lbi </> "doc"
+  
+  -- Generate docs from templates
+  generateDocs docSrcDir docDestDir
+
+-- Install documentation to standard locations
+copyHook oldHook pkg_descr lbi hooks flags = do
+  -- First do the standard copy
+  oldHook pkg_descr lbi hooks flags
+  
+  -- Then copy documentation to proper locations
+  let docDir = case os of
+        "darwin" -> "/usr/local/share/doc/" ++ pkgName
+        "linux"  -> "/usr/share/doc/" ++ pkgName
+        _        -> error "Unsupported OS"
+  
+  installOrdinaryFiles verbosity docDir [(buildDir lbi </> "doc", "*.html")]
+```

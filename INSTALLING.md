@@ -34,6 +34,37 @@ When installing clod through a package manager or Hackage, the man pages are aut
 
 No additional configuration is required to use these man pages - they're automatically accessible through the `man` command.
 
+### Generating Man Pages Manually
+
+If you want to generate the man pages manually:
+
+```bash
+# Generate man pages in the current directory
+bin/generate-man-pages.sh
+
+# Or generate to a specific directory
+bin/generate-man-pages.sh /path/to/output/dir
+```
+
+This requires pandoc to be installed on your system. The script will create three directories for man page sections (man1, man7, man8) and place the generated man pages in them.
+
+### Installing Man Pages Manually
+
+If you need to install the man pages manually after generating them:
+
+```bash
+# System-wide installation (requires admin privileges)
+sudo cp man1/clod.1 /usr/local/share/man/man1/
+sudo cp man7/clod.7 /usr/local/share/man/man7/
+sudo cp man8/clod.8 /usr/local/share/man/man8/
+
+# Or in your home directory
+mkdir -p ~/.local/share/man/man1 ~/.local/share/man/man7 ~/.local/share/man/man8
+cp man1/clod.1 ~/.local/share/man/man1/
+cp man7/clod.7 ~/.local/share/man/man7/
+cp man8/clod.8 ~/.local/share/man/man8/
+```
+
 ## Opening the Staging Directory (macOS)
 
 On macOS, you can directly open the staging directory using the `open` command with the output from clod:
@@ -72,7 +103,26 @@ man clod  # Shows the main command reference (section 1)
   - On macOS: `brew install libmagic`
   - On Linux: `apt-get install libmagic-dev` or equivalent for your distribution
   - On Windows: Install from source or use package manager
-- pandoc (required for generating man pages)
+- pandoc (optional, for generating man pages)
   - On macOS: `brew install pandoc`
   - On Linux: `apt-get install pandoc` or equivalent for your distribution
   - On Windows: Install via package manager or from official website
+
+## Troubleshooting
+
+### Missing Man Pages
+
+If you can't access the man pages after installation:
+
+1. Check if pandoc was available during installation (`brew info clod` to check for Homebrew)
+2. Generate and install the man pages manually using the instructions above
+3. Verify your `MANPATH` environment variable includes the installation directory
+4. On some systems, you may need to run `mandb` to update the man page database
+
+### libmagic Issues
+
+If you encounter problems with libmagic:
+
+1. Ensure libmagic is properly installed
+2. Check that the dynamic library is in your library path
+3. On macOS, you might need to set `DYLD_LIBRARY_PATH` to include the libmagic location

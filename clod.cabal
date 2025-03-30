@@ -9,14 +9,14 @@ description:
   .
   Key features:
   .
-  * Track modified files since last run
+  * Process all files on first run, only modified files on subsequent runs
   * Respect .gitignore and .clodignore patterns
   * Handle binary vs. text files automatically
   * Use system temporary directories for staging files
   * Create optimized filenames for Claude's UI
   * Generate a path manifest for mapping optimized names back to original paths
   * Color-coded, user-friendly terminal interface
-  * Type-safe effects system with capability-based security
+  * Capability-based security model
   * Path-restricted file access to prevent unauthorized operations
   .
   Clod is particularly useful for reducing AI development costs while working with 
@@ -25,10 +25,10 @@ description:
   bootstrappers, and developers on tight budgets, leveling the playing field between 
   the wealthiest and the scrappiest.
   .
-  Clod implements a capability-based security model using algebraic effects to 
-  ensure safe AI interactions with the file system, and uses checksum-based file
-  tracking with SHA-256 hashes for detecting modified or renamed files. It uses
-  libmagic for robust, content-based file type detection.
+  Clod implements a capability-based security model to ensure safe AI interactions 
+  with the file system, and uses checksum-based file tracking with SHA-256 hashes 
+  for detecting modified or renamed files. It uses libmagic for robust, content-based 
+  file type detection.
 license: MIT
 license-file: LICENSE
 author: Fuzz Leonard
@@ -43,21 +43,33 @@ extra-source-files:
   CONTRIBUTING.md, 
   RELEASING.md,
   HUMAN.md,
-  HASKELL.md,
+  HASKELL_PATTERNS.md,
   INSTALLING.md,
+  CAPABILITY_SECURITY.md,
+  CLOD.md,
+  CRITICAL.md,
+  PROJECT_ARCHITECTURE.md,
+  SERIALIZATION.md,
+  SPEC.md,
+  TEST_SAFETY.md,
   guardrails.md,
   project-instructions.md,
   LICENSE,
   resources/default_clodignore.dhall,
-  bin/generate-man-pages.sh
+  resources/binary_signatures.dhall,
+  resources/file_types.dhall,
+  resources/text_patterns.dhall,
+  bin/generate-man-pages.sh,
+  bin/release-to-hackage.sh
   
 extra-doc-files:
   CHANGELOG.md
 
-data-files:
-  man/clod.1,
-  man/clod.7,
-  man/clod.8
+extra-source-files:
+  man/clod.1.md,
+  man/clod.7.md,
+  man/clod.8.md
+
 
 source-repository head
   type:     git
