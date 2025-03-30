@@ -1,249 +1,271 @@
-name: clod
-version: 0.1.0
-x-revision: 1
-synopsis: Project file manager for Claude AI integrations
-description: 
-  Clod (Claude Loader) is a utility for preparing and uploading files to Claude AI's 
-  Project Knowledge feature. It tracks file changes, respects .gitignore and .clodignore 
-  patterns, and optimizes filenames for Claude's UI.
-  .
-  Key features:
-  .
-  * Process all files on first run, only modified files on subsequent runs
-  * Respect .gitignore and .clodignore patterns
-  * Handle binary vs. text files automatically
-  * Use system temporary directories for staging files
-  * Create optimized filenames for Claude's UI
-  * Generate a path manifest for mapping optimized names back to original paths
-  * Color-coded, user-friendly terminal interface
-  * Capability-based security model
-  * Path-restricted file access to prevent unauthorized operations
-  .
-  Clod is particularly useful for reducing AI development costs while working with 
-  Claude. By handling file selection, staging, and tracking efficiently, it can cut 
-  API costs by 50% or more. This makes powerful AI tools accessible to students, 
-  bootstrappers, and developers on tight budgets, leveling the playing field between 
-  the wealthiest and the scrappiest.
-  .
-  Clod implements a capability-based security model to ensure safe AI interactions 
-  with the file system, and uses checksum-based file tracking with SHA-256 hashes 
-  for detecting modified or renamed files. It uses libmagic for robust, content-based 
-  file type detection.
-license: MIT
-license-file: LICENSE
-author: Fuzz Leonard
-maintainer: cyborg@bionicfuzz.com
-homepage: https://github.com/fuzz/clod
-bug-reports: https://github.com/fuzz/clod/issues
-category: Development
-build-type: Simple
-cabal-version: 2.0
-extra-source-files: 
-  README.md,
-  CONTRIBUTING.md, 
-  RELEASING.md,
-  HUMAN.md,
-  HASKELL_PATTERNS.md,
-  INSTALLING.md,
-  CAPABILITY_SECURITY.md,
-  CLOD.md,
-  CRITICAL.md,
-  PROJECT_ARCHITECTURE.md,
-  SERIALIZATION.md,
-  SPEC.md,
-  TEST_SAFETY.md,
-  guardrails.md,
-  project-instructions.md,
-  LICENSE,
-  resources/default_clodignore.dhall,
-  resources/binary_signatures.dhall,
-  resources/file_types.dhall,
-  resources/text_patterns.dhall,
-  bin/generate-man-pages.sh,
+cabal-version:       2.0
+name:                clod
+version:             0.1.0
+x-revision:          1
+synopsis:            Project file manager for Claude AI integrations
+description:         Clod (Claude Loader) is a utility for preparing and uploading files to Claude AI's 
+                     Project Knowledge feature. It tracks file changes, respects .gitignore and .clodignore 
+                     patterns, and optimizes filenames for Claude's UI.
+                     .
+                     Key features:
+                     .
+                     * Process all files on first run, only modified files on subsequent runs
+                     * Respect .gitignore and .clodignore patterns
+                     * Handle binary vs. text files automatically
+                     * Use system temporary directories for staging files
+                     * Create optimized filenames for Claude's UI
+                     * Generate a path manifest for mapping optimized names back to original paths
+                     * Color-coded, user-friendly terminal interface
+                     * Capability-based security model
+                     * Path-restricted file access to prevent unauthorized operations
+                     .
+                     Clod is particularly useful for reducing AI development costs while working with 
+                     Claude. By handling file selection, staging, and tracking efficiently, it can cut 
+                     API costs by 50% or more. This makes powerful AI tools accessible to students, 
+                     bootstrappers, and developers on tight budgets, leveling the playing field between 
+                     the wealthiest and the scrappiest.
+                     .
+                     Clod implements a capability-based security model to ensure safe AI interactions 
+                     with the file system, and uses checksum-based file tracking with SHA-256 hashes 
+                     for detecting modified or renamed files. It uses libmagic for robust, content-based 
+                     file type detection.
+license:             MIT
+license-file:        LICENSE
+author:              Fuzz Leonard
+maintainer:          cyborg@bionicfuzz.com
+homepage:            https://github.com/fuzz/clod
+bug-reports:         https://github.com/fuzz/clod/issues
+category:            Development
+build-type:          Custom
+
+extra-source-files:
+  README.md
+  CONTRIBUTING.md 
+  RELEASING.md
+  HUMAN.md
+  HASKELL_PATTERNS.md
+  INSTALLING.md
+  CAPABILITY_SECURITY.md
+  CLOD.md
+  CRITICAL.md
+  MAN_PAGES.md
+  PROJECT_ARCHITECTURE.md
+  RELEASE_CHECKLIST.md
+  SERIALIZATION.md
+  SPEC.md
+  TEST_SAFETY.md
+  guardrails.md
+  project-instructions.md
+  LICENSE
+  resources/default_clodignore.dhall
+  resources/binary_signatures.dhall
+  resources/file_types.dhall
+  resources/text_patterns.dhall
+  bin/generate-man-pages.sh
   bin/release-to-hackage.sh
-  
+  man/clod.1.md
+  man/clod.7.md
+  man/clod.8.md
+
 extra-doc-files:
   CHANGELOG.md
 
-extra-source-files:
-  man/clod.1.md,
-  man/clod.7.md,
-  man/clod.8.md
+data-files:
+  build/man/man1/clod.1
+  build/man/man7/clod.7
+  build/man/man8/clod.8
 
+custom-setup
+  setup-depends:     
+    base >= 4.7 && < 5,
+    Cabal >= 2.0.0.2 && < 3.12,
+    directory >= 1.3 && < 1.4,
+    filepath >= 1.4 && < 1.5,
+    process >= 1.6 && < 1.7
 
 source-repository head
-  type:     git
-  location: https://github.com/fuzz/clod
+  type:              git
+  location:          https://github.com/fuzz/clod
 
 library
-  hs-source-dirs: src
-  exposed-modules: Clod.Core
-                 , Clod.Config
-                 , Clod.FileSystem
-                 , Clod.FileSystem.Detection
-                 , Clod.FileSystem.Operations
-                 , Clod.FileSystem.Processing
-                 , Clod.FileSystem.Transformations
-                 , Clod.FileSystem.Checksums
-                 , Clod.IgnorePatterns
-                 , Clod.Output
-                 , Clod.Types
-                 , Clod.Effects
-                 , Clod.Capability
-                 , Clod.AdvancedCapability
-  other-modules: Paths_clod
-  autogen-modules: Paths_clod
-  build-depends: base >= 4.7 && < 5
-               , directory >= 1.3 && < 1.4
-               , filepath >= 1.4 && < 1.5
-               , process >= 1.6 && < 1.7
-               , text >= 1.2 && < 1.3
-               , aeson >= 2.0 && < 3.0
-               , aeson-pretty >= 0.8 && < 0.9
-               , dhall >= 1.41 && < 1.42
-               , bytestring >= 0.10 && < 0.12
-               , containers >= 0.6 && < 0.7
-               , time >= 1.9 && < 1.13
-               , temporary >= 1.3 && < 1.4
-               , mtl >= 2.2 && < 2.4
-               , transformers >= 0.5 && < 0.6
-               , unix >= 2.7 && < 2.8
-               , polysemy >= 1.7 && < 1.8
-               , polysemy-plugin >= 0.4 && < 0.5
-               , deepseq >= 1.4 && < 1.5
-               , lens >= 5.0 && < 5.3
-               , cryptohash-sha256 >= 0.11 && < 0.12
-               , base16-bytestring >= 1.0 && < 1.1
-               , magic >= 1.1 && < 1.2
-               , prettyprinter >= 1.7 && < 1.8
-  default-language: Haskell2010
-  default-extensions: OverloadedStrings
-                    , TypeOperators
-                    , FlexibleContexts
-                    , GADTs
-                    , DataKinds
-                    , ScopedTypeVariables
-                    , TypeApplications
-                    , TemplateHaskell
-                    , LambdaCase
-                    , RecordWildCards
-  ghc-options: -Wall
+  hs-source-dirs:    src
+  exposed-modules:   
+    Clod.Core
+    Clod.Config
+    Clod.FileSystem
+    Clod.FileSystem.Detection
+    Clod.FileSystem.Operations
+    Clod.FileSystem.Processing
+    Clod.FileSystem.Transformations
+    Clod.FileSystem.Checksums
+    Clod.IgnorePatterns
+    Clod.Output
+    Clod.Types
+    Clod.Effects
+    Clod.Capability
+    Clod.AdvancedCapability
+  other-modules:     Paths_clod
+  autogen-modules:   Paths_clod
+  build-depends:     
+    base >= 4.7 && < 5,
+    directory >= 1.3 && < 1.4,
+    filepath >= 1.4 && < 1.5,
+    process >= 1.6 && < 1.7,
+    text >= 1.2 && < 1.3,
+    aeson >= 2.0 && < 3.0,
+    aeson-pretty >= 0.8 && < 0.9,
+    dhall >= 1.41 && < 1.42,
+    bytestring >= 0.10 && < 0.12,
+    containers >= 0.6 && < 0.7,
+    time >= 1.9 && < 1.13,
+    temporary >= 1.3 && < 1.4,
+    mtl >= 2.2 && < 2.4,
+    transformers >= 0.5 && < 0.6,
+    unix >= 2.7 && < 2.8,
+    polysemy >= 1.7 && < 1.8,
+    polysemy-plugin >= 0.4 && < 0.5,
+    deepseq >= 1.4 && < 1.5,
+    lens >= 5.0 && < 5.3,
+    cryptohash-sha256 >= 0.11 && < 0.12,
+    base16-bytestring >= 1.0 && < 1.1,
+    magic >= 1.1 && < 1.2,
+    prettyprinter >= 1.7 && < 1.8
+  default-language:  Haskell2010
+  default-extensions: 
+    OverloadedStrings
+    TypeOperators
+    FlexibleContexts
+    GADTs
+    DataKinds
+    ScopedTypeVariables
+    TypeApplications
+    TemplateHaskell
+    LambdaCase
+    RecordWildCards
+  ghc-options:       -Wall
 
 executable clod
-  hs-source-dirs: app
-  main-is: Main.hs
-  build-depends: base >= 4.7 && < 5
-               , clod
-               , directory >= 1.3 && < 1.4
-               , filepath >= 1.4 && < 1.5
-               , text >= 1.2 && < 1.3
-               , aeson >= 2.0 && < 3.0
-               , bytestring >= 0.10 && < 0.12
-               , containers >= 0.6 && < 0.7
-               , time >= 1.9 && < 1.13
-               , process >= 1.6 && < 1.7
-               , hashable >= 1.3 && < 1.5 
-               , optparse-applicative >= 0.16 && < 0.18
-               , polysemy >= 1.7 && < 1.8
-               , polysemy-plugin >= 0.4 && < 0.5
-               , deepseq >= 1.4 && < 1.5
-               , lens >= 5.0 && < 5.3
-  default-language: Haskell2010
-  default-extensions: OverloadedStrings
-                    , TypeOperators
-                    , FlexibleContexts
-                    , GADTs
-                    , DataKinds
-                    , ScopedTypeVariables
-                    , TypeApplications
-                    , RecordWildCards
-  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  hs-source-dirs:    app
+  main-is:           Main.hs
+  build-depends:     
+    base >= 4.7 && < 5,
+    clod,
+    directory >= 1.3 && < 1.4,
+    filepath >= 1.4 && < 1.5,
+    text >= 1.2 && < 1.3,
+    aeson >= 2.0 && < 3.0,
+    bytestring >= 0.10 && < 0.12,
+    containers >= 0.6 && < 0.7,
+    time >= 1.9 && < 1.13,
+    process >= 1.6 && < 1.7,
+    hashable >= 1.3 && < 1.5,
+    optparse-applicative >= 0.16 && < 0.18,
+    polysemy >= 1.7 && < 1.8,
+    polysemy-plugin >= 0.4 && < 0.5,
+    deepseq >= 1.4 && < 1.5,
+    lens >= 5.0 && < 5.3
+  default-language:  Haskell2010
+  default-extensions: 
+    OverloadedStrings
+    TypeOperators
+    FlexibleContexts
+    GADTs
+    DataKinds
+    ScopedTypeVariables
+    TypeApplications
+    RecordWildCards
+  ghc-options:       -Wall -threaded -rtsopts -with-rtsopts=-N
   
-
-
 test-suite clod-test
-  type: exitcode-stdio-1.0
-  hs-source-dirs: test
-  main-is: Spec.hs
-  other-modules: Clod.IgnorePatternsSpec
-               , Clod.FileSystemSpec
-               , Clod.CoreSpec
-               , Clod.ConfigSpec
-               , Clod.OutputSpec
-               , Clod.MainSpec
-               , Clod.FileSystem.DetectionSpec
-               , Clod.FileSystem.ChecksumsSpec
-               , Clod.FileSystem.DatabaseSpec
-               , Clod.CapabilitySpec
-               , Clod.AdvancedCapabilitySpec
-               , Clod.EffectsSpec
-               , Clod.TypesSpec
-               , Clod.FileSystem.OperationsSpec
-               , Clod.FileSystem.ProcessingSpec
-               , Clod.FileSystem.TransformationsSpec
-               , Clod.TestHelpers
-  build-depends: base >= 4.7 && < 5
-               , clod
-               , directory >= 1.3 && < 1.4
-               , filepath >= 1.4 && < 1.5
-               , process >= 1.6 && < 1.7
-               , temporary >= 1.3 && < 1.4
-               , text >= 1.2 && < 1.3
-               , time >= 1.9 && < 1.13
-               , hspec >= 2.8 && < 2.12
-               , QuickCheck >= 2.14 && < 2.16
-               , unix >= 2.7 && < 2.8
-               , polysemy >= 1.7 && < 1.8
-               , polysemy-plugin >= 0.4 && < 0.5
-               , bytestring >= 0.10 && < 0.12
-               , containers >= 0.6 && < 0.7
-               , optparse-applicative >= 0.16 && < 0.18
-               , random >= 1.2 && < 1.4
-               , deepseq >= 1.4 && < 1.5
-               , lens >= 5.0 && < 5.3
-               , mtl >= 2.2 && < 2.4
-  default-language: Haskell2010
-  default-extensions: OverloadedStrings
-                    , TypeOperators
-                    , FlexibleContexts
-                    , GADTs
-                    , DataKinds
-                    , ScopedTypeVariables
-                    , TypeApplications
-                    , RecordWildCards
-  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  type:              exitcode-stdio-1.0
+  hs-source-dirs:    test
+  main-is:           Spec.hs
+  other-modules:     
+    Clod.IgnorePatternsSpec
+    Clod.FileSystemSpec
+    Clod.CoreSpec
+    Clod.ConfigSpec
+    Clod.OutputSpec
+    Clod.MainSpec
+    Clod.FileSystem.DetectionSpec
+    Clod.FileSystem.ChecksumsSpec
+    Clod.FileSystem.DatabaseSpec
+    Clod.CapabilitySpec
+    Clod.AdvancedCapabilitySpec
+    Clod.EffectsSpec
+    Clod.TypesSpec
+    Clod.FileSystem.OperationsSpec
+    Clod.FileSystem.ProcessingSpec
+    Clod.FileSystem.TransformationsSpec
+    Clod.ManPagesSpec
+    Clod.TestHelpers
+  build-depends:     
+    base >= 4.7 && < 5,
+    clod,
+    directory >= 1.3 && < 1.4,
+    filepath >= 1.4 && < 1.5,
+    process >= 1.6 && < 1.7,
+    temporary >= 1.3 && < 1.4,
+    text >= 1.2 && < 1.3,
+    time >= 1.9 && < 1.13,
+    hspec >= 2.8 && < 2.12,
+    QuickCheck >= 2.14 && < 2.16,
+    unix >= 2.7 && < 2.8,
+    polysemy >= 1.7 && < 1.8,
+    polysemy-plugin >= 0.4 && < 0.5,
+    bytestring >= 0.10 && < 0.12,
+    containers >= 0.6 && < 0.7,
+    optparse-applicative >= 0.16 && < 0.18,
+    random >= 1.2 && < 1.4,
+    deepseq >= 1.4 && < 1.5,
+    lens >= 5.0 && < 5.3,
+    mtl >= 2.2 && < 2.4
+  default-language:  Haskell2010
+  default-extensions: 
+    OverloadedStrings
+    TypeOperators
+    FlexibleContexts
+    GADTs
+    DataKinds
+    ScopedTypeVariables
+    TypeApplications
+    RecordWildCards
+  ghc-options:       -Wall -threaded -rtsopts -with-rtsopts=-N
   
 executable effects-example
-  hs-source-dirs: examples
-  main-is: EffectsExample.hs
-  build-depends: base >= 4.7 && < 5
-               , clod
-               , directory >= 1.3 && < 1.4
-               , filepath >= 1.4 && < 1.5
-               , text >= 1.2 && < 1.3
-               , bytestring >= 0.10 && < 0.12
-               , process >= 1.6 && < 1.7
-               , polysemy >= 1.7 && < 1.8
-               , polysemy-plugin >= 0.4 && < 0.5
-               , deepseq >= 1.4 && < 1.5
-               , lens >= 5.0 && < 5.3
-  default-language: Haskell2010
-  default-extensions: OverloadedStrings
-                    , TypeOperators
-                    , FlexibleContexts
-                    , GADTs
-                    , DataKinds
-                    , ScopedTypeVariables
-                    , TypeApplications
-                    , RecordWildCards
-  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  hs-source-dirs:    examples
+  main-is:           EffectsExample.hs
+  build-depends:     
+    base >= 4.7 && < 5,
+    clod,
+    directory >= 1.3 && < 1.4,
+    filepath >= 1.4 && < 1.5,
+    text >= 1.2 && < 1.3,
+    bytestring >= 0.10 && < 0.12,
+    process >= 1.6 && < 1.7,
+    polysemy >= 1.7 && < 1.8,
+    polysemy-plugin >= 0.4 && < 0.5,
+    deepseq >= 1.4 && < 1.5,
+    lens >= 5.0 && < 5.3
+  default-language:  Haskell2010
+  default-extensions: 
+    OverloadedStrings
+    TypeOperators
+    FlexibleContexts
+    GADTs
+    DataKinds
+    ScopedTypeVariables
+    TypeApplications
+    RecordWildCards
+  ghc-options:       -Wall -threaded -rtsopts -with-rtsopts=-N
   
 executable magictest
-  hs-source-dirs: test
-  main-is: MagicTest.hs
-  build-depends: base >= 4.7 && < 5
-               , magic >= 1.1 && < 1.2
-               , directory >= 1.3 && < 1.4
-  default-language: Haskell2010
+  hs-source-dirs:    test
+  main-is:           MagicTest.hs
+  build-depends:     
+    base >= 4.7 && < 5,
+    magic >= 1.1 && < 1.2,
+    directory >= 1.3 && < 1.4
+  default-language:  Haskell2010
   default-extensions: OverloadedStrings
-  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:       -Wall -threaded -rtsopts -with-rtsopts=-N

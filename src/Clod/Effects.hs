@@ -14,16 +14,48 @@
 
 -- |
 -- Module      : Clod.Effects
--- Description : Legacy module maintained for backward compatibility
+-- Description : Effect types and utilities for Clod
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
 -- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
--- This module is maintained for backward compatibility with test code.
--- The effect system has been replaced with a traditional monad stack
--- in Clod.Types.
+-- This module provides types and utilities for working with effects in Clod.
+-- It uses a traditional monad transformer stack rather than an algebraic effects
+-- system, prioritizing type inference and error reporting clarity.
+--
+-- The module re-exports the core functionality from Clod.Types to provide
+-- a clean interface for working with the ClodM monad stack.
 
 module Clod.Effects 
-  (
+  ( -- * Core effect types
+    ClodM
+  , ClodError(..)
+  , ClodConfig(..)
+  
+    -- * Running effects
+  , runClodM
+  
+    -- * Monadic operations
+  , throwError
+  , catchError
+  , liftIO
+  
+    -- * Reader operations
+  , ask
+  , asks
+  , local
   ) where
+
+import Clod.Types
+  ( ClodM
+  , ClodError(..)
+  , ClodConfig(..)
+  , runClodM
+  , throwError
+  , catchError
+  , liftIO
+  , ask
+  , asks
+  , local
+  )

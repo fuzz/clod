@@ -42,9 +42,6 @@ import System.FilePath ((</>), takeFileName)
 import System.IO (stdout, stderr, hPutStrLn)
 import Data.Version (showVersion)
 import Control.Monad (when, unless, filterM, forM_)
--- import Data.List (sortOn)
--- import Data.Time.Clock (getCurrentTime)
--- import qualified Data.Map.Strict as Map
 
 import Clod.Types
 import Clod.IgnorePatterns (matchesIgnorePattern, readClodIgnore, readGitIgnore)

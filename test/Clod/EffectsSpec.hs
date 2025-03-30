@@ -3,14 +3,14 @@
 
 -- |
 -- Module      : Clod.EffectsSpec
--- Description : Test for the effects module - now using the ClodM monad stack
+-- Description : Tests for the effects module using the ClodM monad stack
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
 -- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
--- This file has been updated to use the new ClodM monad stack instead of
--- the Polysemy effects system.
+-- This module contains tests for the ClodM monad stack, focusing on
+-- error handling and basic monad operations.
 
 module Clod.EffectsSpec (spec) where
 

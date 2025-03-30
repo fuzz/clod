@@ -30,6 +30,7 @@ import qualified Clod.TypesSpec
 import qualified Clod.FileSystem.OperationsSpec
 import qualified Clod.FileSystem.ProcessingSpec
 import qualified Clod.FileSystem.TransformationsSpec
+import qualified Clod.ManPagesSpec
 
 main :: IO ()
 main = hspec $ do
@@ -49,3 +50,4 @@ main = hspec $ do
   describe "Clod.FileSystem.Operations" Clod.FileSystem.OperationsSpec.spec
   describe "Clod.FileSystem.Processing" Clod.FileSystem.ProcessingSpec.spec
   describe "Clod.FileSystem.Transformations" Clod.FileSystem.TransformationsSpec.spec
+  describe "Clod.ManPages" Clod.ManPagesSpec.spec

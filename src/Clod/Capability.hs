@@ -23,14 +23,16 @@
 
 -- |
 -- Module      : Clod.Capability
--- Description : Legacy module for compatibility with tests
+-- Description : Capability-based security for file operations
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
 -- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
--- This module is kept for backward compatibility with tests.
--- New code should use Clod.Types and the direct capability functions.
+-- This module implements capability-based security for file operations,
+-- providing safe access to the filesystem with explicit permissions.
+-- It enforces the principle of least privilege by requiring explicit
+-- capabilities for reading from and writing to files.
 
 module Clod.Capability 
   (
