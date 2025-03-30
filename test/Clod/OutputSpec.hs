@@ -26,6 +26,7 @@ import Control.Monad.IO.Class ()
 import System.Random (randomIO)
 
 import Clod.Types
+import Clod.TestHelpers (defaultTestConfig)
 
 -- | Mock implementations of the functions we want to test
 -- Since the actual implementation might be in various files, we create test versions
@@ -111,20 +112,7 @@ outputFormattingSpec :: Spec
 outputFormattingSpec = describe "Output formatting" $ do
   it "formats verbose output correctly" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      let config = ClodConfig {
-            projectPath = tmpDir,
-            stagingDir = tmpDir </> "staging",
-            configDir = tmpDir </> ".clod", 
-            databaseFile = tmpDir </> ".clod" </> "database.dhall",
-            previousStaging = Nothing,
-            flushMode = False,
-            lastMode = False,
-            timestamp = "20250325",
-            currentStaging = tmpDir </> "staging",
-            testMode = True,
-            verbose = False,
-            ignorePatterns = []
-          }
+      let config = defaultTestConfig tmpDir
           
       -- Create test file paths
       let paths = ["src/index.js", "src/components/Button.jsx", "README.md"]
@@ -150,20 +138,7 @@ outputFormattingSpec = describe "Output formatting" $ do
   
   it "formats regular output correctly" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      let config = ClodConfig {
-            projectPath = tmpDir,
-            stagingDir = tmpDir </> "staging",
-            configDir = tmpDir </> ".clod", 
-            databaseFile = tmpDir </> ".clod" </> "database.dhall",
-            previousStaging = Nothing,
-            flushMode = False,
-            lastMode = False,
-            timestamp = "20250325",
-            currentStaging = tmpDir </> "staging",
-            testMode = True,
-            verbose = False,
-            ignorePatterns = []
-          }
+      let config = defaultTestConfig tmpDir
           
       -- Create test file paths
       let paths = ["src/index.js", "src/components/Button.jsx", "README.md"]
@@ -195,28 +170,15 @@ pathManifestSpec = describe "Path manifest generation" $ do
       
       -- Create test files with expected optimized names
       let originalPaths = [ tmpDir </> "src" </> "index.js"
-                           tmpDir </> "src" </> "components" </> "Button.jsx"
-                           tmpDir </> "README.md"
+                          , tmpDir </> "src" </> "components" </> "Button.jsx"
+                          , tmpDir </> "README.md"
                           ]
                           
                                  
       -- We'll use these values to check manifest content
       let relativePaths = ["src/index.js", "src/components/Button.jsx", "README.md"]
                            
-      let config = ClodConfig {
-            projectPath = tmpDir,
-            stagingDir = tmpDir </> "staging",
-            configDir = tmpDir </> ".clod", 
-            databaseFile = tmpDir </> ".clod" </> "database.dhall",
-            previousStaging = Nothing,
-            flushMode = False,
-            lastMode = False,
-            timestamp = "20250325",
-            currentStaging = tmpDir </> "staging",
-            testMode = True,
-            verbose = False,
-            ignorePatterns = []
-          }
+      let config = defaultTestConfig tmpDir
       
       -- We'll verify the content directly rather than using expectedMapping
       -- since it contains the same information as optimizedNames and relativePaths

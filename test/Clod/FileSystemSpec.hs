@@ -24,9 +24,10 @@ import qualified System.IO
 import Prelude hiding (readFile, writeFile)
 import Control.Monad.IO.Class ()
 
-import Clod.Types (ClodConfig(..), runClodM, fileReadCap, fileWriteCap)
+import Clod.Types (runClodM, fileReadCap, fileWriteCap)
 import Clod.FileSystem.Operations (safeReadFile, safeCopyFile)
 import Clod.FileSystem.Detection (safeFileExists)
+import Clod.TestHelpers (defaultTestConfig)
 
 -- | Test specification for file system operations
 spec :: Spec
@@ -42,7 +43,7 @@ spec = do
         System.IO.writeFile (tmpDir </> "forbidden" </> "secret.txt") "secret content"
         
         -- Create capability that only allows access to the "allowed" directory
-        let config = defaultConfig tmpDir
+        let config = defaultTestConfig tmpDir
             readCap = fileReadCap [tmpDir </> "allowed"]
         
         -- Attempt to read from allowed directory
@@ -73,7 +74,7 @@ spec = do
         System.IO.writeFile (tmpDir </> "test" </> "index.test.js") "test('example');"
         
         -- Build a list of files manually using a helper function
-        let config = defaultConfig tmpDir
+        let config = defaultTestConfig tmpDir
             readCap = fileReadCap [tmpDir]
             
         -- Check if each file exists using the capability-based system
@@ -98,7 +99,7 @@ spec = do
         System.IO.writeFile (tmpDir </> "source" </> "test.txt") "test content"
         
         -- Create capabilities
-        let config = defaultConfig tmpDir
+        let config = defaultTestConfig tmpDir
             readCap = fileReadCap [tmpDir </> "source"]
             writeCap = fileWriteCap [tmpDir </> "dest"]
             
@@ -116,19 +117,3 @@ spec = do
             content <- System.IO.readFile (tmpDir </> "dest" </> "test.txt")
             content `shouldBe` "test content"
   
--- | Helper function to create a default config for tests
-defaultConfig :: FilePath -> ClodConfig
-defaultConfig tmpDir = ClodConfig
-  { projectPath = tmpDir
-   stagingDir = tmpDir </> "staging"
-   configDir = tmpDir </> ".clod"
-   databaseFile = tmpDir </> ".clod" </> "database.dhall",
-  previousStaging = Nothing,
-  flushMode = False,
-  lastMode = False,
-   timestamp = "20250401-000000"
-   currentStaging = tmpDir </> "staging"
-   testMode = True,
-             verbose = False
-   ignorePatterns = []
-  }

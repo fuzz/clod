@@ -19,12 +19,13 @@ import Test.Hspec
 import Test.QuickCheck hiding (Success)
 import Control.Exception ()
 import Data.Text ()
-import System.FilePath
+-- import System.FilePath
 import System.IO.Temp ()
 import Control.Monad.Reader ()
 import Control.Monad.Except ()
 
 import Clod.Types
+import Clod.TestHelpers (defaultTestConfig)
 
 -- | Property: OptimizedName should preserve its structure through the newtype
 prop_optimizedNameRoundTrip :: String -> Bool
@@ -54,7 +55,7 @@ spec = do
   describe "ClodError" $ do
     it "can be created and displayed" $ do
       show (ConfigError "test error") `shouldBe` "ConfigError \"test error\""
-      show (GitError "git error") `shouldBe` "GitError \"git error\""
+      show (DatabaseError "db error") `shouldBe` "DatabaseError \"db error\""
       show (FileSystemError "file.txt" (userError "fs error")) `shouldBe` "FileSystemError \"file.txt\" user error (fs error)"
   
   describe "FileResult" $ do
@@ -68,27 +69,12 @@ spec = do
             config <- ask
             return (projectPath config) :: ClodM String
             
-      mtlResult <- runExceptT $ runReaderT mtlComputation (defaultConfig "test-dir")
+      mtlResult <- runExceptT $ runReaderT mtlComputation (defaultTestConfig "test-dir")
       mtlResult `shouldBe` Right "test-dir"
       
     it "handles errors correctly" $ do
       let mtlError = throwError (ConfigError "test error") :: ClodM String
           
-      mtlResult <- runExceptT $ runReaderT mtlError (defaultConfig "test")
+      mtlResult <- runExceptT $ runReaderT mtlError (defaultTestConfig "test")
       mtlResult `shouldBe` Left (ConfigError "test error")
   
-  where
-    defaultConfig dir = ClodConfig 
-      { projectPath = dir
-       stagingDir = dir </> "staging"
-       configDir = dir </> "config"
-       databaseFile = tmpDir </> ".clod" </> "database.dhall",
-  previousStaging = Nothing,
-  flushMode = False,
-  lastMode = False,
-       timestamp = "20250401-120000"
-       currentStaging = dir </> "staging"
-       testMode = True
-       verbose = False
-       ignorePatterns = []
-      }

@@ -19,10 +19,11 @@ import System.IO.Temp (withSystemTempDirectory)
 import Control.Monad.IO.Class ()
 
 import Clod.IgnorePatterns
-import Clod.Types (IgnorePattern(..), ClodConfig(..), runClodM, fileReadCap)
+import Clod.Types (IgnorePattern(..), runClodM, fileReadCap)
 import qualified Data.ByteString.Char8 as BC
 import Clod.FileSystem.Operations (safeReadFile)
 import qualified System.IO
+import Clod.TestHelpers (defaultTestConfig)
 
 -- | Test specification for ignore patterns
 spec :: Spec
@@ -108,10 +109,10 @@ spec = do
       
     it "handles nested patterns with proper precedence" $ do
       -- Simulate patterns from different .gitignore files with varying specificity
-      let patterns = [ IgnorePattern "*.log"              -- from root .gitignore
-                      IgnorePattern "src/temp/"          -- from root .gitignore
-                      IgnorePattern "src/temp/*.log"     -- from src/.gitignore 
-                      IgnorePattern "!src/temp/debug.log" -- from src/temp/.gitignore
+      let patterns = [ IgnorePattern "*.log"               -- from root .gitignore
+                     , IgnorePattern "src/temp/"           -- from root .gitignore
+                     , IgnorePattern "src/temp/*.log"      -- from src/.gitignore 
+                     , IgnorePattern "!src/temp/debug.log" -- from src/temp/.gitignore
                      ]
       
       -- Regular log file should be ignored
@@ -159,7 +160,7 @@ spec = do
         System.IO.writeFile clodIgnorePath "# Comment line\n*.tmp\n*.log\nsrc/temp\n"
         
         -- Create a config and file capability for the test directory
-        let config = defaultConfig tmpDir
+        let config = defaultTestConfig tmpDir
             readCap = fileReadCap [tmpDir]
         
         -- Run with ClodM monad
@@ -188,7 +189,7 @@ spec = do
         System.IO.writeFile gitIgnorePath "# Node dependencies\n/node_modules\n*.log\ndist/\n"
         
         -- Create a config and file capability for the test directory
-        let config = defaultConfig tmpDir
+        let config = defaultTestConfig tmpDir
             readCap = fileReadCap [tmpDir]
         
         -- Run with ClodM monad
@@ -216,19 +217,3 @@ isValidPattern "" = False
 isValidPattern ('#':_) = False
 isValidPattern _ = True
 
--- | Helper function to create a default config for tests
-defaultConfig :: FilePath -> ClodConfig
-defaultConfig tmpDir = ClodConfig
-  { projectPath = tmpDir
-   stagingDir = tmpDir </> "staging"
-   configDir = tmpDir </> ".clod"
-   databaseFile = tmpDir </> ".clod" </> "database.dhall",
-  previousStaging = Nothing,
-  flushMode = False,
-  lastMode = False,
-   timestamp = "20250401-000000"
-   currentStaging = tmpDir </> "staging"
-   testMode = True,
-             verbose = False
-   ignorePatterns = []
-  }

@@ -81,6 +81,7 @@ import Data.Time.Clock (UTCTime)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Dhall (FromDhall, ToDhall)
+import Data.Aeson (FromJSON, ToJSON)
 
 -- | Newtype for ignore patterns to prevent mixing with other string types
 newtype IgnorePattern = IgnorePattern { unIgnorePattern :: String }
@@ -95,6 +96,8 @@ newtype OptimizedName = OptimizedName { unOptimizedName :: String }
 
 instance FromDhall OptimizedName
 instance ToDhall OptimizedName
+instance FromJSON OptimizedName
+instance ToJSON OptimizedName
 
 -- | Newtype for original filepath in the repository
 newtype OriginalPath = OriginalPath { unOriginalPath :: String }
@@ -104,6 +107,8 @@ newtype OriginalPath = OriginalPath { unOriginalPath :: String }
 
 instance FromDhall OriginalPath
 instance ToDhall OriginalPath
+instance FromJSON OriginalPath
+instance ToJSON OriginalPath
 
 -- | Configuration for the clod program
 data ClodConfig = ClodConfig
@@ -154,6 +159,8 @@ newtype Checksum = Checksum { unChecksum :: String }
 
 instance FromDhall Checksum
 instance ToDhall Checksum
+instance FromJSON Checksum
+instance ToJSON Checksum
 
 -- | File entry in the checksum database
 data FileEntry = FileEntry
@@ -162,7 +169,7 @@ data FileEntry = FileEntry
   , entryLastModified :: !UTCTime        -- ^ Last modified time
   , entryOptimizedName :: !OptimizedName -- ^ Name in staging directory
   } deriving stock (Show, Eq, Generic)
-    deriving anyclass (Typeable, FromDhall, ToDhall)
+    deriving anyclass (Typeable, FromDhall, ToDhall, FromJSON, ToJSON)
 
 -- | Main database structure
 data ClodDatabase = ClodDatabase
@@ -180,7 +187,7 @@ data SerializableClodDatabase = SerializableClodDatabase
   , serializedLastStagingDir :: !(Maybe FilePath)          -- ^ Previous staging directory
   , serializedLastRunTime    :: !UTCTime                  -- ^ Time of last run
   } deriving stock (Show, Eq, Generic)
-    deriving anyclass (Typeable, FromDhall, ToDhall)
+    deriving anyclass (Typeable, FromDhall, ToDhall, FromJSON, ToJSON)
 
 -- | Convert to serializable form
 toSerializable :: ClodDatabase -> SerializableClodDatabase

@@ -29,6 +29,7 @@ import Control.Monad.IO.Class ()
 import qualified Clod.Core as Core
 import Clod.Types (ClodConfig(..), runClodM, fileReadCap, fileWriteCap)
 import qualified Options.Applicative as Opt
+import Clod.TestHelpers (defaultTestConfig)
 
 -- We'll create a mock Options type instead of importing Main
 -- This avoids circular dependencies and follows test isolation principles
@@ -36,10 +37,10 @@ import qualified Options.Applicative as Opt
 -- | Mock Options type that matches Main module's Options type
 data Options = Options
   { optStagingDir  :: String  -- ^ Directory where files will be staged
-   optAllFiles    :: Bool    -- ^ Import all files
-   optModified    :: Bool    -- ^ Import only modified files
-   optTestMode    :: Bool    -- ^ Run in test mode
-   optVerbose     :: Bool    -- ^ Enable verbose output
+  , optAllFiles    :: Bool    -- ^ Import all files
+  , optModified    :: Bool    -- ^ Import only modified files
+  , optTestMode    :: Bool    -- ^ Run in test mode
+  , optVerbose     :: Bool    -- ^ Enable verbose output
   } deriving (Show, Eq)
 
 -- | Mock parser for options that matches Main module's optionsParser
@@ -159,19 +160,9 @@ cliWorkflowSpec = describe "CLI workflow" $ do
       -- Direct execution in production code would need a more sophisticated approach
       result <- Exception.try @SomeException $ withArgs ["--test", "--staging-dir", stagingDir] $ do
         -- Create minimal config to use in test (avoiding main which could exit)
-        let config = ClodConfig {
-              projectPath = projectDir,
+        let config = (defaultTestConfig projectDir) {
               stagingDir = stagingDir,
-              configDir = projectDir </> ".clod",
-              databaseFile = tmpDir </> ".clod" </> "database.dhall",
-            previousStaging = Nothing,
-            flushMode = False,
-            lastMode = False,
-              timestamp = "20250325",
-              currentStaging = stagingDir,
-              testMode = True,
-            verbose = False,
-              ignorePatterns = []
+              currentStaging = stagingDir
             }
         
         -- Now execute what main would do but in a controlled way

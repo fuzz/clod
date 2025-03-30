@@ -30,6 +30,7 @@ import Data.List ()
 
 import Clod.Types
 import Clod.FileSystem.Transformations
+import Clod.TestHelpers (defaultTestConfig)
 
 -- | Test the file transformations
 spec :: Spec
@@ -93,7 +94,7 @@ spec = do
         -- Create capabilities
         let readCap = fileReadCap [tmpDir]
             writeCap = fileWriteCap [tmpDir]
-            config = defaultTestConfig
+            config = defaultTestConfig tmpDir
         
         -- Run the function
         result <- runClodM config $ 
@@ -119,7 +120,7 @@ spec = do
           -- Create read capability that only includes the temp dir
           let readCap = fileReadCap [tmpDir]
               writeCap = fileWriteCap [tmpDir]
-              config = defaultTestConfig
+              config = defaultTestConfig tmpDir
           
           -- Run the function
           result <- runClodM config $ 
@@ -153,7 +154,7 @@ spec = do
         let readCap = fileReadCap [srcDir, destDir]
             writeCap = fileWriteCap [destDir]
             transformFn = TE.decodeUtf8 -- Transform ByteString to Text
-            config = defaultTestConfig
+            config = defaultTestConfig tmpDir
             
         -- Run the transformation
         _ <- runClodM config $ 
@@ -179,7 +180,7 @@ spec = do
         -- Create capabilities
         let readCap = fileReadCap [tmpDir]
             writeCap = fileWriteCap [tmpDir]
-            config = defaultTestConfig
+            config = defaultTestConfig tmpDir
             
         -- Define a simple transformation function that adds different comments for different file types
         let jsTransform :: BS.ByteString -> T.Text
@@ -202,19 +203,3 @@ spec = do
         jsResult `shouldBe` "// Transformed by Clod\n" <> T.pack jsContent
         htmlResult `shouldBe` "<!-- Transformed by Clod -->\n" <> T.pack htmlContent
 
--- | Default test configuration
-defaultTestConfig :: ClodConfig
-defaultTestConfig = ClodConfig
-  { projectPath = "/"
-   stagingDir = "/"
-   configDir = "/"
-   databaseFile = tmpDir </> ".clod" </> "database.dhall",
-  previousStaging = Nothing,
-  flushMode = False,
-  lastMode = False,
-   timestamp = ""
-   currentStaging = "/"
-   testMode = True
-   verbose = False
-   ignorePatterns = []
-  }

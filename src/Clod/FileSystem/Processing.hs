@@ -183,8 +183,11 @@ processFiles config manifestPath files includeInManifestOnly = do
     -- Process with file copying
     processWithCopy :: ClodConfig -> FilePath -> FilePath -> ClodM (Maybe [ManifestEntry], Int)
     processWithCopy cfg fullPath relPath
-      -- Skip specifically excluded files
+      -- Skip specifically excluded files and directories
       | relPath `elem` [".gitignore", "package-lock.json", "yarn.lock", ".clodignore"] = 
+          return (Nothing, 1)
+      -- Skip any paths containing node_modules or .git directories
+      | "node_modules" `L.isInfixOf` relPath || ".git/" `L.isPrefixOf` relPath || ".git" == relPath =
           return (Nothing, 1)
       | otherwise = do
           -- Skip if matches ignore patterns

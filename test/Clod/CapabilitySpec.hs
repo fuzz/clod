@@ -20,12 +20,10 @@ import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
 import Data.Either (isRight, isLeft)
 import qualified System.IO
-import System.Process (callProcess)
 
 import Clod.Types
 import Clod.FileSystem.Operations (safeReadFile, safeWriteFile)
--- Git module has been replaced with checksum-based tracking
--- import Clod.Git (safeGetModifiedFiles)
+import Clod.TestHelpers (defaultTestConfig)
 
 -- | Test specification for capability-based security
 spec :: Spec
@@ -47,7 +45,7 @@ fileReadCapSpec = describe "File read capabilities" $ do
       
       -- Create capability that allows access to the subDir
       let readCap = fileReadCap [subDir]
-          config = defaultTestConfig
+          config = defaultTestConfig tmpDir
       
       -- Test file access
       result <- runClodM config $ safeReadFile readCap (subDir </> "test.txt")
@@ -69,7 +67,7 @@ fileReadCapSpec = describe "File read capabilities" $ do
       
       -- Create capability that only allows access to allowedDir
       let readCap = fileReadCap [allowedDir]
-          config = defaultTestConfig
+          config = defaultTestConfig tmpDir
       
       -- Try to access forbidden file
       result <- runClodM config $ safeReadFile readCap (forbiddenDir </> "forbidden.txt")
@@ -91,7 +89,7 @@ fileWriteCapSpec = describe "File write capabilities" $ do
       
       -- Create write capability
       let writeCap = fileWriteCap [writeDir]
-          config = defaultTestConfig
+          config = defaultTestConfig tmpDir
       
       -- Try to write to permitted directory
       result <- runClodM config $ safeWriteFile writeCap (writeDir </> "new.txt") "new content"
@@ -114,7 +112,7 @@ fileWriteCapSpec = describe "File write capabilities" $ do
       
       -- Create write capability that only allows certain directories
       let writeCap = fileWriteCap [writeDir]
-          config = defaultTestConfig
+          config = defaultTestConfig tmpDir
       
       -- Try to write to forbidden directory
       result <- runClodM config $ safeWriteFile writeCap (noWriteDir </> "forbidden.txt") "forbidden content"
@@ -125,73 +123,63 @@ fileWriteCapSpec = describe "File write capabilities" $ do
         Left err -> putStrLn (show err) -- Just check that it's an error
         Right _ -> expectationFailure "Write access was granted to a forbidden directory"
 
--- | Tests for Git capabilities
+-- | Tests for Checksum Database capabilities
 gitCapSpec :: Spec
-gitCapSpec = describe "Git capabilities" $ do
-  it "allows access to git repos inside permitted directories" $ do
+gitCapSpec = describe "Database capabilities" $ do
+  it "allows basic file operations with capabilities" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Set up a test repo structure
-      let repoDir = tmpDir </> "test-repo"
-      createDirectoryIfMissing True repoDir
+      -- Set up a test directory
+      let dataDir = tmpDir </> "data-dir"
+      createDirectoryIfMissing True dataDir
       
-      -- Initialize proper git repo using actual git command
-      callProcess "git" ["-C", repoDir, "init"]
+      -- Create a file
+      System.IO.writeFile (dataDir </> "test-file.txt") "test content"
       
-      -- Create a file in the repo and commit it
-      System.IO.writeFile (repoDir </> "test-file.txt") "test content"
-      callProcess "git" ["-C", repoDir, "add", "test-file.txt"]
-      callProcess "git" ["-C", repoDir, "config", "user.name", "Test User"]
-      callProcess "git" ["-C", repoDir, "config", "user.email", "test@example.com"]
-      callProcess "git" ["-C", repoDir, "commit", "-m", "Initial commit"]
+      -- Create capabilities
+      let readCap = fileReadCap [dataDir]
+          writeCap = fileWriteCap [dataDir]
+          config = defaultTestConfig tmpDir
       
-      -- Create capability
-      let gitCapability = gitCap [repoDir]
-          config = defaultTestConfig
-      
-      -- Check repo access
-      result <- runClodM config $ safeGetModifiedFiles gitCapability repoDir
+      -- Check file access
+      readResult <- runClodM config $ safeReadFile readCap (dataDir </> "test-file.txt")
       
       -- Should succeed
-      result `shouldSatisfy` isRight
+      readResult `shouldSatisfy` isRight
       
-  it "restricts access to repos outside permitted directories" $ do
+      -- Write a new file with write capability
+      writeResult <- runClodM config $ safeWriteFile writeCap (dataDir </> "new-file.txt") "new content"
+      writeResult `shouldSatisfy` isRight
+      
+  it "restricts database operations outside permitted directories" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Set up test repos
-      let allowedRepo = tmpDir </> "allowed-repo"
-      let forbiddenRepo = tmpDir </> "forbidden-repo"
+      -- Set up test directories
+      let allowedDir = tmpDir </> "allowed-dir"
+      let forbiddenDir = tmpDir </> "forbidden-dir"
       
-      -- Create and initialize the repos
-      createDirectoryIfMissing True allowedRepo
-      createDirectoryIfMissing True forbiddenRepo
+      -- Create the directories
+      createDirectoryIfMissing True allowedDir
+      createDirectoryIfMissing True forbiddenDir
       
-      -- Initialize proper git repos
-      callProcess "git" ["-C", allowedRepo, "init"]
-      callProcess "git" ["-C", forbiddenRepo, "init"]
+      -- Create files in both dirs
+      System.IO.writeFile (allowedDir </> "allowed.txt") "allowed content"
+      System.IO.writeFile (forbiddenDir </> "forbidden.txt") "forbidden content"
       
-      -- Create files in both repos
-      System.IO.writeFile (allowedRepo </> "allowed.txt") "allowed content"
-      System.IO.writeFile (forbiddenRepo </> "forbidden.txt") "forbidden content"
+      -- Create restricted capabilities
+      let readCap = fileReadCap [allowedDir]
+          writeCap = fileWriteCap [allowedDir]
+          config = defaultTestConfig tmpDir
       
-      -- Set up basic git config and commit
-      callProcess "git" ["-C", allowedRepo, "add", "allowed.txt"]
-      callProcess "git" ["-C", allowedRepo, "config", "user.name", "Test User"]
-      callProcess "git" ["-C", allowedRepo, "config", "user.email", "test@example.com"]
-      callProcess "git" ["-C", allowedRepo, "commit", "-m", "Initial commit"]
-      
-      callProcess "git" ["-C", forbiddenRepo, "add", "forbidden.txt"]
-      callProcess "git" ["-C", forbiddenRepo, "config", "user.name", "Test User"]
-      callProcess "git" ["-C", forbiddenRepo, "config", "user.email", "test@example.com"]
-      callProcess "git" ["-C", forbiddenRepo, "commit", "-m", "Initial commit"]
-      
-      -- Create restricted capability
-      let gitCapability = gitCap [allowedRepo]
-          config = defaultTestConfig
-      
-      -- Try to access forbidden repo
-      result <- runClodM config $ safeGetModifiedFiles gitCapability forbiddenRepo
+      -- Try to access forbidden dir
+      readResult <- runClodM config $ safeReadFile readCap (forbiddenDir </> "forbidden.txt")
       
       -- Should fail with permission error
-      result `shouldSatisfy` isLeft
+      readResult `shouldSatisfy` isLeft
+      
+      -- Try to write to forbidden dir
+      writeResult <- runClodM config $ safeWriteFile writeCap (forbiddenDir </> "new-file.txt") "new content"
+      
+      -- Should fail with permission error
+      writeResult `shouldSatisfy` isLeft
 
 -- | Tests that specifically try to escape capability restrictions
 capabilityEscapePreventionSpec :: Spec
@@ -210,7 +198,7 @@ capabilityEscapePreventionSpec = describe "Capability escape prevention" $ do
       
       -- Create a limited capability
       let readCap = fileReadCap [allowedDir]
-          config = defaultTestConfig
+          config = defaultTestConfig tmpDir
       
       -- Try path traversal attack using ../
       let traversalPath = allowedDir </> ".." </> "secret" </> "secret.txt"
@@ -252,7 +240,7 @@ capabilityEscapePreventionSpec = describe "Capability escape prevention" $ do
           
           -- Create a limited capability
           let readCap = fileReadCap [allowedDir]
-              config = defaultTestConfig
+              config = defaultTestConfig tmpDir
           
           -- Try to access via symlink
           result <- runClodM config $ safeReadFile readCap linkPath
@@ -260,19 +248,3 @@ capabilityEscapePreventionSpec = describe "Capability escape prevention" $ do
           -- Should fail with permission error since the target is outside
           result `shouldSatisfy` isLeft
 
--- | Default test configuration
-defaultTestConfig :: ClodConfig
-defaultTestConfig = ClodConfig
-  { projectPath = "/"
-  , stagingDir = "/"
-  , configDir = "/"
-  , databaseFile = "/.clod/database.dhall"
-  , previousStaging = Nothing
-  , flushMode = False
-  , lastMode = False
-  , timestamp = ""
-  , currentStaging = "/"
-  , testMode = True
-  , verbose = False
-  , ignorePatterns = []
-  }

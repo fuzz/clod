@@ -11,22 +11,21 @@
 -- Maintainer  : cyborg@bionicfuzz.com
 -- Stability   : experimental
 --
--- This module contains tests for file type detection functionality.
+-- This module contains tests for file type detection functionality 
+-- using magic-based file type detection.
 
 module Clod.FileSystem.DetectionSpec (spec) where
 
 import Test.Hspec
+import Control.Monad (forM_)
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
-import qualified System.IO
+-- import qualified System.IO
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BC
-import Data.List ()
-import Data.Char ()
 
-import Clod.Types (ClodConfig(..), runClodM, fileReadCap)
-import Clod.FileSystem.Detection (safeIsTextFile)
-import Control.Monad.IO.Class ()
+import Clod.Types (runClodM, fileReadCap)
+import Clod.FileSystem.Detection (safeIsTextFile, isMimeTypeText, needsTransformation)
+import Clod.TestHelpers (defaultTestConfig)
 
 -- | Our own FileType definition for testing purposes
 data FileType = TextFile | BinaryFile
@@ -35,221 +34,121 @@ data FileType = TextFile | BinaryFile
 -- | Test specification for FileSystem.Detection module
 spec :: Spec
 spec = do
-  fileTypeDetectionSpec
-  binaryDetectionSpec
-  encodingDetectionSpec
-  extensionBasedDetectionSpec
+  magicDetectionSpec
+  mimeTypeSpec
+  transformationSpec
 
--- | Tests for file type detection
-fileTypeDetectionSpec :: Spec
-fileTypeDetectionSpec = describe "File type detection" $ do
-  it "correctly detects text files" $ do
+-- | Tests for magic-based file type detection
+magicDetectionSpec :: Spec
+magicDetectionSpec = describe "Magic-based file type detection" $ do
+  it "correctly detects text files using magic" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create a text file
+      -- Create test files with appropriate content
       let textFile = tmpDir </> "text.txt"
-      System.IO.writeFile textFile "This is a text file with plain ASCII content."
+      let htmlFile = tmpDir </> "page.html"
+      let jsonFile = tmpDir </> "data.json"
+      
+      writeFile textFile "This is plain text."
+      writeFile htmlFile "<!DOCTYPE html><html><body>HTML content</body></html>"
+      writeFile jsonFile "{\"key\": \"value\"}"
       
       -- Create a config and capabilities
-      let config = defaultConfig tmpDir
-          readCap = fileReadCap [tmpDir]
-      
-      -- Run detection
-      result <- runClodM config $ do
-        isText <- safeIsTextFile readCap textFile
-        return (if isText then TextFile else BinaryFile)
-      
-      -- Verify detection
-      case result of
-        Left err -> expectationFailure $ "Failed to detect file type: " ++ show err
-        Right fileType -> fileType `shouldBe` TextFile
-
-  it "correctly detects empty files" $ do
-    withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create an empty file
-      let emptyFile = tmpDir </> "empty.txt"
-      System.IO.writeFile emptyFile ""
-      
-      -- Create a config and capabilities
-      let config = defaultConfig tmpDir
-          readCap = fileReadCap [tmpDir]
-      
-      -- Run detection
-      result <- runClodM config $ do
-        isText <- safeIsTextFile readCap emptyFile
-        return (if isText then TextFile else BinaryFile)
-      
-      -- Verify detection
-      case result of
-        Left err -> expectationFailure $ "Failed to detect file type: " ++ show err
-        Right fileType -> fileType `shouldBe` TextFile
-
--- | Tests for binary file detection
-binaryDetectionSpec :: Spec
-binaryDetectionSpec = describe "Binary file detection" $ do
-  it "correctly detects binary files" $ do
-    withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create a binary file with non-text bytes
-      let binaryFile = tmpDir </> "binary.bin"
-      BS.writeFile binaryFile $ BS.pack [0x00, 0x01, 0x02, 0x03, 0x7F, 0xFF]
-      
-      -- Create a config and capabilities
-      let config = defaultConfig tmpDir
-          readCap = fileReadCap [tmpDir]
-      
-      -- Run detection
-      result <- runClodM config $ do
-        isText <- safeIsTextFile readCap binaryFile
-        return (if isText then TextFile else BinaryFile)
-      
-      -- Verify detection
-      case result of
-        Left err -> expectationFailure $ "Failed to detect file type: " ++ show err
-        Right fileType -> fileType `shouldBe` BinaryFile
-
-  it "correctly handles commonly known binary file extensions" $ do
-    withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create files with binary extensions but text content
-      let pdfFile = tmpDir </> "fake.pdf"
-      let pngFile = tmpDir </> "fake.png"
-      
-      -- Write text content to these files
-      System.IO.writeFile pdfFile "This is not really a PDF file"
-      System.IO.writeFile pngFile "This is not really a PNG file"
-      
-      -- Create a config and capabilities
-      let config = defaultConfig tmpDir
-          readCap = fileReadCap [tmpDir]
-      
-      -- Run detection for both files
-      pdfResult <- runClodM config $ do
-        isText <- safeIsTextFile readCap pdfFile
-        return (if isText then TextFile else BinaryFile)
-        
-      pngResult <- runClodM config $ do
-        isText <- safeIsTextFile readCap pngFile
-        return (if isText then TextFile else BinaryFile)
-      
-      -- Verify detection based on extension 
-      case pdfResult of
-        Left err -> expectationFailure $ "Failed to detect PDF file type: " ++ show err
-        Right fileType -> fileType `shouldBe` BinaryFile
-        
-      case pngResult of
-        Left err -> expectationFailure $ "Failed to detect PNG file type: " ++ show err
-        Right fileType -> fileType `shouldBe` BinaryFile
-
--- | Tests for text encoding detection
-encodingDetectionSpec :: Spec
-encodingDetectionSpec = describe "Text encoding detection" $ do
-  it "correctly handles UTF-8 text files" $ do
-    withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create a UTF-8 file with non-ASCII characters
-      let utf8File = tmpDir </> "utf8.txt"
-      System.IO.writeFile utf8File "UTF-8 text with special characters: äöüß éèê 日本語"
-      
-      -- Create a config and capabilities
-      let config = defaultConfig tmpDir
-          readCap = fileReadCap [tmpDir]
-      
-      -- Run detection
-      result <- runClodM config $ do
-        isText <- safeIsTextFile readCap utf8File
-        return (if isText then TextFile else BinaryFile)
-      
-      -- Verify detection
-      case result of
-        Left err -> expectationFailure $ "Failed to detect file type: " ++ show err
-        Right fileType -> fileType `shouldBe` TextFile
-
-  it "correctly handles files with a few non-text bytes" $ do
-    withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create a mostly text file with a few binary bytes
-      let mixedFile = tmpDir </> "mixed.txt"
-      BS.writeFile mixedFile $ BS.concat [BC.pack "This is mostly text but has a few binary bytes: ", BS.pack [0x00, 0x01, 0x02], BC.pack " and then more text."]
-      
-      -- Create a config and capabilities
-      let config = defaultConfig tmpDir
-          readCap = fileReadCap [tmpDir]
-      
-      -- Run detection
-      result <- runClodM config $ do
-        isText <- safeIsTextFile readCap mixedFile
-        return (if isText then TextFile else BinaryFile)
-      
-      -- Binary detection should identify this as binary due to null bytes
-      case result of
-        Left err -> expectationFailure $ "Failed to detect file type: " ++ show err
-        Right fileType -> fileType `shouldBe` BinaryFile
-
--- | Tests for extension-based detection
-extensionBasedDetectionSpec :: Spec
-extensionBasedDetectionSpec = describe "Extension-based detection" $ do
-  it "correctly identifies source code files as text" $ do
-    withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create sample source code files
-      let files = [ (tmpDir </> "source.js", "// JavaScript file\nconsole.log('hello');")
-                   (tmpDir </> "source.py", "# Python file\nprint('hello')")
-                   (tmpDir </> "source.hs", "-- Haskell file\nmain = putStrLn \"hello\"")
-                   (tmpDir </> "source.c", "// C file\n#include <stdio.h>\nint main() { printf(\"hello\"); return 0; }")
-                  ]
-                  
-      -- Create the files
-      mapM_ (\(path, content) -> System.IO.writeFile path content) files
-      
-      -- Create a config and capabilities
-      let config = defaultConfig tmpDir
+      let config = defaultTestConfig tmpDir
           readCap = fileReadCap [tmpDir]
       
       -- Test each file
-      results <- mapM (\(path, _) -> 
-        runClodM config $ do
-          isText <- safeIsTextFile readCap path
-          return (if isText then TextFile else BinaryFile)) files
-      
-      -- Verify all are detected as text files
-      let isCorrectType (Right TextFile) = True
-          isCorrectType _ = False
-      all isCorrectType results `shouldBe` True
-      
-  it "correctly handles common special-case extensions" $ do
+      forM_ [textFile, htmlFile, jsonFile] $ \file -> do
+        result <- runClodM config $ do
+          isText <- safeIsTextFile readCap file
+          return (if isText then TextFile else BinaryFile)
+        
+        case result of
+          Left err -> expectationFailure $ "Error detecting text file: " ++ show err
+          Right fileType -> fileType `shouldBe` TextFile
+
+  it "correctly identifies binary files" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create special case files (these might be detected differently based on extension)
-      let files = [ (tmpDir </> "executable.exe", "This pretends to be an executable")
-                   (tmpDir </> "archive.zip", "This pretends to be a zip file")
-                   (tmpDir </> "image.jpg", "This pretends to be a JPG")
-                  ]
-                  
-      -- Create the files
-      mapM_ (\(path, content) -> System.IO.writeFile path content) files
+      -- Create binary files with appropriate content
+      let pngFile = tmpDir </> "image.png"
+      let exeFile = tmpDir </> "program.exe"
+      
+      -- Write some binary data (PNG header and some random bytes)
+      BS.writeFile pngFile $ BS.pack [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D]
+      
+      -- Write EXE header
+      BS.writeFile exeFile $ BS.pack [0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00]
       
       -- Create a config and capabilities
-      let config = defaultConfig tmpDir
+      let config = defaultTestConfig tmpDir
           readCap = fileReadCap [tmpDir]
       
       -- Test each file
-      results <- mapM (\(path, _) -> 
-        runClodM config $ do
-          isText <- safeIsTextFile readCap path
-          return (if isText then TextFile else BinaryFile)) files
-      
-      -- These should be detected as binary based on extension despite having text content
-      let isCorrectType (Right BinaryFile) = True
-          isCorrectType _ = False
-      all isCorrectType results `shouldBe` True
+      forM_ [pngFile, exeFile] $ \file -> do
+        result <- runClodM config $ do
+          isText <- safeIsTextFile readCap file
+          return (if isText then TextFile else BinaryFile)
+        
+        case result of
+          Left err -> expectationFailure $ "Error detecting binary file: " ++ show err
+          Right fileType -> fileType `shouldBe` BinaryFile
 
--- | Helper function to create a default config for tests
-defaultConfig :: FilePath -> ClodConfig
-defaultConfig tmpDir = ClodConfig
-  { projectPath = tmpDir
-   stagingDir = tmpDir </> "staging"
-   configDir = tmpDir </> ".clod"
-   databaseFile = tmpDir </> ".clod" </> "database.dhall",
-  previousStaging = Nothing,
-  flushMode = False,
-  lastMode = False,
-   timestamp = "20250401-000000"
-   currentStaging = tmpDir </> "staging"
-   testMode = True,
-             verbose = False
-   ignorePatterns = []
-  }
+-- | Tests for MIME type determination
+mimeTypeSpec :: Spec
+mimeTypeSpec = describe "MIME type detection" $ do
+  it "identifies text MIME types correctly" $ do
+    -- Test various text MIME types
+    let textMimes = 
+          [ "text/plain"
+          , "text/html"
+          , "text/css"
+          , "text/javascript"
+          , "application/json"
+          , "application/xml"
+          , "application/javascript"
+          , "application/x-shell"
+          , "application/x-shellscript"
+          , "application/x-perl-script"
+          ]
+    
+    forM_ textMimes $ \mime ->
+      isMimeTypeText mime `shouldBe` True
+  
+  it "identifies non-text MIME types correctly" $ do
+    -- Test various non-text MIME types
+    let nonTextMimes = 
+          [ "application/octet-stream"
+          , "application/pdf"
+          , "application/zip"
+          , "image/png"
+          , "image/jpeg"
+          , "audio/mpeg"
+          , "video/mp4"
+          ]
+    
+    forM_ nonTextMimes $ \mime ->
+      isMimeTypeText mime `shouldBe` False
+
+-- | Tests for special file handling
+transformationSpec :: Spec
+transformationSpec = describe "Special file handling" $ do
+  it "identifies files needing special transformation" $ do
+    -- Test files that need special handling
+    let specialFiles = 
+          [ "/path/to/.gitignore"
+          , "/path/to/.env"
+          , "/path/to/logo.svg"
+          ]
+    
+    forM_ specialFiles $ \file ->
+      needsTransformation file `shouldBe` True
+  
+  it "identifies files not needing special transformation" $ do
+    -- Test regular files
+    let regularFiles = 
+          [ "/path/to/file.txt"
+          , "/path/to/image.png"
+          , "/path/to/normal.html"
+          ]
+    
+    forM_ regularFiles $ \file ->
+      needsTransformation file `shouldBe` False

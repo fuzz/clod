@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for efficient file change detection using SHA-256 hashes
 - Database of file checksums for tracking changes between runs
 - Rename detection using content checksums
+- Magic-based file type detection using libmagic
 - New flags: --flush and --last
   - --flush: Remove missing entries from the checksum database
   - --last: Reuse the previous staging directory

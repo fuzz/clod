@@ -19,26 +19,14 @@ import Control.Monad.Except ()
 import Control.Monad.Reader ()
 
 import Clod.Types
+import Clod.TestHelpers (defaultTestConfig)
 
 -- | Test the error handling with the simplified monad stack
 spec :: Spec
 spec = do
   describe "Error handling" $ do
     it "can throw and catch errors" $ do
-      let config = ClodConfig 
-            { projectPath = "/"
-            , stagingDir = "/"
-            , configDir = "/"
-            , databaseFile = "/.clod/database.dhall"
-            , previousStaging = Nothing
-            , flushMode = False
-            , lastMode = False
-            , timestamp = ""
-            , currentStaging = "/"
-            , testMode = True
-            , verbose = False
-            , ignorePatterns = []
-            }
+      let config = defaultTestConfig "/"
       
       -- Create a monad that throws and catches an error
       let action = do
@@ -56,20 +44,7 @@ spec = do
       result `shouldBe` Right ()
       
     it "propagates uncaught errors" $ do
-      let config = ClodConfig 
-            { projectPath = "/"
-             stagingDir = "/"
-             configDir = "/"
-             databaseFile = tmpDir </> ".clod" </> "database.dhall",
-  previousStaging = Nothing,
-  flushMode = False,
-  lastMode = False,
-             timestamp = ""
-             currentStaging = "/"
-             testMode = True
-             verbose = False
-             ignorePatterns = []
-            }
+      let config = defaultTestConfig "/"
       
       -- Create a monad that throws an error but doesn't catch it
       let action = throwError (ConfigError "test error") :: ClodM ()
