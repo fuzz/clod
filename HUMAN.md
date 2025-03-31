@@ -251,5 +251,6 @@ This simple setup ensures that as Claude makes changes to your codebase, you'll 
 ## Configuration
 
 The tool creates a configuration directory at `.clod/` in your project root:
-- `last-run-marker`: Tracks when the tool was last run for incremental updates
+- `db.dhall`: Tracks checksums, filename mappings and the location of the
+  previous staging directory
 - Path mappings are stored in each staging directory
