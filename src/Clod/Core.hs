@@ -48,7 +48,7 @@ import Clod.IgnorePatterns (matchesIgnorePattern, readClodIgnore, readGitIgnore)
 import Clod.FileSystem.Detection (safeFileExists, safeIsTextFile)
 import Clod.FileSystem.Operations (safeCopyFile, findAllFiles)
 import Clod.FileSystem.Processing (processFiles, writeManifestFile, createOptimizedName)
-import Clod.FileSystem.Checksums (FileStatus(Unchanged), detectFileChanges,
+import Clod.FileSystem.Checksums (FileStatus(Unchanged, Modified, New, Renamed), detectFileChanges,
                               loadDatabase, saveDatabase, updateDatabase, 
                               cleanupStagingDirectories, flushMissingEntries,
                               checksumFile)
@@ -189,6 +189,13 @@ mainLogic optAllFiles = do
   let readCap = fileReadCap [projectPath]
       writeCap = fileWriteCap [stagingDir]
 
+  -- First filter out files that match ignore patterns BEFORE any other processing
+  let filteredFiles = filter (\path -> not (matchesIgnorePattern allPatterns path)) allFiles
+  
+  when verbose $ do
+    liftIO $ hPutStrLn stderr $ "Total files: " ++ show (length allFiles)
+    liftIO $ hPutStrLn stderr $ "Filtered files (after ignore patterns): " ++ show (length filteredFiles)
+  
   -- Flush missing files from database if in flush mode
   databaseUpdated <- if flushMode
                      then flushMissingEntries readCap database projectPath
@@ -197,22 +204,51 @@ mainLogic optAllFiles = do
   -- Process all files for the manifest
   let manifestPath = stagingDir </> "_path_manifest.json"
   
-  -- Detect file changes by comparing checksums with database
-  (changedFiles, renamedFiles) <- detectFileChanges readCap databaseUpdated allFiles projectPath
+  -- Detect file changes by comparing checksums with database (using filtered files)
+  (changedFiles, renamedFiles) <- detectFileChanges readCap databaseUpdated filteredFiles projectPath
   
   -- Filter files based on database existence
-  let 
-    dbExists = not $ null $ dbFiles databaseUpdated
+  let dbExists = not $ null $ dbFiles databaseUpdated
+  
+  -- Debug output for database existence
+  when verbose $ do
+    liftIO $ hPutStrLn stderr $ "Database exists: " ++ show dbExists
+    liftIO $ hPutStrLn stderr $ "Database entries: " ++ show (length $ dbFiles databaseUpdated)
+  
+  -- Find unchanged files for debugging
+  let unchangedFiles = filter (\(_, status) -> status == Unchanged) changedFiles
+  when verbose $ do
+    liftIO $ hPutStrLn stderr $ "Unchanged files: " ++ show (length unchangedFiles) ++ " of " ++ show (length changedFiles)
     
-    -- Get paths of changed files
-    changedPaths = if not dbExists || optAllFiles
-                  then allFiles
+  -- Get paths of changed files
+  -- This logic determines which files to actually copy to the staging directory
+  -- First run (empty database) or --all flag: process all filtered files
+  -- Subsequent runs: process only modified/new/renamed files
+  let changedPaths = if not dbExists || optAllFiles
+                  then filteredFiles
                   else map fst $ filter (\(_, status) -> status /= Unchanged) changedFiles
 
-    -- Determine which files to process
-    -- First run (no database): process all files
-    -- Subsequent runs: process only modified files
-    filesToProcess = changedPaths
+  -- Determine which files to process
+  -- First run (no database): process all files
+  -- Subsequent runs: process only modified files
+  let filesToProcess = changedPaths
+  
+  -- Log detailed information about file processing
+  when verbose $ do
+    let unchangedCount = length $ filter (\(_, status) -> status == Unchanged) changedFiles
+    let newCount = length $ filter (\(_, status) -> status == New) changedFiles
+    let modifiedCount = length $ filter (\(_, status) -> status == Modified) changedFiles
+    let renamedCount = length $ filter (\(_, status) -> 
+                                case status of 
+                                  Renamed _ -> True
+                                  _ -> False) changedFiles
+    
+    liftIO $ hPutStrLn stderr $ "Database entries: " ++ show (length $ dbFiles databaseUpdated)
+    liftIO $ hPutStrLn stderr $ "Files to process: " ++ show (length filesToProcess)
+    liftIO $ hPutStrLn stderr $ "  - Unchanged: " ++ show unchangedCount
+    liftIO $ hPutStrLn stderr $ "  - New: " ++ show newCount
+    liftIO $ hPutStrLn stderr $ "  - Modified: " ++ show modifiedCount
+    liftIO $ hPutStrLn stderr $ "  - Renamed: " ++ show renamedCount
   
   -- First pass: Add all files to the manifest
   -- Create database entries for all files
@@ -223,8 +259,13 @@ mainLogic optAllFiles = do
         let optName = createOptimizedName path
         return (path, checksum, modTime, optName)
   
-  -- Create entries for all text files
-  entries <- filterM (\path -> safeIsTextFile readCap (projectPath </> path)) allFiles >>= 
+  -- Create entries only for already filtered files (just need to check if they're text files)
+  -- This ensures consistency with the filtering we already did earlier
+  entries <- filterM (\path -> do
+                -- Check if it's a text file
+                isText <- safeIsTextFile readCap (projectPath </> path)
+                return isText
+             ) filteredFiles >>= 
              mapM processFile'
   
   -- Create manifest entries
@@ -243,6 +284,8 @@ mainLogic optAllFiles = do
       liftIO $ hPutStrLn stderr "No files changed since last run"
     else do
       -- Process files that have changed (copy to staging)
+      when verbose $ do
+        liftIO $ hPutStrLn stderr $ "Files to process: " ++ show (length filesToProcess)
       (processed, skipped) <- processFiles configWithPatterns manifestPath filesToProcess False
       
       when verbose $ do

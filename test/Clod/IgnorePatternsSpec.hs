@@ -32,12 +32,12 @@ spec = do
   describe "defaultClodIgnoreContent" $ do
     it "contains expected patterns" $ do
       -- Check that the embedded content contains expected patterns
-      defaultClodIgnoreContent `shouldContain` "*.dll"
-      defaultClodIgnoreContent `shouldContain` "node_modules"
-      defaultClodIgnoreContent `shouldContain` "*.jpg"
-      defaultClodIgnoreContent `shouldContain` "*.jpeg"
-      defaultClodIgnoreContent `shouldContain` ".git"
-      defaultClodIgnoreContent `shouldContain` ".clodignore"
+      defaultClodIgnoreContentStr `shouldContain` "*.dll"
+      defaultClodIgnoreContentStr `shouldContain` "node_modules"
+      defaultClodIgnoreContentStr `shouldContain` "*.jpg"
+      defaultClodIgnoreContentStr `shouldContain` "*.jpeg"
+      defaultClodIgnoreContentStr `shouldContain` ".git"
+      defaultClodIgnoreContentStr `shouldContain` ".clodignore"
   describe "matchesIgnorePattern" $ do
     it "correctly handles basic patterns" $ do
       matchesIgnorePattern [IgnorePattern "node_modules"] "node_modules/index.js" `shouldBe` True
@@ -183,11 +183,14 @@ spec = do
             -- Read the file content and check the content
             content <- readFile testIgnorePath
             
-            -- Verify it has the header and embedded content
+            -- We can't predict exact content anymore since we're parsing Dhall
+            -- Just check that the content starts with our header 
             let expectedHeader = "# Default .clodignore file for Claude uploader\n# Add patterns to ignore files when uploading to Claude\n\n"
-                expectedContent = expectedHeader ++ defaultClodIgnoreContent
             
-            content `shouldBe` expectedContent
+            content `shouldStartWith` expectedHeader
+            -- Also check some patterns appear
+            content `shouldContain` "*.dll"
+            content `shouldContain` "node_modules"
   
   describe "readClodIgnore and readGitIgnore with ClodM" $ do
     it "correctly reads .clodignore file using ClodM" $ do
@@ -266,10 +269,13 @@ spec = do
         content `shouldContain` "*.dll"
         content `shouldContain` "node_modules"
         
-        -- Verify the content matches our embedded content (plus header)
+        -- We can't predict exact content anymore since we're parsing Dhall
+        -- Just check that the content starts with our header 
         let expectedHeader = "# Default .clodignore file for Claude uploader\n# Add patterns to ignore files when uploading to Claude\n\n"
-        let expectedContent = expectedHeader ++ defaultClodIgnoreContent
-        content `shouldBe` expectedContent
+        content `shouldStartWith` expectedHeader
+        -- Also check some patterns appear
+        content `shouldContain` "*.dll"
+        content `shouldContain` "node_modules"
     
     it "correctly reads .gitignore file using ClodM" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do

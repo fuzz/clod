@@ -164,7 +164,7 @@ runClodAppSpec = describe "runClodApp" $ do
 -- | Tests for ignore pattern handling
 ignorePatternSpec :: Spec
 ignorePatternSpec = describe "Ignore pattern handling" $ do
-  it "does not checksum ignored files" $ do
+  it "does not checksum files matching ignore patterns" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
       -- Create directories and test files
       createDirectoryIfMissing True (tmpDir </> "src")
@@ -221,9 +221,14 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
           -- The manifest should exist
           manifestExists `shouldBe` True
           
-          -- The ignored file should not be copied to staging (but may still be in the manifest)
-          -- This shows that ignorePatterns are correctly used in the file copying phase
-          -- but currently not in the manifest generation phase
+          -- Read manifest content to verify ignored file is not included
+          manifestContent <- readFile manifestPath
+          
+          -- The manifest should contain the normal file
+          manifestContent `shouldContain` "src/main.txt"
+          
+          -- The manifest should NOT contain the ignored file
+          manifestContent `shouldNotContain` "ignored/ignored.txt"
           
           -- Assert that normal file IS copied to staging
           normalExists `shouldBe` True
@@ -231,7 +236,53 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
           -- Assert that ignored file is NOT copied to staging
           ignoredExists `shouldBe` False
   
-  it "respects .clodignore patterns" $ do
+  it "excludes ignored files from checksum database" $ do
+    withSystemTempDirectory "clod-test" $ \tmpDir -> do
+      -- Create directories and test files
+      createDirectoryIfMissing True (tmpDir </> "src")
+      createDirectoryIfMissing True (tmpDir </> ".git")
+      createDirectoryIfMissing True (tmpDir </> "node_modules")
+      createDirectoryIfMissing True (tmpDir </> ".clod")
+      
+      -- Create test files
+      writeFile (tmpDir </> "src" </> "main.txt") "Normal file"
+      writeFile (tmpDir </> ".git" </> "HEAD") "ref: refs/heads/main"
+      writeFile (tmpDir </> "node_modules" </> "package.js") "module.exports = {}"
+      
+      -- Create a .clodignore file
+      writeFile (tmpDir </> ".clodignore") ".git/\nnode_modules/"
+      
+      -- Create a test config with ignore patterns
+      let config = (defaultTestConfig tmpDir) {
+            ignorePatterns = [IgnorePattern ".git/", IgnorePattern "node_modules/"]
+          }
+      
+      -- Run the application
+      result <- runClodApp config "" True False
+      
+      -- Check if it worked
+      case result of
+        Left err -> expectationFailure $ "Failed to run clod: " ++ show err
+        Right _ -> do
+          -- Check the database file
+          let dbPath = tmpDir </> ".clod" </> "db.dhall"
+          dbExists <- doesFileExist dbPath
+          
+          -- The database should exist
+          dbExists `shouldBe` True
+          
+          -- Check the database content
+          when dbExists $ do
+            dbContent <- readFile dbPath
+            
+            -- The database should contain the normal file
+            dbContent `shouldContain` "src/main.txt"
+            
+            -- The database should NOT contain ignored files
+            dbContent `shouldNotContain` "\".git/HEAD\""
+            dbContent `shouldNotContain` "\"node_modules/package.js\""
+  
+  it "respects .clodignore and .gitignore patterns for copying" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
       -- Create directories and test files
       createDirectoryIfMissing True (tmpDir </> ".git")
@@ -308,7 +359,18 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
             -- The manifest should contain src/main.js 
             manifestContent `shouldContain` "src/main.js"
             
-            -- What matters is that ignored files aren't copied to the staging directory
-            -- We've already confirmed this above (lines 212-226)
-            -- So the implementation is working correctly
-            True `shouldBe` True
+            -- The manifest should NOT contain any .git files
+            manifestContent `shouldNotContain` ".git/HEAD"
+            manifestContent `shouldNotContain` ".git/config"
+            
+            -- Also check the database file to verify it doesn't contain git files
+            let dbPath = tmpDir </> ".clod" </> "db.dhall"
+            dbExists <- doesFileExist dbPath
+            
+            -- If the database exists, check its contents
+            when dbExists $ do
+              dbContent <- readFile dbPath
+              
+              -- The database should not contain any git files
+              dbContent `shouldNotContain` "\".git/HEAD\""
+              dbContent `shouldNotContain` "\".git/config\""

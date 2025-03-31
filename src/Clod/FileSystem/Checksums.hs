@@ -72,7 +72,7 @@ module Clod.FileSystem.Checksums
   , flushMissingEntries
   ) where
 
-import Control.Exception (try, IOException)
+import Control.Exception (try, IOException, SomeException)
 import Control.Monad (when, forM)
 import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
@@ -82,16 +82,15 @@ import System.Directory (doesFileExist, doesDirectoryExist, getModificationTime,
                          removeDirectoryRecursive, createDirectoryIfMissing, renameFile)
 import System.FilePath ((</>), takeDirectory)
 import GHC.Generics (Generic)
-
 import Clod.Types
 import Clod.FileSystem.Detection (safeFileExists, safeIsTextFile)
 import Clod.FileSystem.Operations (safeReadFile)
--- import Clod.FileSystem.Processing (createOptimizedName)
 
 import qualified Crypto.Hash.SHA256 as SHA256
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.Text.IO as TextIO
-import qualified Data.Text as T
+import qualified Dhall
+import qualified Dhall.Core
 
 -- User error helper for IOErrors
 createError :: String -> IOError
@@ -156,10 +155,31 @@ loadDatabase dbPath = do
       saveDatabase dbPath db
       return db
     else do
-      -- For test purposes, create an empty database to simplify testing
-      -- In a real implementation, we would properly parse the Dhall file
-      db <- initializeDatabase
-      return db
+      -- Try to parse the database file using Dhall
+      eitherResult <- liftIO $ try @SomeException $ do
+        -- Use Dhall.inputFile to correctly parse the database file
+        sdb <- Dhall.inputFile Dhall.auto dbPath
+        -- Convert to ClodDatabase and return
+        return $ fromSerializable sdb
+      
+      case eitherResult of
+        Right db -> return db
+        Left err -> do
+          -- If parsing fails, log the error in verbose mode
+          config <- ask
+          when (verbose config) $ 
+            liftIO $ putStrLn $ "Warning: Failed to parse database: " ++ show err
+          
+          -- Create a new database
+          whenVerbose $ liftIO $ putStrLn "Creating a new empty database"
+          db <- initializeDatabase
+          -- Save it right away to ensure it's in the right format for next time
+          saveDatabase dbPath db
+          return db
+  where
+    whenVerbose action = do
+      config <- ask
+      when (verbose config) action
 
 -- | Save the database to disk using Dhall serialization
 saveDatabase :: FilePath -> ClodDatabase -> ClodM ()
@@ -173,28 +193,11 @@ saveDatabase dbPath db = do
   -- Write to temporary file first to avoid locking issues
   let tempPath = dbPath ++ ".new"
   
-  -- Simplified Dhall format - just use string serialization for now
-  -- This is a workaround due to complex format issues with Dhall
-  -- NOTE: In a real-world application, we would use proper Dhall encoding
+  -- Use proper Dhall encoding
   eitherResult <- liftIO $ try @IOException $ do
-    let fileEntriesText = show $ map 
-          (\(path, entry) -> (path, 
-                             (entryPath entry, 
-                              unChecksum (entryChecksum entry),
-                              show (entryLastModified entry),
-                              unOptimizedName (entryOptimizedName entry))))
-          (serializedFiles serializedDb)
-    
-    let checksumEntriesText = show (serializedChecksums serializedDb)
-    
-    let lastStagingText = show (serializedLastStagingDir serializedDb)
-    
-    let dhallText = T.pack $ 
-          "{ serializedFiles = " ++ fileEntriesText ++
-          ", serializedChecksums = " ++ checksumEntriesText ++
-          ", serializedLastStagingDir = " ++ lastStagingText ++
-          ", serializedLastRunTime = " ++ show (serializedLastRunTime serializedDb) ++
-          "}"
+    -- Use Dhall's encoding to create a properly formatted Dhall expression
+    let dhallExpr = Dhall.embed Dhall.inject serializedDb
+    let dhallText = Dhall.Core.pretty dhallExpr
     
     -- Write to the temp file
     TextIO.writeFile tempPath dhallText
@@ -203,7 +206,12 @@ saveDatabase dbPath db = do
   
   case eitherResult of
     Left err -> throwError $ DatabaseError $ "Failed to save database: " ++ show err
-    Right _ -> return ()
+    Right _ -> whenVerbose $ liftIO $ putStrLn $ "Successfully saved database to: " ++ dbPath
+  where
+    whenVerbose action = do
+      config <- ask
+      when (verbose config) action
+      
 
 
 -- | Update the database with a new file entry
@@ -238,7 +246,11 @@ getFileStatus db path checksum = do
     Nothing -> 
       -- Check if file with same checksum exists (renamed file)
       case Map.lookup checksumStr checksums of
-        Just oldPath -> return $ Renamed oldPath
+        Just oldPath -> 
+          -- Only consider it renamed if the old path is different
+          if oldPath /= path 
+            then return $ Renamed oldPath
+            else return New
         Nothing -> return New
 
     -- File exists in database
@@ -251,10 +263,18 @@ getFileStatus db path checksum = do
 -- | Find files that need processing (new, modified, renamed)
 findChangedFiles :: ClodDatabase -> [(FilePath, Checksum, UTCTime)] -> ClodM [(FilePath, FileStatus)]
 findChangedFiles db fileInfos = do
+  whenVerbose $ liftIO $ putStrLn $ "Processing " ++ show (length fileInfos) ++ " files for change detection"
+  
   -- Process each file
   forM fileInfos $ \(path, checksum, _) -> do
     status <- getFileStatus db path checksum
+    whenVerbose $ liftIO $ putStrLn $ "File status for " ++ path ++ ": " ++ show status
     return (path, status)
+  
+  where
+    whenVerbose action = do
+      config <- ask
+      when (verbose config) action
 
 -- | Find files that have been renamed
 findRenamedFiles :: ClodDatabase -> [(FilePath, FileStatus)] -> [(FilePath, FilePath)]
@@ -267,6 +287,9 @@ findRenamedFiles _ fileStatuses =
 -- | Detect changes by comparing current files with database
 detectFileChanges :: FileReadCap -> ClodDatabase -> [FilePath] -> FilePath -> ClodM ([(FilePath, FileStatus)], [(FilePath, FilePath)])
 detectFileChanges readCap db filePaths projectRoot = do
+  whenVerbose $ liftIO $ putStrLn $ "Detecting changes for " ++ show (length filePaths) ++ " files"
+  whenVerbose $ liftIO $ putStrLn $ "Database has " ++ show (Map.size (dbFiles db)) ++ " entries"
+  
   -- For each file, calculate checksum and get modification time
   fileInfos <- catMaybes <$> forM filePaths (\path -> do
       let fullPath = projectRoot </> path
@@ -274,27 +297,40 @@ detectFileChanges readCap db filePaths projectRoot = do
       -- Check if file exists
       fileExists <- safeFileExists readCap fullPath
       if not fileExists
-        then return Nothing
+        then do
+          whenVerbose $ liftIO $ putStrLn $ "File does not exist: " ++ fullPath
+          return Nothing
         else do
           -- Check if it's a text file
           isText <- safeIsTextFile readCap fullPath
           if not isText
-            then return Nothing
+            then do
+              whenVerbose $ liftIO $ putStrLn $ "Not a text file: " ++ fullPath
+              return Nothing
             else do
               -- Calculate checksum
               checksum <- checksumFile readCap fullPath
               -- Get modification time
               modTime <- liftIO $ getModificationTime fullPath
+              whenVerbose $ liftIO $ putStrLn $ "Processed file: " ++ path ++ " with checksum: " ++ unChecksum checksum
               return $ Just (path, checksum, modTime)
     )
   
   -- Detect file statuses
+  whenVerbose $ liftIO $ putStrLn $ "Got " ++ show (length fileInfos) ++ " files to check"
   changedFiles <- findChangedFiles db fileInfos
   
   -- Find renamed files
   let renamedFiles = findRenamedFiles db changedFiles
+  whenVerbose $ liftIO $ putStrLn $ "Found " ++ show (length renamedFiles) ++ " renamed files"
   
   return (changedFiles, renamedFiles)
+  
+  where
+    whenVerbose action = do
+      config <- ask
+      when (verbose config) action
+
 
 -- | Clean up old staging directories
 cleanupStagingDirectories :: ClodM ()

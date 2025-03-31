@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 -- |
 -- Module      : Clod.IgnorePatterns
@@ -65,10 +66,13 @@ module Clod.IgnorePatterns
   , categorizePatterns
     -- * Embedded content
   , defaultClodIgnoreContent
+  , defaultClodIgnoreContentStr
   ) where
 
 import Control.Monad (filterM)
 import Control.Monad.IO.Class (liftIO)
+import Control.Exception (try, SomeException)
+import Control.Monad.Except (throwError)
 import qualified Data.List as L
 import Data.Char (toLower)
 import qualified Data.Map.Strict as Map
@@ -76,8 +80,12 @@ import System.Directory (doesDirectoryExist, doesFileExist, getDirectoryContents
 import System.FilePath (splitDirectories, takeExtension, takeFileName, takeDirectory, (</>))
 import Data.FileEmbed (embedStringFile)
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.Text as T
+import Data.Text (Text)
+import GHC.Generics (Generic)
+import qualified Dhall
 
-import Clod.Types (ClodM, IgnorePattern(..))
+import Clod.Types (ClodM, IgnorePattern(..), ClodError(..))
 import Clod.Config (clodIgnoreFile)
 
 -- | Pattern synonyms for common ignore pattern structures
@@ -108,9 +116,21 @@ data PatternType
   | Negation   -- ^ Negation pattern to re-include files (e.g., "!important.js")
   deriving (Show, Eq)
 
--- | Default clodignore pattern content embedded at compile time
-defaultClodIgnoreContent :: String
-defaultClodIgnoreContent = BS.unpack $(embedStringFile "resources/default_clodignore.dhall")
+-- | Data type to parse ignore patterns from Dhall
+data ClodIgnorePatterns = ClodIgnorePatterns
+  { textPatterns :: [Text]  -- ^ List of patterns to ignore
+  } deriving (Show, Eq, Generic)
+
+instance Dhall.FromDhall ClodIgnorePatterns where
+  autoWith _ = Dhall.record $ ClodIgnorePatterns <$> Dhall.field "textPatterns" Dhall.auto
+
+-- | Default clodignore pattern content embedded at compile time (Dhall format)
+defaultClodIgnoreContent :: Text
+defaultClodIgnoreContent = T.pack $ BS.unpack $(embedStringFile "resources/default_clodignore.dhall")
+
+-- | Default clodignore pattern content as a string (for testing)
+defaultClodIgnoreContentStr :: String
+defaultClodIgnoreContentStr = BS.unpack $(embedStringFile "resources/default_clodignore.dhall")
 
 -- | Map used to cache compiled pattern matchers for performance
 type PatternCache = Map.Map String (FilePath -> Bool)
@@ -133,19 +153,25 @@ createDefaultClodIgnore :: FilePath -> String -> ClodM ()
 createDefaultClodIgnore projectPath ignoreFileName = do
   let ignorePath = projectPath </> ignoreFileName
   
-  -- Create a default .clodignore file directly from the embedded template
-  -- Just add a header comment to the file
-  let fileContent = "# Default .clodignore file for Claude uploader\n# Add patterns to ignore files when uploading to Claude\n\n" ++
-                    defaultClodIgnoreContent
-  
-  -- Write the file
-  liftIO $ writeFile ignorePath fileContent
+  -- Parse the Dhall content to extract patterns
+  result <- liftIO $ try $ Dhall.input Dhall.auto defaultClodIgnoreContent
+  case result of
+    Left (e :: SomeException) -> 
+      throwError $ ConfigError $ "Failed to parse default clodignore patterns: " ++ show e
+    Right (ClodIgnorePatterns patterns) -> do
+      -- Convert to plain text format with comments
+      let fileContent = "# Default .clodignore file for Claude uploader\n# Add patterns to ignore files when uploading to Claude\n\n" ++
+                       unlines (map T.unpack patterns)
+      
+      -- Write the file
+      liftIO $ writeFile ignorePath fileContent
 
 -- | Read and parse .clodignore file
 -- 
 -- This function reads patterns from a .clodignore file in the specified directory.
 -- If the file doesn't exist, a default one is created using the template in resources/default_clodignore.dhall
--- (which is now a plain text file). Comments (lines starting with '#') and empty lines are ignored.
+-- which is a proper Dhall configuration file that is parsed and converted to a plain text .clodignore file.
+-- Comments (lines starting with '#') and empty lines are ignored.
 --
 -- Uses the CLODIGNORE environment variable or defaults to ".clodignore".
 --

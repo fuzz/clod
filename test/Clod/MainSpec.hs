@@ -198,19 +198,24 @@ cliWorkflowSpec = describe "CLI workflow" $ do
           }
       
       -- Make no changes to files
-      _ <- Core.runClodApp config2 stagingDir2 False False
+      result2 <- Core.runClodApp config2 stagingDir2 False False
+      
+      -- Print any errors for debugging
+      case result2 of
+        Left err -> putStrLn $ "Second run error: " ++ show err
+        Right _ -> putStrLn "Second run completed successfully"
       
       -- Files should not be processed again
       file1Exists2 <- doesFileExist (stagingDir2 </> "file1.txt")
       file2Exists2 <- doesFileExist (stagingDir2 </> "file2.txt")
       manifestExists <- doesFileExist (stagingDir2 </> "_path_manifest.json")
       
-      -- Check that files are processed according to the implementation
-      -- The manifest is always created, and for the current implementation,
-      -- either all files are there (first run) or none (subsequent runs with no changes)
-      file1Exists2 `shouldBe` True  -- Files are processed on first run against the database
-      file2Exists2 `shouldBe` True  -- Even if they haven't changed
-      manifestExists `shouldBe` True -- Manifest is always created
+      -- Check that files are processed according to SPEC.md
+      -- The manifest is always created, but files should NOT be copied on second run
+      -- if they haven't changed
+      file1Exists2 `shouldBe` False  -- Unchanged files should NOT be processed on second run
+      file2Exists2 `shouldBe` False  -- Unchanged files should NOT be processed on second run
+      manifestExists `shouldBe` True  -- Manifest is always created
       
       -- Now modify a file and check third run
       System.IO.writeFile (projectDir </> "file1.txt") "modified content"
@@ -232,10 +237,10 @@ cliWorkflowSpec = describe "CLI workflow" $ do
       file1Exists3 <- doesFileExist (stagingDir3 </> "file1.txt")
       file2Exists3 <- doesFileExist (stagingDir3 </> "file2.txt")
       
-      -- In the current implementation, we're still on the second run against our test database
-      -- But we've modified file1.txt, so it should be processed
-      file1Exists3 `shouldBe` True  -- Modified file should be copied
-      file2Exists3 `shouldBe` True  -- Unchanged file is also copied (current behavior)
+      -- According to SPEC.md, on subsequent runs only changed files should be processed
+      -- unless the --all flag is set
+      file1Exists3 `shouldBe` True   -- Modified file should be copied
+      file2Exists3 `shouldBe` False  -- Unchanged file should NOT be copied
   
   it "creates necessary directories" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do

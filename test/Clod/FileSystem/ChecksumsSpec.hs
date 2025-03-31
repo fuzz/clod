@@ -26,7 +26,7 @@ import Data.Time.Clock (getCurrentTime)
 import Data.List (isInfixOf)
 
 import Clod.Types (ClodDatabase(..), FileEntry(..), OptimizedName(..), Checksum(..), 
-               ClodConfig(..), runClodM, fileReadCap, liftIO, IgnorePattern(..))
+               runClodM, fileReadCap, liftIO, IgnorePattern(..))
 import Clod.TestHelpers (defaultTestConfig)
 import qualified Clod.IgnorePatterns
 import Clod.FileSystem.Checksums
@@ -140,12 +140,22 @@ databaseOperationsSpec = describe "Database operations" $ do
       case result of
         Left err -> expectationFailure $ "Database operation failed: " ++ show err
         Right db -> do
-          -- In our simplified version, the database is always empty for testing
-          -- Just check that the database file was created
+          -- Check that the database file was created
           doesFileExist dbPath >>= (`shouldBe` True)
           
-          -- Since we're returning an empty database for testing, this is expected:
-          Map.size (dbFiles db) `shouldBe` 0
+          -- Now with proper Dhall parsing, we should have one file entry
+          Map.size (dbFiles db) `shouldBe` 1
+          
+          -- Verify the entry is correct
+          Map.member "test.txt" (dbFiles db) `shouldBe` True
+          
+          -- Get the entry and check its attributes
+          let entry = Map.lookup "test.txt" (dbFiles db)
+          case entry of
+            Nothing -> expectationFailure "Entry for test.txt not found in database"
+            Just e -> do
+              entryPath e `shouldBe` "test.txt"
+              entryChecksum e `shouldBe` checksum
 
 -- | Tests for change detection
 changeDetectionSpec :: Spec
