@@ -63,7 +63,7 @@ Reuse the previous staging directory:
 Remove missing entries from the database:
     clod --flush
 
-# ENVIRONMENT
+# ENVIRONMENT VARIABLES
 
 **CLOD_DIR**
 : Override the default .clod directory name
@@ -79,7 +79,7 @@ Remove missing entries from the database:
 **.clod/db.dhall**
 : Database of file checksums and metadata
 
-**_path_manifest.json**
+**_path_manifest.dhall**
 : Created in staging directory to map optimized filenames back to original paths
 
 # SEE ALSO

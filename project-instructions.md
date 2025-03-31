@@ -31,7 +31,7 @@ When the user requests changes to the codebase:
 
 When writing files back to disk:
 
-1. Look up the optimized filename in `_path_manifest.json` to find the original path
+1. Look up the optimized filename in `_path_manifest.dhall` to find the original path
 2. Use the `write_file()` function with the original path to write the file
 3. Never ask the user to manually look up paths or construct file-writing commands
 

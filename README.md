@@ -92,7 +92,6 @@ open `clod`
 ### Command-Line Options
 
 - `--all`, `-a`: Process all files, not just modified ones
-- `--modified`, `-m`: Process only modified files (default)
 - `--test`, `-t`: Run in test mode (no prompts, useful for CI)
 - `--staging-dir DIR`, `-d DIR`: Specify a directory for test mode (only used with --test)
 - `--verbose`, `-v`: Enable verbose output
@@ -138,7 +137,7 @@ After running Clod:
 
 1. Navigate to Project Knowledge in your Claude Project (Pro or Team account required)
 2. Drag files from the opened staging folder to Project Knowledge
-3. Include the `_path_manifest.json` file which maps optimized names back to original paths
+3. Include the `_path_manifest.dhall` file which maps optimized names back to original paths
 4. Paste the contents of `project-instructions.md` into the Project Instructions section
 5. **Important**: You must manually delete previous versions of these files from Project Knowledge before starting a new conversation to ensure Claude uses the most recent files
 6. Note that the staging directory is temporary and will be cleaned up on your next run of clod (or system reboot)

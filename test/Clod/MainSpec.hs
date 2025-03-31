@@ -208,7 +208,7 @@ cliWorkflowSpec = describe "CLI workflow" $ do
       -- Files should not be processed again
       file1Exists2 <- doesFileExist (stagingDir2 </> "file1.txt")
       file2Exists2 <- doesFileExist (stagingDir2 </> "file2.txt")
-      manifestExists <- doesFileExist (stagingDir2 </> "_path_manifest.json")
+      manifestExists <- doesFileExist (stagingDir2 </> "_path_manifest.dhall")
       
       -- Check that files are processed according to SPEC.md
       -- The manifest is always created, but files should NOT be copied on second run

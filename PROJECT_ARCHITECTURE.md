@@ -164,7 +164,7 @@ Clod creates staging directories with the following structure:
 staging-dir/
 ├── file1.txt
 ├── file2.txt
-├── _path_manifest.json
+├── _path_manifest.dhall
 └── ...
 ```
 

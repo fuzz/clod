@@ -5,11 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2025-03-30
+## [0.1.0] - 2025-03-31
 ### Added
 - Initial release with core functionality
 - Checksum-based file tracking to detect modified files
-- Support for efficient file change detection using SHA-256 hashes
+- Support for efficient file change detection using XXH3 (64-bit) hashes
 - Database of file checksums for tracking changes between runs
 - Rename detection using content checksums
 - Magic-based file type detection using libmagic
@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic creation of default .clodignore file
 - Case-insensitive extension matching
 - Optimized file naming for Claude AI integration
-- _path_manifest.json generation for mapping optimized filenames back to original paths
+- _path_manifest.dhall generation for mapping optimized filenames back to original paths
 - Command-line options:
   - --all: Import all files (respecting .gitignore)
   - --test: Run in test mode

@@ -80,7 +80,7 @@ clod provides a complete, end-to-end workflow for coding with Claude AI:
    - Haskell-based tool that finds modified files in your git repository
    - Respects `.gitignore` patterns and excludes binary files
    - Optimizes filenames for Claude's UI (converting paths to prefixes)
-   - Creates the _path_manifest.json file for accurately mapping filenames back to original paths
+   - Creates the _path_manifest.dhall file for accurately mapping filenames back to original paths
    
 2. **Seamless Code Modification Workflow**:
    - Project instructions that teach Claude how to use the uploaded files
@@ -106,7 +106,7 @@ Hidden files and directories (those starting with a `.` character) are transform
    - `.env` becomes `dot--env`
    - `.config/settings.ini` becomes `dot--config-settings.ini`
 
-2. The original file path with the leading dot is preserved in the `_path_manifest.json` file, ensuring Claude writes back to the correct location with the proper hidden file format.
+2. The original file path with the leading dot is preserved in the `_path_manifest.dhall` file, ensuring Claude writes back to the correct location with the proper hidden file format.
 
 3. In your conversations with Claude, you can refer to these files using either name:
    - "Can you modify the .env file?"
@@ -132,7 +132,7 @@ SVG files are automatically converted to XML files when processed by clod. This 
    - `logo.svg` becomes `logo-svg.xml`
    - `public/logo.svg` becomes `public-logo-svg.xml`
 
-2. The original file path is preserved in the `_path_manifest.json` file, ensuring Claude writes back to the correct SVG file when making changes.
+2. The original file path is preserved in the `_path_manifest.dhall` file, ensuring Claude writes back to the correct SVG file when making changes.
 
 3. In your conversations with Claude, you can refer to these files using either name:
    - "Can you modify the SVG in public/logo.svg?"

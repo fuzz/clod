@@ -25,21 +25,8 @@ import Clod.TestHelpers (defaultTestConfig)
 -- | Test specification for FileSystem.Processing module
 spec :: Spec
 spec = do
-  escapeJSONSpec
   writeManifestFileSpec
   createOptimizedNameSpec
-
--- | Tests for JSON escaping
-escapeJSONSpec :: Spec
-escapeJSONSpec = describe "escapeJSON" $ do
-  it "escapes quotes and backslashes" $ do
-    escapeJSON "text with \"quotes\"" `shouldBe` "text with \\\"quotes\\\""
-    escapeJSON "text with \\backslash" `shouldBe` "text with \\\\backslash"
-    escapeJSON "quotes \"and\" \\backslash" `shouldBe` "quotes \\\"and\\\" \\\\backslash"
-  
-  it "leaves other characters unchanged" $ do
-    escapeJSON "normal text" `shouldBe` "normal text"
-    escapeJSON "symbols" `shouldBe` "symbols"
 
 -- | Tests for manifest file creation
 writeManifestFileSpec :: Spec
@@ -48,7 +35,7 @@ writeManifestFileSpec = describe "writeManifestFile" $ do
     -- Create a temp directory
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
       -- Create a manifest file path and entries
-      let manifestPath = tmpDir </> "manifest.json"
+      let manifestPath = tmpDir </> "manifest.dhall"
           entry1 = (OptimizedName "src-main.js", OriginalPath "src/main.js")
           entry2 = (OptimizedName "src-utils.js", OriginalPath "src/utils.js")
           entries = [entry1, entry2]
@@ -70,8 +57,8 @@ writeManifestFileSpec = describe "writeManifestFile" $ do
           
           -- Check content
           content <- readFile manifestPath
-          content `shouldContain` "\"src-main.js\": \"src/main.js\""
-          content `shouldContain` "\"src-utils.js\": \"src/utils.js\""
+          content `shouldContain` "`src-main.js` = \"src/main.js\""
+          content `shouldContain` "`src-utils.js` = \"src/utils.js\""
 
 -- | Tests for optimized name creation
 createOptimizedNameSpec :: Spec

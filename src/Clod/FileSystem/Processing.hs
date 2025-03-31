@@ -21,7 +21,6 @@ module Clod.FileSystem.Processing
     -- * Manifest operations
   , createOptimizedName
   , writeManifestFile
-  , escapeJSON
   ) where
 
 import qualified Data.List as L
@@ -70,23 +69,39 @@ readManifestEntries manifestPath = do
         fileContent <- readFile manifestPath
         length fileContent `seq` return fileContent
       
-      -- Simple parsing to extract entries (basic approach)
-      let parseEntry line =
-            case break (== ':') line of
-              (optimizedPart, ':':restPart) -> do
-                let chars :: String
-                    chars = " \"," 
-                    cleanOptimized = filter (\c -> not (c `elem` chars)) optimizedPart
-                    cleanOriginal = filter (\c -> not (c `elem` chars)) restPart
-                if null cleanOptimized || null cleanOriginal
+      -- Parse Dhall record format
+      -- This parsing handles the record format with keys and string values
+      let stripQuotes s = case s of
+            '"':rest -> case reverse rest of
+              '"':revRest -> reverse revRest
+              _ -> s
+            _ -> s
+            
+          -- Strip backticks from keys if present
+          stripBackticks s = case s of
+            '`':rest -> case reverse rest of
+              '`':revRest -> reverse revRest
+              _ -> s
+            _ -> s
+      
+          -- Parse Dhall key-value pairs
+          parseEntry line = do
+            -- Look for the = sign that separates key and value
+            let parts = break (== '=') line
+            case parts of
+              (keyPart, '=':valuePart) -> do
+                let key = strip (stripBackticks (strip keyPart))
+                    value = strip (stripQuotes (strip valuePart))
+                -- Filter out any entry where key or value is empty
+                if null key || null value
                   then Nothing
                   else Just $ ManifestEntry 
-                           (OptimizedName cleanOptimized) 
-                           (OriginalPath cleanOriginal)
+                         (OptimizedName key) 
+                         (OriginalPath value)
               _ -> Nothing
               
-      -- Split by lines and parse each entry line
-      let possibleEntries = filter (\l -> ":" `L.isInfixOf` l) (lines content)
+      -- Get lines that look like Dhall record entries
+      let possibleEntries = filter (\l -> "=" `L.isInfixOf` l) (lines content)
           entries = mapMaybe parseEntry possibleEntries
       
       return entries
@@ -97,6 +112,14 @@ readManifestEntries manifestPath = do
         isJust Nothing = False
         fromJust (Just x) = x
         fromJust Nothing = error "Impossible: fromJust Nothing"
+        
+        -- Remove leading and trailing whitespace
+        strip :: String -> String
+        strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace
+        
+        -- Check if a character is whitespace
+        isSpace :: Char -> Bool
+        isSpace c = c == ' ' || c == '\t' || c == '\n' || c == '\r'
 
 -- | Process a list of files for Claude integration
 --
@@ -228,15 +251,15 @@ processFiles config manifestPath files includeInManifestOnly = do
 
 -- | Write all entries to the manifest file at once
 --
--- This creates the _path_manifest.json file that maps optimized filenames back to original paths.
--- The manifest is a simple JSON object with optimized names as keys and original paths as values.
+-- This creates the _path_manifest.dhall file that maps optimized filenames back to original paths.
+-- The manifest is a Dhall record with optimized names as keys and original paths as values.
 --
--- >>> writeManifestFile writeCap "_path_manifest.json" [(OptimizedName "app-config.js", OriginalPath "app/config.js")]
--- -- Creates a file with content: { "app-config.js": "app/config.js" }
+-- >>> writeManifestFile writeCap "_path_manifest.dhall" [(OptimizedName "app-config.js", OriginalPath "app/config.js")]
+-- -- Creates a file with content: { `app-config.js` = "app/config.js" }
 --
 -- The manifest file is crucial for Claude to know where to write files back to the filesystem.
 writeManifestFile :: FileWriteCap -- ^ Capability token with permissions to write to the staging directory
-                  -> FilePath    -- ^ Path to the manifest file (typically "_path_manifest.json")
+                  -> FilePath    -- ^ Path to the manifest file (typically "_path_manifest.dhall")
                   -> [(OptimizedName, OriginalPath)] -- ^ List of optimized name to original path mappings
                   -> ClodM ()    -- ^ Action that creates the manifest file
 writeManifestFile writeCap manifestPath entries = do
@@ -247,9 +270,13 @@ writeManifestFile writeCap manifestPath entries = do
       -- Format a single entry (with comma for all but the last)
       formatEntry idx (optimizedName, originalPath) =
         let comma = if idx == length entries - 1 then "" else ","
-            escapedOptimizedName = escapeJSON (unOptimizedName optimizedName)
-            escapedOriginalPath = escapeJSON (unOriginalPath originalPath)
-        in "  \"" ++ escapedOptimizedName ++ "\": \"" ++ escapedOriginalPath ++ "\"" ++ comma
+            -- Properly escape keys for Dhall format (backticks for non-standard identifiers)
+            dhallOptimizedName = if needsBackticks (unOptimizedName optimizedName)
+                               then "`" ++ unOptimizedName optimizedName ++ "`"
+                               else unOptimizedName optimizedName
+            -- Properly escape string values for Dhall
+            dhallOriginalPath = "\"" ++ escapeString (unOriginalPath originalPath) ++ "\""
+        in "  " ++ dhallOptimizedName ++ " = " ++ dhallOriginalPath ++ comma
   
   -- Check if path is allowed by capability
   allowed <- liftIO $ isPathAllowed (allowedWriteDirs writeCap) manifestPath
@@ -261,6 +288,24 @@ writeManifestFile writeCap manifestPath entries = do
       liftIO $ System.IO.withFile manifestPath System.IO.WriteMode $ \h -> do
         System.IO.hPutStr h content
         System.IO.hFlush h
+      
+-- | Check if a key needs to be wrapped in backticks for Dhall
+needsBackticks :: String -> Bool
+needsBackticks s = case s of
+  [] -> True
+  (c:cs) -> not (isAlpha c) || any notAllowedInIdentifier cs
+  where
+    isAlpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+    notAllowedInIdentifier c = not (isAlpha c || isDigit c || c == '_' || c == '-')
+    isDigit c = c >= '0' && c <= '9'
+    
+-- | Escape string literals for Dhall
+escapeString :: String -> String
+escapeString = concatMap escapeChar
+  where
+    escapeChar '"' = "\\\""
+    escapeChar '\\' = "\\\\"
+    escapeChar c = [c]
 
 -- | Create an optimized filename for Claude UI
 createOptimizedName :: FilePath -> OptimizedName
@@ -300,10 +345,3 @@ createOptimizedName relPath = OptimizedName finalOptimizedName
         sameGroup c1 c2 = c1 /= '/' && c2 /= '/'
         getSegment seg = filter (/= '/') seg
 
--- | Escape JSON special characters 
-escapeJSON :: String -> String
-escapeJSON = concatMap escapeChar
-  where
-    escapeChar '\\' = "\\\\"
-    escapeChar '"'  = "\\\""
-    escapeChar c    = [c]

@@ -121,7 +121,7 @@ showNextSteps config _ = unless (testMode config) $
     steps = zipWith formatStep [1..] 
       [ "Navigate to Project Knowledge in your Claude Project (Pro or Team account required)"
       , "Drag files from the staging folder to Project Knowledge"
-      , "Don't forget _path_manifest.json which maps optimized names back to original paths"
+      , "Don't forget _path_manifest.dhall which maps optimized names back to original paths"
       , "Paste the contents of project-instructions.md into the Project Instructions section"
       , "IMPORTANT: You must manually delete previous versions of these files from Project Knowledge\n   before starting a new conversation to ensure Claude uses the most recent files"
       , "Start a new conversation to see changes"

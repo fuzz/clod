@@ -228,8 +228,8 @@ mainLogic optAllFiles = do
                      then flushMissingEntries readCap database projectPath
                      else return database
   
-  -- Prepare to create the _path_manifest.json file
-  let manifestPath = stagingDir </> "_path_manifest.json"
+  -- Prepare to create the _path_manifest.dhall file
+  let manifestPath = stagingDir </> "_path_manifest.dhall"
   
   -- Detect file changes by comparing checksums with database (using filtered files)
   (changedFiles, renamedFiles) <- detectFileChanges readCap databaseUpdated filteredFiles projectPath
@@ -295,15 +295,15 @@ mainLogic optAllFiles = do
              ) filteredFiles >>= 
              mapM processFile'
   
-  -- Create entries for the _path_manifest.json file
+  -- Create entries for the _path_manifest.dhall file
   let manifestEntries = map (\(path, _, _, optName) -> 
                         (optName, OriginalPath path)) entries
   
-  -- Write the _path_manifest.json file
+  -- Write the _path_manifest.dhall file
   _ <- writeManifestFile writeCap manifestPath manifestEntries
   
   when verbose $ do
-    liftIO $ hPutStrLn stderr $ "Added " ++ show (length entries) ++ " files to _path_manifest.json"
+    liftIO $ hPutStrLn stderr $ "Added " ++ show (length entries) ++ " files to _path_manifest.dhall"
   
   -- Second pass: Only copy changed files to staging
   if null filesToProcess

@@ -57,12 +57,5 @@
 -- > safeWriteFile writeCap "/path/to/staging/src-main.hs" content
 
 module Clod.Capability 
-  ( -- * Capability types
-    FileReadCap(..)
-  , FileWriteCap(..)
-    -- * Capability construction
-  , mkFileReadCap
-  , mkFileWriteCap
-    -- * Path validation
-  , isPathAllowed
+  ( -- * Capability types and functionality are now in Types.hs
   ) where

@@ -22,6 +22,7 @@ import Data.Time (getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Hashable (hash)
 import Control.Exception (try, IOException)
+import Data.List (isInfixOf)
 
 import Clod.Core (runClodApp)
 import Clod.Types (ClodConfig(..))
@@ -98,10 +99,21 @@ main = do
                      then do
                        -- Try to read the database to get the previous staging dir
                        edb <- try $ do
-                         _ <- readFile dbPath
-                         -- For now, just return Nothing
-                         -- In a real implementation, we'd parse the file content
-                         return Nothing
+                         content <- readFile dbPath
+                         -- Look for lastStagingDir pattern in the Dhall file
+                         let contentLines = filter (\l -> "lastStagingDir" `isInfixOf` l) $ lines content
+                         case contentLines of
+                           (line:_) -> 
+                             if "None" `isInfixOf` line
+                               then return Nothing 
+                               else do
+                                 -- Extract path from "Some ./path/to/dir" format
+                                 let parts = words line
+                                 let path = if length parts > 2 
+                                            then read (last parts) :: String
+                                            else ""
+                                 return $ if null path then Nothing else Just path
+                           _ -> return Nothing
                          :: IO (Either IOException (Maybe FilePath))
                        case edb of
                          Left _ -> return Nothing

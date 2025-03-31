@@ -63,7 +63,6 @@ module Clod.FileSystem
   , ManifestEntry(..)
   , createOptimizedName
   , writeManifestFile
-  , escapeJSON
   
     -- * Re-exports from FileSystem.Transformations
   , transformFilename
@@ -82,7 +81,7 @@ import Clod.FileSystem.Detection (isModifiedSince, isTextFile, isTextDescription
 
 -- Re-export from FileSystem.Processing
 import Clod.FileSystem.Processing (processFiles, ManifestEntry(..), 
-                                  createOptimizedName, writeManifestFile, escapeJSON)
+                                  createOptimizedName, writeManifestFile)
 
 -- Re-export from FileSystem.Transformations
 import Clod.FileSystem.Transformations (transformFilename, flattenPath, 

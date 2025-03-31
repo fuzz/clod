@@ -205,7 +205,7 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
           -- Check if ignore patterns were respected
           let normalFile = tmpDir </> "staging" </> "src-main.txt"
               ignoredFile = tmpDir </> "staging" </> "ignored-ignored.txt"
-              manifestPath = tmpDir </> "staging" </> "_path_manifest.json"
+              manifestPath = tmpDir </> "staging" </> "_path_manifest.dhall"
           
           -- Check which files exist in staging
           normalExists <- doesFileExist normalFile
@@ -322,7 +322,7 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
           -- Directly check if the ignored files were copied
           let nodeModulesJs = tmpDir </> "staging" </> "node_modules-package.js"
               gitFile = tmpDir </> "staging" </> ".git-HEAD"
-              manifestPath = tmpDir </> "staging" </> "_path_manifest.json"
+              manifestPath = tmpDir </> "staging" </> "_path_manifest.dhall"
           
           -- Get all files in the staging directory
           allFiles <- getDirectoryContents (tmpDir </> "staging")
