@@ -1328,3 +1328,182 @@ copyHook oldHook pkg_descr lbi hooks flags = do
   
   installOrdinaryFiles verbosity docDir [(buildDir lbi </> "doc", "*.html")]
 ```
+
+## Patterns for Human-AI Collaboration
+
+These patterns are particularly effective when working with AI assistants on Haskell projects.
+
+### Explicit Type Annotations
+
+Add type annotations to make intentions clear and guide AI inference, even when GHC can infer types.
+
+```haskell
+-- Without annotation (ambiguous intention)
+processData input = map process . filter isValid $ input
+
+-- With annotation (clear intention)
+processData :: [InputData] -> [OutputData]
+processData input = map process . filter isValid $ input
+
+-- Intermediate type annotations for complex pipelines
+processData :: [InputData] -> [OutputData]
+processData input = 
+  let validData = filter isValid input        :: [InputData]
+      processedData = map process validData   :: [IntermediateData]
+      result = finalize <$> processedData     :: [OutputData]
+  in result
+```
+
+### Named Function Parameters
+
+Use record syntax for complex parameter sets to make function usage self-documenting.
+
+```haskell
+-- Hard to understand parameter meanings
+createUser :: String -> Int -> String -> Bool -> IO User
+createUser name age email verified = ...
+
+-- Parameters are self-documenting with records
+data CreateUserParams = CreateUserParams
+  { userName :: String
+  , userAge :: Int
+  , userEmail :: String
+  , isVerified :: Bool
+  }
+
+createUser :: CreateUserParams -> IO User
+createUser params = ...
+
+-- Usage is clear and order-independent
+newUser <- createUser CreateUserParams
+  { userName = "John"
+  , userAge = 30
+  , userEmail = "john@example.com"
+  , isVerified = True
+  }
+```
+
+### Consistent Error Handling Patterns
+
+Choose a consistent error handling approach and stick to it across the codebase.
+
+```haskell
+-- Example with ExceptT pattern
+type AppM a = ExceptT AppError IO a
+
+-- Clear error hierarchy
+data AppError
+  = ValidationError String
+  | DatabaseError DBError
+  | AuthError AuthenticationError
+  | NotFoundError Resource
+  deriving (Show, Eq)
+
+-- Helper functions for error handling
+whenM :: Monad m => m Bool -> m () -> m ()
+whenM cond action = do
+  result <- cond
+  when result action
+
+-- Usage
+validateInput :: Input -> AppM ValidatedInput
+validateInput input = do
+  whenM (pure $ null $ inputName input) $
+    throwError $ ValidationError "Name cannot be empty"
+  
+  whenM (pure $ inputAge input < 18) $
+    throwError $ ValidationError "Must be at least 18 years old"
+    
+  -- Create validated input after all checks pass
+  return ValidatedInput
+    { validName = inputName input
+    , validAge = inputAge input
+    }
+```
+
+### Build System Patterns
+
+Use simpler build configurations when possible to ease maintenance.
+
+```haskell
+-- Prefer Simple build-type over Custom when possible
+build-type: Simple
+
+-- Use common extensions across the project
+default-extensions: 
+  OverloadedStrings
+  LambdaCase
+  NamedFieldPuns
+  RecordWildCards
+  DeriveGeneric
+  DeriveDataTypeable
+
+-- Only use custom Setup.hs when actually needed
+-- For example, to generate and install man pages
+```
+
+### Module Organization for Discovery
+
+Structure modules to facilitate code discovery by humans and AI assistants.
+
+```haskell
+-- Organize hierarchically with explicit exports
+module MyApp
+  ( -- * Core types
+    AppConfig(..)
+  , AppState(..)
+    
+    -- * Running the application
+  , runApp
+  , runAppWithConfig
+    
+    -- * Error handling
+  , AppError(..)
+  , handleError
+  ) where
+
+-- Create index modules
+module MyApp.Database
+  ( -- * Re-exports from all database modules
+    module MyApp.Database.Connection
+  , module MyApp.Database.Query
+  , module MyApp.Database.Migration
+  ) where
+
+import MyApp.Database.Connection
+import MyApp.Database.Query
+import MyApp.Database.Migration
+
+-- Function purpose is clear from name
+validateUserInput :: UserInput -> Either ValidationError ValidatedInput
+```
+
+### Type-Level Documentation
+
+Embed information in types to make function behavior self-documenting.
+
+```haskell
+-- Types convey information about the function's behavior
+authRequired :: HasAuth r => RIO r Resource
+adminOnly :: HasAdminAccess r => RIO r Resource
+
+-- Status-tracking in result type
+data VerificationStatus = Pending | Verified | Rejected
+data Email (s :: VerificationStatus) = Email Text
+
+sendEmail :: Email 'Verified -> Message -> IO ()
+
+-- Directional data flow
+data Input
+data Processed
+data Output
+
+data Pipeline s a where
+  Input :: a -> Pipeline 'Input a
+  Process :: Pipeline 'Input a -> Pipeline 'Processed a
+  Output :: Pipeline 'Processed a -> Pipeline 'Output a
+
+-- Function chains are guaranteed correct order by types
+pipeline :: Data -> Pipeline 'Output Result
+pipeline = Output . Process . Input
+```

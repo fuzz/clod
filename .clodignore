@@ -1,6 +1,9 @@
 # Default .clodignore file for Claude uploader
 # Add patterns to ignore files when uploading to Claude
 
+# Default ignore patterns for Clod uploader
+# These patterns specify which files to ignore when uploading to Claude
+
 # Binary and media files
 *.dll
 *.dylib
@@ -33,3 +36,7 @@ Cargo.lock
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
+
+# Configuration files
+.gitignore
+.clodignore

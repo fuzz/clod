@@ -46,7 +46,7 @@ main = do
   let files = [
         "/Users/fuzz/Projects/clod-contain/CLAUDE.md",
         "/Users/fuzz/Projects/clod-contain/clod/README.md",
-        "/Users/fuzz/Projects/clod-contain/clod/bin/cld",
+        "/Users/fuzz/Projects/clod-contain/clod/bin/generate-man-pages.sh",
         "/Users/fuzz/Projects/clod-contain/clod/src/Clod/Types.hs"
         ]
   

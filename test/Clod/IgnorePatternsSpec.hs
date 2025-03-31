@@ -29,6 +29,15 @@ import Clod.TestHelpers (defaultTestConfig)
 -- | Test specification for ignore patterns
 spec :: Spec
 spec = do
+  describe "defaultClodIgnoreContent" $ do
+    it "contains expected patterns" $ do
+      -- Check that the embedded content contains expected patterns
+      defaultClodIgnoreContent `shouldContain` "*.dll"
+      defaultClodIgnoreContent `shouldContain` "node_modules"
+      defaultClodIgnoreContent `shouldContain` "*.jpg"
+      defaultClodIgnoreContent `shouldContain` "*.jpeg"
+      defaultClodIgnoreContent `shouldContain` ".git"
+      defaultClodIgnoreContent `shouldContain` ".clodignore"
   describe "matchesIgnorePattern" $ do
     it "correctly handles basic patterns" $ do
       matchesIgnorePattern [IgnorePattern "node_modules"] "node_modules/index.js" `shouldBe` True
@@ -153,6 +162,33 @@ spec = do
       simpleGlobMatch "file[!0-9].txt" "filea.txt" `shouldBe` True
       simpleGlobMatch "file[!0-9].txt" "file5.txt" `shouldBe` False
 
+  describe "createDefaultClodIgnore" $ do
+    it "creates a file with embedded content" $ do
+      withSystemTempDirectory "clod-test" $ \tmpDir -> do
+        -- Create a config for the test directory
+        let config = defaultTestConfig tmpDir
+            testIgnorePath = tmpDir </> "test-clodignore"
+        
+        -- Run with ClodM monad to create the file
+        result <- runClodM config $ createDefaultClodIgnore tmpDir "test-clodignore"
+        
+        -- Verify the result
+        case result of
+          Left err -> expectationFailure $ "Failed to create default ignore file: " ++ show err
+          Right _ -> do
+            -- Check that the file was created
+            fileExists <- doesFileExist testIgnorePath
+            fileExists `shouldBe` True
+            
+            -- Read the file content and check the content
+            content <- readFile testIgnorePath
+            
+            -- Verify it has the header and embedded content
+            let expectedHeader = "# Default .clodignore file for Claude uploader\n# Add patterns to ignore files when uploading to Claude\n\n"
+                expectedContent = expectedHeader ++ defaultClodIgnoreContent
+            
+            content `shouldBe` expectedContent
+  
   describe "readClodIgnore and readGitIgnore with ClodM" $ do
     it "correctly reads .clodignore file using ClodM" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do
@@ -229,6 +265,11 @@ spec = do
         content <- readFile clodIgnorePath
         content `shouldContain` "*.dll"
         content `shouldContain` "node_modules"
+        
+        -- Verify the content matches our embedded content (plus header)
+        let expectedHeader = "# Default .clodignore file for Claude uploader\n# Add patterns to ignore files when uploading to Claude\n\n"
+        let expectedContent = expectedHeader ++ defaultClodIgnoreContent
+        content `shouldBe` expectedContent
     
     it "correctly reads .gitignore file using ClodM" $ do
       withSystemTempDirectory "clod-test" $ \tmpDir -> do

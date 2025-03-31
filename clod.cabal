@@ -111,7 +111,8 @@ library
     cryptohash-sha256 >= 0.11 && < 0.12,
     base16-bytestring >= 1.0 && < 1.1,
     magic >= 1.1 && < 1.2,
-    prettyprinter >= 1.7 && < 1.8
+    prettyprinter >= 1.7 && < 1.8,
+    file-embed >= 0.0.15 && < 0.1
   default-language:  Haskell2010
   default-extensions: 
     OverloadedStrings
