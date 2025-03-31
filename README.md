@@ -11,6 +11,8 @@ For information about the capability-based security model, see [CAPABILITY_SECUR
 
 For details on man page integration, see [MAN_PAGES.md](MAN_PAGES.md) and [INSTALLING.md](INSTALLING.md).
 
+Developed by [BionicFuzz](https://bionicfuzz.com) - World-class technical leadership and execution.
+
 ## Features
 
 - Track modified files using checksums for accuracy
@@ -150,50 +152,9 @@ You can customize Clod's behavior using these environment variables:
 - `CLOD_DIR` - Override the default `.clod` directory name
 - `CLODIGNORE` - Override the default `.clodignore` filename
 
-Example:
-```bash
-# Use custom locations 
-CLOD_DIR=.config/clod CLODIGNORE=.config/clod/ignore clod
-```
-
 ### .clodignore
 
-Create a `.clodignore` file in your repository root to specify files or patterns to exclude:
-
-```
-# Binary and media files
-*.dll
-*.dylib
-*.exe
-*.gif
-*.ico
-*.jar
-*.jpg
-*.jpeg
-*.mp3
-*.mp4
-*.png
-*.so
-*.svg
-*.tar.gz
-*.zip
-
-# Build directories
-.clod
-.git
-build
-dist
-node_modules
-out
-target
-
-# Large files and lock files
-*.log
-Cargo.lock
-package-lock.json
-pnpm-lock.yaml
-yarn.lock
-```
+A `.clodignore` file in your repository root specifies files or patterns to exclude. If this file doesn't exist, Clod will create a default one for you with common patterns for binary files, build directories, and large files.
 
 ## Development Utilities
 
@@ -243,11 +204,7 @@ The architecture focuses on reliability and maintainability, delivering a system
 - `test/`: Test suite
 - `.clod/`: Configuration and state (created during execution)
 
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-### Development Workflow
+## Development Workflow
 
 1. Fork the repository
 2. Create a feature branch
@@ -255,10 +212,6 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for det
 4. Add tests for your changes
 5. Run the test suite with `cabal test`
 6. Submit a pull request
-
-### Release Process
-
-See [RELEASING.md](RELEASING.md) for details on the release process.
 
 ## License
 
