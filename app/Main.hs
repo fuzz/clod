@@ -90,7 +90,7 @@ main = do
                     else optStagingDir options
   
   -- Load previous staging directory if in "last" mode
-  let dbPath = configDir </> "checksums.dhall"
+  let dbPath = configDir </> "db.dhall"
   previousDir <- if optLast options
                  then do
                    dbExists <- doesFileExist dbPath

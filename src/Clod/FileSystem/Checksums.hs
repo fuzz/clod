@@ -114,6 +114,7 @@ calculateChecksum content =
   in Checksum (show hexHash)
 
 -- | Calculate the checksum of a file
+-- Only text files are allowed to be checksummed
 checksumFile :: FileReadCap -> FilePath -> ClodM Checksum
 checksumFile readCap path = do
   -- Check if file exists
@@ -124,7 +125,7 @@ checksumFile readCap path = do
       -- Check if it's a text file
       isText <- safeIsTextFile readCap path
       if not isText
-        then throwError $ ChecksumError "Cannot checksum binary file"
+        then throwError $ ChecksumError $ "Cannot checksum binary or ineligible file: " ++ path
         else do
           -- Read file content and calculate checksum
           content <- safeReadFile readCap path

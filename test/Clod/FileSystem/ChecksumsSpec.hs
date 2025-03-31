@@ -23,6 +23,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.Map.Strict as Map
 import Data.Time.Clock (getCurrentTime)
+import Data.List (isInfixOf)
 
 import Clod.Types (ClodDatabase(..), FileEntry(..), OptimizedName(..), Checksum(..), runClodM, fileReadCap, liftIO)
 import Clod.TestHelpers (defaultTestConfig)
@@ -56,6 +57,24 @@ checksumCalculationSpec = describe "Checksum calculation" $ do
     let content1 = "Test content"
     let content2 = "Different content"
     calculateChecksum (BC.pack content1) `shouldNotBe` calculateChecksum (BC.pack content2)
+  
+  it "refuses to checksum binary files" $ do
+    withSystemTempDirectory "clod-test" $ \tmpDir -> do
+      -- Create a binary file
+      let binaryFile = tmpDir </> "test.bin"
+      BS.writeFile binaryFile $ BS.pack [0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE, 0xFD]
+      
+      -- Create a config and capabilities
+      let config = defaultTestConfig tmpDir
+          readCap = fileReadCap [tmpDir]
+      
+      -- Attempt to calculate checksum should fail
+      result <- runClodM config $ checksumFile readCap binaryFile
+      
+      -- Should fail with appropriate error
+      case result of
+        Left err -> "Cannot checksum binary" `shouldSatisfy` (\msg -> msg `isInfixOf` show err)
+        Right _ -> expectationFailure "Should not be able to checksum binary files"
   
   it "can calculate a file checksum" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
@@ -94,7 +113,7 @@ databaseOperationsSpec = describe "Database operations" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
       -- Create a config and directories
       let config = defaultTestConfig tmpDir
-          dbPath = tmpDir </> ".clod" </> "database.dhall"
+          dbPath = tmpDir </> ".clod" </> "db.dhall"
       
       createDirectoryIfMissing True (tmpDir </> ".clod")
       
@@ -129,6 +148,40 @@ databaseOperationsSpec = describe "Database operations" $ do
 -- | Tests for change detection
 changeDetectionSpec :: Spec
 changeDetectionSpec = describe "File change detection" $ do
+  it "ignores binary files during change detection" $ do
+    withSystemTempDirectory "clod-test" $ \tmpDir -> do
+      -- Create text and binary files
+      let textFile = tmpDir </> "text.txt"
+          binaryFile = tmpDir </> "binary.bin"
+      
+      -- Write content to the files
+      writeFile textFile "This is a text file"
+      BS.writeFile binaryFile $ BS.pack [0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE, 0xFD]
+      
+      -- Create a config and capabilities
+      let config = defaultTestConfig tmpDir
+          readCap = fileReadCap [tmpDir]
+      
+      -- Create an empty database 
+      currentTime <- getCurrentTime
+      let emptyDb = ClodDatabase Map.empty Map.empty Nothing currentTime
+      
+      -- Detect changes
+      result <- runClodM config $ detectFileChanges readCap emptyDb ["text.txt", "binary.bin"] tmpDir
+      
+      -- Should only detect the text file and ignore the binary file
+      case result of
+        Left err -> expectationFailure $ "Change detection failed: " ++ show err
+        Right (changes, _) -> do
+          -- Should have one change (just the text file)
+          length changes `shouldBe` 1
+          -- The change should be for the text file only
+          let (path, status) = head changes
+          path `shouldBe` "text.txt"
+          status `shouldBe` New
+          -- The binary file should not be present in the changes
+          any (("binary.bin" ==) . fst) changes `shouldBe` False
+  
   it "identifies new files" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
       -- Create files
@@ -166,7 +219,7 @@ changeDetectionSpec = describe "File change detection" $ do
       -- Create a config and capabilities
       let config = defaultTestConfig tmpDir
           readCap = fileReadCap [tmpDir]
-          dbPath = tmpDir </> ".clod" </> "database.dhall"
+          dbPath = tmpDir </> ".clod" </> "db.dhall"
       
       createDirectoryIfMissing True (tmpDir </> ".clod")
       
@@ -221,7 +274,7 @@ changeDetectionSpec = describe "File change detection" $ do
       -- Create a config and capabilities
       let config = defaultTestConfig tmpDir
           readCap = fileReadCap [tmpDir]
-          dbPath = tmpDir </> ".clod" </> "database.dhall"
+          dbPath = tmpDir </> ".clod" </> "db.dhall"
       
       createDirectoryIfMissing True (tmpDir </> ".clod")
       

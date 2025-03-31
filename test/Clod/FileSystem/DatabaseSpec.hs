@@ -55,7 +55,7 @@ flushModeSpec = describe "Flush mode functionality" $ do
       -- Create a config and capabilities
       let config = (defaultTestConfig tmpDir) { flushMode = True }
           readCap = fileReadCap [tmpDir]
-          dbPath = tmpDir </> ".clod" </> "database.dhall"
+          dbPath = tmpDir </> ".clod" </> "db.dhall"
       
       createDirectoryIfMissing True (tmpDir </> ".clod")
       
@@ -115,7 +115,7 @@ flushModeSpec = describe "Flush mode functionality" $ do
       -- Create a config with flush mode OFF
       let config = (defaultTestConfig tmpDir) { flushMode = False }
           readCap = fileReadCap [tmpDir]
-          dbPath = tmpDir </> ".clod" </> "database.dhall"
+          dbPath = tmpDir </> ".clod" </> "db.dhall"
       
       createDirectoryIfMissing True (tmpDir </> ".clod")
       
@@ -170,7 +170,7 @@ lastFlagSpec = describe "Last flag functionality" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
       -- Create config with last mode enabled
       let config = (defaultTestConfig tmpDir) { lastMode = True }
-          dbPath = tmpDir </> ".clod" </> "database.dhall"
+          dbPath = tmpDir </> ".clod" </> "db.dhall"
           previousDir = tmpDir </> "staging" </> "previous-run"
       
       createDirectoryIfMissing True (tmpDir </> ".clod")

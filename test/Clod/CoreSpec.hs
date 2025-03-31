@@ -128,7 +128,7 @@ runClodAppSpec = describe "runClodApp" $ do
       
       -- Create a test config
       let config = defaultTestConfig tmpDir
-          dbPath = tmpDir </> ".clod" </> "database.dhall"
+          dbPath = tmpDir </> ".clod" </> "db.dhall"
           
       -- Run application
       result <- runClodApp config "" False False
