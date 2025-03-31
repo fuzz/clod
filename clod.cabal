@@ -26,7 +26,7 @@ description:         Clod (Claude Loader) is a utility for preparing and uploadi
                      the wealthiest and the scrappiest.
                      .
                      Clod implements a capability-based security model to ensure safe AI interactions 
-                     with the file system, and uses checksum-based file tracking with SHA-256 hashes 
+                     with the file system, and uses checksum-based file tracking with XXH3 hashes 
                      for detecting modified or renamed files. It uses libmagic for robust, content-based 
                      file type detection.
 license:             MIT
@@ -108,7 +108,8 @@ library
     unix >= 2.7 && < 2.8,
     deepseq >= 1.4 && < 1.5,
     lens >= 5.0 && < 5.3,
-    cryptohash-sha256 >= 0.11 && < 0.12,
+    xxhash-ffi >= 0.3 && < 0.4,
+    hashable >= 1.3 && < 1.5,
     base16-bytestring >= 1.0 && < 1.1,
     magic >= 1.1 && < 1.2,
     prettyprinter >= 1.7 && < 1.8,

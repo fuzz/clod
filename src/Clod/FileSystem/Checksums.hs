@@ -16,7 +16,7 @@
 -- Stability   : experimental
 --
 -- This module provides functions for tracking file changes using checksums.
--- It calculates SHA-256 hashes of file content and maintains a database of files
+-- It calculates XXH3 (64-bit) hashes of file content and maintains a database of files
 -- that have been processed, allowing us to detect new, modified, deleted, and renamed files.
 --
 -- The file checksum database is stored as a Dhall configuration file with the following structure:
@@ -82,15 +82,16 @@ import System.Directory (doesFileExist, doesDirectoryExist, getModificationTime,
                          removeDirectoryRecursive, createDirectoryIfMissing, renameFile)
 import System.FilePath ((</>), takeDirectory)
 import GHC.Generics (Generic)
+import Numeric (showHex)
 import Clod.Types
 import Clod.FileSystem.Detection (safeFileExists, safeIsTextFile)
 import Clod.FileSystem.Operations (safeReadFile)
 
-import qualified Crypto.Hash.SHA256 as SHA256
-import qualified Data.ByteString.Base16 as Base16
 import qualified Data.Text.IO as TextIO
 import qualified Dhall
 import qualified Dhall.Core
+import qualified Data.Digest.XXHash.FFI as XXH
+import Data.Hashable (hash)
 
 -- User error helper for IOErrors
 createError :: String -> IOError
@@ -105,12 +106,17 @@ data FileStatus
   | Renamed FilePath  -- ^ File was renamed (new path)
   deriving (Show, Eq, Generic)
 
--- | Calculate SHA-256 checksum of a ByteString
+-- | Calculate XXH3 checksum (64-bit) of a ByteString
+-- XXH3 is a fast non-cryptographic hash function with excellent performance
 calculateChecksum :: BS.ByteString -> Checksum
 calculateChecksum content =
-  let hash = SHA256.hash content
-      hexHash = Base16.encode hash
-  in Checksum (show hexHash)
+  let -- Use the newer XXH3 implementation (faster than xxh64)
+      hashVal = hash (XXH.XXH3 content)
+      -- Convert the hash to an absolute value to handle negative hash values
+      absHash = abs hashVal
+      -- Convert the 64-bit integer to a hex string for consistent representation
+      hexStr = showHex absHash ""
+  in Checksum hexStr
 
 -- | Calculate the checksum of a file
 -- Only text files are allowed to be checksummed
