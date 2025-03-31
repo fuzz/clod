@@ -42,9 +42,19 @@ import Clod.FileSystem.Detection (isTextFile)
 import Clod.FileSystem.Transformations (transformFilename)
 
 -- | A manifest entry consisting of an optimized name and original path
+--
+-- Each entry in the path manifest maps an optimized file name (as displayed in Claude) 
+-- to its original file path in the repository.
+--
+-- @
+-- ManifestEntry 
+--   { entryOptimizedName = OptimizedName "src-config-settings.js"
+--   , entryOriginalPath = OriginalPath "src/config/settings.js"
+--   }
+-- @
 data ManifestEntry = ManifestEntry 
-  { entryOptimizedName :: OptimizedName
-  , entryOriginalPath :: OriginalPath
+  { entryOptimizedName :: OptimizedName  -- ^ The optimized filename shown in Claude's UI
+  , entryOriginalPath :: OriginalPath   -- ^ The original path in the repository
   } deriving (Show, Eq)
 
 -- | Read any existing entries from a manifest file
@@ -217,7 +227,18 @@ processFiles config manifestPath files includeInManifestOnly = do
                   return (Just [entry], 0)
 
 -- | Write all entries to the manifest file at once
-writeManifestFile :: FileWriteCap -> FilePath -> [(OptimizedName, OriginalPath)] -> ClodM ()
+--
+-- This creates the _path_manifest.json file that maps optimized filenames back to original paths.
+-- The manifest is a simple JSON object with optimized names as keys and original paths as values.
+--
+-- >>> writeManifestFile writeCap "_path_manifest.json" [(OptimizedName "app-config.js", OriginalPath "app/config.js")]
+-- -- Creates a file with content: { "app-config.js": "app/config.js" }
+--
+-- The manifest file is crucial for Claude to know where to write files back to the filesystem.
+writeManifestFile :: FileWriteCap -- ^ Capability token with permissions to write to the staging directory
+                  -> FilePath    -- ^ Path to the manifest file (typically "_path_manifest.json")
+                  -> [(OptimizedName, OriginalPath)] -- ^ List of optimized name to original path mappings
+                  -> ClodM ()    -- ^ Action that creates the manifest file
 writeManifestFile writeCap manifestPath entries = do
   -- Create the manifest content with all entries
   let manifestLines = "{\n" : entryLines ++ ["\n}"]

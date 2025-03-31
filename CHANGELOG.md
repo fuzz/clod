@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic creation of default .clodignore file
 - Case-insensitive extension matching
 - Optimized file naming for Claude AI integration
-- Path manifest generation for mapping files
+- _path_manifest.json generation for mapping optimized filenames back to original paths
 - Command-line options:
   - --all: Import all files (respecting .gitignore)
   - --test: Run in test mode

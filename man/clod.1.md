@@ -16,6 +16,10 @@ Clod is a utility for preparing and uploading files to Claude AI's Project Knowl
 It tracks file changes, respects .gitignore and .clodignore patterns, and optimizes filenames 
 for Claude's UI.
 
+Special file handling includes transforming SVG files to XML format (e.g., logo.svg becomes logo-svg.xml)
+and converting hidden files to a visible format (e.g., .gitignore becomes dot--gitignore).
+All original paths are preserved in a manifest file for accurate file writing.
+
 # OPTIONS
 
 **--all**, **-a**
@@ -74,6 +78,9 @@ Remove missing entries from the database:
 
 **.clod/db.dhall**
 : Database of file checksums and metadata
+
+**_path_manifest.json**
+: Created in staging directory to map optimized filenames back to original paths
 
 # SEE ALSO
 

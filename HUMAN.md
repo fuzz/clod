@@ -4,7 +4,7 @@ A streamlined workflow system for coding with Claude AI using filesystem access 
 
 ## What is clod?
 
-Clod (meat+robot hybrid) creates a smooth integration between your local codebase and Claude AI's coding capabilities. It solves key problems when using Claude for coding:
+Clod creates a smooth integration between your local codebase and Claude AI's coding capabilities. It solves key problems when using Claude for coding:
 
 1. It optimizes your files for Claude's project knowledge UI
 2. It tracks which files have changed since your last upload
@@ -68,7 +68,7 @@ clod provides a complete, end-to-end workflow for coding with Claude AI:
    - Haskell-based tool that finds modified files in your git repository
    - Respects `.gitignore` patterns and excludes binary files
    - Optimizes filenames for Claude's UI (converting paths to prefixes)
-   - Creates a path manifest for accurately writing files back
+   - Creates the _path_manifest.json file for accurately mapping filenames back to original paths
    
 2. **Seamless Code Modification Workflow**:
    - Project instructions that teach Claude how to use the uploaded files

@@ -108,6 +108,21 @@ isTextDescription desc = do
   return $ any (\pattern -> pattern `T.isInfixOf` lowerDesc) (textPatterns patterns)
 
 -- | Special handling for files that need transformation
+--
+-- Detects files that need special handling and transformation based on their
+-- name or extension. Currently identifies:
+--
+-- * Hidden files (dotfiles) - need to be transformed to be visible
+-- * SVG files - need to be transformed to XML for Claude compatibility
+--
+-- >>> needsTransformation ".gitignore"
+-- True
+--
+-- >>> needsTransformation "logo.svg"
+-- True
+--
+-- >>> needsTransformation "regular-file.txt"
+-- False
 needsTransformation :: FilePath -> Bool
 needsTransformation path =
   -- Handle dotfiles and SVG files with special transformation

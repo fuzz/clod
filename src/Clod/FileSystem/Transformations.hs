@@ -40,8 +40,11 @@ import Clod.FileSystem.Operations (safeReadFile, safeWriteFile)
 --
 -- Currently handles:
 -- * SVG files - converted to XML extension for Claude compatibility
+--   (e.g., "logo.svg" becomes "logo-svg.xml")
 -- * Hidden files (.dotfiles) - converted to "dot--filename" format
+--   (e.g., ".gitignore" becomes "dot--gitignore")
 -- * Path flattening and sanitization for improved compatibility
+--   (e.g., "src/utils/helpers.js" becomes "src-utils-helpers.js")
 --
 -- @
 -- transformFilename "logo.svg" -- returns "logo-svg.xml"

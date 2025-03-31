@@ -11,7 +11,6 @@ clod - project instructions and safeguards for Claude AI integration
 This man page contains guidance on how to structure project instructions for Claude AI
 and implement safeguards when using clod with Claude AI's Project Knowledge feature.
 # PROJECT INSTRUCTIONS
-# Project Instructions
 *These instructions should be pasted into the Project Instructions section of your Claude Project.*
 *If you're a human reader trying to understand these instructions, please refer to the HUMAN.md file for more detailed explanations*
 

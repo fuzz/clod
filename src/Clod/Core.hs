@@ -104,7 +104,34 @@ copyToStaging readCap writeCap fullPath relPath = do
   pure $ Right Success
 
 -- | Process a file using capability-based security
-processFile :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM FileResult
+--
+-- This function runs a file through a pipeline of processing steps, with each step
+-- using capability tokens to ensure secure access. The steps are:
+--
+-- 1. Check against ignore patterns
+-- 2. Verify the file exists (using FileReadCap)
+-- 3. Verify the file is a text file (using FileReadCap)
+-- 4. Copy to staging directory (using both FileReadCap and FileWriteCap)
+--
+-- Each step must succeed for the file to be processed. If any step fails,
+-- processing stops and the reason is returned.
+--
+-- >>> -- Process a text file that exists and isn't ignored
+-- >>> processFile readCap writeCap "/project/src/main.hs" "src/main.hs"
+-- Success
+--
+-- >>> -- Process a binary file (skipped)
+-- >>> processFile readCap writeCap "/project/img/logo.png" "img/logo.png"
+-- Skipped "binary file"
+--
+-- >>> -- Process an ignored file
+-- >>> processFile readCap writeCap "/project/node_modules/package.json" "node_modules/package.json"
+-- Skipped "matched .clodignore pattern"
+processFile :: FileReadCap      -- ^ Capability for reading files
+            -> FileWriteCap     -- ^ Capability for writing files
+            -> FilePath         -- ^ Full path to the file
+            -> FilePath         -- ^ Relative path from project root
+            -> ClodM FileResult -- ^ Result of processing (Success or Skipped)
 processFile readCap writeCap fullPath relPath = do
   let steps = [ checkIgnorePatterns fullPath relPath
               , checkFileExists readCap fullPath relPath
@@ -201,7 +228,7 @@ mainLogic optAllFiles = do
                      then flushMissingEntries readCap database projectPath
                      else return database
   
-  -- Process all files for the manifest
+  -- Prepare to create the _path_manifest.json file
   let manifestPath = stagingDir </> "_path_manifest.json"
   
   -- Detect file changes by comparing checksums with database (using filtered files)
@@ -268,15 +295,15 @@ mainLogic optAllFiles = do
              ) filteredFiles >>= 
              mapM processFile'
   
-  -- Create manifest entries
+  -- Create entries for the _path_manifest.json file
   let manifestEntries = map (\(path, _, _, optName) -> 
                         (optName, OriginalPath path)) entries
   
-  -- Write the manifest file
+  -- Write the _path_manifest.json file
   _ <- writeManifestFile writeCap manifestPath manifestEntries
   
   when verbose $ do
-    liftIO $ hPutStrLn stderr $ "Added " ++ show (length entries) ++ " files to manifest"
+    liftIO $ hPutStrLn stderr $ "Added " ++ show (length entries) ++ " files to _path_manifest.json"
   
   -- Second pass: Only copy changed files to staging
   if null filesToProcess
