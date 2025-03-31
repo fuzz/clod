@@ -87,25 +87,24 @@ magicDetectionSpec = describe "Magic-based file type detection" $ do
           Left err -> expectationFailure $ "Error detecting binary file: " ++ show err
           Right fileType -> fileType `shouldBe` BinaryFile
 
--- | Create a test patterns file for testing
-setupTestTextPatterns :: FilePath -> IO ()
-setupTestTextPatterns tmpDir = do
+-- | Create a test environment for testing with embedded patterns
+setupTestEnvironment :: FilePath -> IO ()
+setupTestEnvironment tmpDir = do
+  -- Create the necessary directory structure
   let resourceDir = tmpDir </> "resources"
-      patternsFile = resourceDir </> "text_patterns.dhall"
-      content = "{ textPatterns = [ \"text\" : Text, \"ascii\" : Text, \"utf\" : Text, \"unicode\" : Text, \"json\" : Text, \"xml\" : Text, \"html\" : Text, \"yaml\" : Text, \"source\" : Text, \"script\" : Text ] }"
-      
-  -- Create resources directory and patterns file
   createDirectoryIfMissing True resourceDir
-  writeFile patternsFile content
+  
+  -- No need to create a patterns file anymore as we're using
+  -- the embedded version directly in the code
 
 -- | Tests for text file detection through description
 mimeTypeSpec :: Spec
 mimeTypeSpec = describe "File description detection" $ do
   it "identifies text file descriptions correctly" $ do
-    -- Prepare a test environment with test resources
+    -- Prepare a test environment
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create test patterns file
-      setupTestTextPatterns tmpDir
+      -- Setup test environment
+      setupTestEnvironment tmpDir
       
       -- Set config directory to our test directory
       let config = (defaultTestConfig tmpDir) { configDir = tmpDir }
@@ -130,10 +129,10 @@ mimeTypeSpec = describe "File description detection" $ do
           Right isText -> isText `shouldBe` True
   
   it "identifies non-text file descriptions correctly" $ do
-    -- Prepare a test environment with test resources
+    -- Prepare a test environment
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
-      -- Create test patterns file
-      setupTestTextPatterns tmpDir
+      -- Setup test environment
+      setupTestEnvironment tmpDir
       
       -- Set config directory to our test directory
       let config = (defaultTestConfig tmpDir) { configDir = tmpDir }

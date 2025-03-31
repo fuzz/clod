@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      : Clod.FileSystem.Detection
@@ -31,9 +32,10 @@ import Data.List (isPrefixOf)
 import Data.Time.Clock (UTCTime)
 import System.Directory (doesFileExist, getModificationTime, canonicalizePath)
 import System.FilePath ((</>), takeFileName, takeExtension)
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text as T
 import qualified Dhall
-import qualified Paths_clod as Paths
+import Data.FileEmbed (embedStringFile)
 
 import Clod.Types (ClodM, FileReadCap(..), ClodError(..), isPathAllowed, ClodConfig(..))
 import qualified Magic.Init as Magic
@@ -48,9 +50,24 @@ instance Dhall.FromDhall TextPatterns where
   autoWith _ = Dhall.record $
     TextPatterns <$> Dhall.field "textPatterns" Dhall.auto
 
--- | Get the resource path for patterns
-getResourcePath :: ClodM FilePath
-getResourcePath = do
+-- | Default text patterns content embedded at compile time
+defaultTextPatternsContent :: String
+defaultTextPatternsContent = BS.unpack $(embedStringFile "resources/text_patterns.dhall")
+
+-- | Parse the embedded text patterns content
+parseDefaultTextPatterns :: ClodM TextPatterns
+parseDefaultTextPatterns = do
+  result <- liftIO $ try $ Dhall.input Dhall.auto (T.pack defaultTextPatternsContent)
+  case result of
+    Right patterns -> return patterns
+    Left (e :: SomeException) -> 
+      throwError $ ConfigError $ "Failed to parse default text patterns: " ++ show e
+
+-- | Load text patterns for determining text files
+-- This first checks for a custom pattern file in the clod directory,
+-- and falls back to the embedded default patterns if not found.
+loadTextPatterns :: ClodM TextPatterns
+loadTextPatterns = do
   clodDir <- asks configDir
   
   -- First check if there's a custom pattern file in the clod directory
@@ -58,18 +75,13 @@ getResourcePath = do
   customExists <- liftIO $ doesFileExist customPath
   
   if customExists
-    then return customPath
-    else liftIO $ Paths.getDataFileName $ "resources" </> "text_patterns.dhall"
-
--- | Load text patterns for determining text files
-loadTextPatterns :: ClodM TextPatterns
-loadTextPatterns = do
-  patternsPath <- getResourcePath
-  result <- liftIO $ try $ Dhall.inputFile Dhall.auto patternsPath
-  case result of
-    Right patterns -> return patterns
-    Left (e :: SomeException) -> 
-      throwError $ ConfigError $ "Failed to load text patterns: " ++ show e
+    then do
+      result <- liftIO $ try $ Dhall.inputFile Dhall.auto customPath
+      case result of
+        Right patterns -> return patterns
+        Left (e :: SomeException) -> 
+          throwError $ ConfigError $ "Failed to load custom text patterns: " ++ show e
+    else parseDefaultTextPatterns
 
 -- | Check if a file is a text file using libmagic with enhanced detection
 isTextFile :: FilePath -> ClodM Bool
