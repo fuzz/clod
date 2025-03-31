@@ -955,6 +955,42 @@ processList = filter p1 . map f . filter p2
 
 ## Performance Patterns and Optimizations
 
+### Hash Function Selection and Implementation
+
+Choose the appropriate hash function based on your actual requirements, not just defaults:
+
+```haskell
+-- Non-cryptographic fast hashing (xxHash) when you just need speed
+import qualified Data.Digest.XXHash.FFI as XXH
+import Data.Hashable (hash)
+
+fastChecksum :: BS.ByteString -> Checksum
+fastChecksum content =
+  let -- Use XXH3 hash function (extremely fast)
+      hashVal = hash (XXH.XXH3 content)
+      -- Handle potential negative hash values
+      absHash = abs hashVal
+      -- Convert to hex string representation
+      hexStr = showHex absHash ""
+  in Checksum hexStr
+
+-- Cryptographic hashing when security is required
+import qualified Crypto.Hash.SHA256 as SHA256
+import qualified Data.ByteString.Base16 as Base16
+
+secureChecksum :: BS.ByteString -> Checksum
+secureChecksum content =
+  let hash = SHA256.hash content
+      hexHash = Base16.encode hash
+  in Checksum (show hexHash)
+```
+
+Performance considerations:
+- XXH3 can be 5-15x faster than cryptographic hashes like SHA-256
+- For content identification, non-cryptographic hashes are usually sufficient
+- Be careful with hash values: they may be negative and need absolute value conversion
+- Abstract hash implementation behind a consistent interface
+
 ### Efficient ByteString Usage
 
 Use ByteString for efficient text and binary data handling.
@@ -1052,6 +1088,48 @@ streamProcess xs = S.fold S.sum
                  $ S.map (*2) 
                  $ S.fromList xs
 ```
+
+### Handling Numeric Edge Cases
+
+Be aware of edge cases when working with numeric computations, especially hash functions:
+
+```haskell
+-- Example: Converting hash values to hex strings
+import Data.Hashable (hash)
+import Numeric (showHex)
+
+-- INCORRECT: May fail on negative hash values
+toHexStringUnsafe :: Hashable a => a -> String
+toHexStringUnsafe x = showHex (hash x) ""  -- Fails if hash x is negative
+
+-- CORRECT: Handle negative hash values
+toHexString :: Hashable a => a -> String
+toHexString x = 
+  let hashVal = hash x
+      -- Take absolute value to ensure showHex works correctly
+      absHash = abs hashVal
+  in showHex absHash ""
+
+-- Alternative: Use Data.Bits for bit manipulation
+import Data.Bits ((.&.))
+import Data.Word (Word64)
+
+-- This avoids negative numbers entirely by using Word64
+toHexStringBits :: Hashable a => a -> String
+toHexStringBits x =
+  let hashVal = hash x
+      -- Convert to Word64 by masking with all bits set
+      -- This preserves the exact bit pattern
+      wordVal = fromIntegral hashVal .&. (maxBound :: Word64)
+  in showHex wordVal ""
+```
+
+Common numeric pitfalls to handle:
+- Integer overflow/underflow
+- Division by zero
+- Negative values in functions expecting positives (like showHex)
+- Floating point precision errors
+- Range limitations in conversions between numeric types
 
 ### Lazy vs. Strict Evaluation Control
 
@@ -1333,6 +1411,43 @@ copyHook oldHook pkg_descr lbi hooks flags = do
 
 These patterns are particularly effective when working with AI assistants on Haskell projects.
 
+### Leveraging Types for Verification
+
+Use type checking to verify collaboratively written code and catch misunderstandings early:
+
+```haskell
+-- Example 1: Use phantom types to enforce usage patterns
+data Operation = Read | Write | ReadWrite
+
+-- File access with permission enforcement
+newtype File (p :: Operation) = File FilePath
+
+readFile :: File p -> IO String
+readFile (File path) = -- Implementation
+
+writeFile :: File 'Write -> String -> IO ()
+writeFile (File path) content = -- Implementation
+
+-- Example 2: Use GADTs to restrict operations
+data DatabaseAction a where
+  Query :: SQL -> DatabaseAction [Row]
+  Update :: SQL -> DatabaseAction Int
+  Transaction :: [DatabaseAction a] -> DatabaseAction [a]
+
+-- The return type enforces that queries return rows and updates return count
+runAction :: DatabaseAction a -> Connection -> IO a
+
+-- Example 3: Use newtypes to prevent confusion
+newtype FileReadCap = FileReadCap { allowedDirs :: [FilePath] }
+newtype FileWriteCap = FileWriteCap { writeDirs :: [FilePath] }
+
+-- Won't compile if permissions are mixed up
+readFile' :: FileReadCap -> FilePath -> IO String
+writeFile' :: FileWriteCap -> FilePath -> String -> IO ()
+```
+
+By using these patterns, the AI can catch type errors during development rather than relying solely on runtime testing. The compiler becomes an active participant in the human-AI collaboration.
+
 ### Explicit Type Annotations
 
 Add type annotations to make intentions clear and guide AI inference, even when GHC can infer types.
@@ -1441,6 +1556,38 @@ default-extensions:
 -- Only use custom Setup.hs when actually needed
 -- For example, to generate and install man pages
 ```
+
+### Library Selection for Maintainability
+
+Choose libraries that align with the project's complexity needs and maintainer expertise:
+
+```haskell
+-- Prefer libraries with clear type signatures and good documentation
+-- GOOD: Easy for humans and AI to understand this API
+-- xxhash-ffi provides a clear API with good type signatures
+import qualified Data.Digest.XXHash.FFI as XXH
+import Data.Hashable (hash)
+
+calculateChecksum :: BS.ByteString -> String
+calculateChecksum content = show $ hash (XXH.XXH3 content)
+
+-- AVOID: Complex APIs with many type parameters or advanced features 
+-- unless they're truly needed
+-- Overly complex for simple checksumming needs:
+import qualified Crypto.Hash as CH
+import qualified Crypto.Hash.Algorithms as CHA
+
+complexChecksum :: BS.ByteString -> String
+complexChecksum content = 
+  show (CH.hashWith CHA.SHA256 content :: CH.Digest CHA.SHA256)
+```
+
+Guidelines for library selection:
+- Choose libraries that match the project's complexity and maintainer expertise
+- Prefer libraries with clear documentation and simple, well-typed APIs
+- Consider the maintenance burden and dependency footprint
+- Avoid over-engineered solutions for simple problems
+- Document reasoning for library choices to help future maintainers
 
 ### Module Organization for Discovery
 

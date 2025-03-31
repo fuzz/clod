@@ -42,6 +42,11 @@ fine as XML files the user can choose to include them (by removing their entry
 from .clodignore) and we'll transform them into files with XML extensions--for
 example assets/images/logo.svg becomes assets-images-logo-svg.xml
 
+## Clean up previous staging directory
+
+Clod stores the most recent staging directory in db.dhall, when we run clod
+again it deletes the previous staging directory.
+
 ## Output
 
 This is a Unix tool and is expected to act like one. The only output from
