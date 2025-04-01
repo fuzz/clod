@@ -312,18 +312,29 @@ cabal haddock --haddock-for-hackage --enable-documentation
 
 # Step 11: Upload to Hackage (manual step)
 echo "=== Ready to upload to Hackage ==="
-echo "The following commands will upload the package to Hackage:"
+echo "The following commands will upload the package and documentation to Hackage:"
 echo
 echo "  cabal upload --publish dist-newstyle/sdist/clod-$VERSION.tar.gz"
-echo "  cabal upload --documentation --publish dist-newstyle/clod-$VERSION-docs.tar.gz"
+echo "  curl --http1.1 for documentation (using HTTP 1.1 to work around Hackage networking issues)"
 echo
-echo "Do you want to run these commands now? [y/N]"
+
+echo "Do you want to upload to Hackage now? [y/N]"
 read -r upload_response
 if [[ "$upload_response" =~ ^[Yy] ]]; then
   echo "Uploading package to Hackage..."
   cabal upload --publish "dist-newstyle/sdist/clod-$VERSION.tar.gz"
-  echo "Uploading documentation to Hackage..."
-  cabal upload --documentation --publish "dist-newstyle/clod-$VERSION-docs.tar.gz"
+  
+  echo "Please enter your Hackage username for documentation upload:"
+  read -r username
+  
+  echo "Uploading documentation for clod-$VERSION"
+  echo "You will be prompted for your Hackage password."
+  # Must force HTTP 1.1 to get around networking issues
+  curl --http1.1 -X PUT --data-binary "@dist-newstyle/clod-$VERSION-docs.tar.gz" \
+    -H 'Content-Type: application/x-tar' \
+    -H 'Content-Encoding: gzip' \
+    --user "$username" \
+    "https://hackage.haskell.org/package/clod-$VERSION/docs"
 else
   echo "Skipping Hackage upload. Run the commands manually when ready."
   exit 0
