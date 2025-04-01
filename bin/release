@@ -256,26 +256,9 @@ cabal build --disable-documentation
 echo "=== Building man pages for verification ==="
 "$PROJECT_ROOT/bin/install-man-pages.sh" /tmp/clod-man-test
 
-# Step 8: Commit updated man pages
-echo "=== Committing updated man pages ==="
-echo "Do you want to commit updated man pages? [y/N]"
-read -r man_response
-if [[ "$man_response" =~ ^[Yy] ]]; then
-  git add man/
-  # Use || true to prevent script exit if no changes to commit
-  git commit -m "Update man pages for release $VERSION" || true
-  
-  # Only ask to push if there are changes to push
-  if git diff --quiet origin/main; then
-    echo "No changes to push."
-  else
-    echo "Do you want to push the commit to origin? [y/N]"
-    read -r push_man_response
-    if [[ "$push_man_response" =~ ^[Yy] ]]; then
-      git push origin
-    fi
-  fi
-fi
+# Step 8: Verify man pages were generated correctly (no commit needed, already done earlier)
+echo "=== Verifying man pages ==="
+ls -la "$PROJECT_ROOT/man/" | grep -E "\.md$"
 
 # Step 9: Create tag
 echo "=== Creating Git tag ==="
