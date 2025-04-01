@@ -74,7 +74,6 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ReaderT, ask, asks, local, runReaderT)
 import Data.String (IsString(..))
 import GHC.Generics (Generic)
-import Data.Typeable (Typeable)
 import Data.List (isPrefixOf)
 import System.Directory (canonicalizePath)
 import Data.Time.Clock (UTCTime)
@@ -125,7 +124,6 @@ data ClodConfig = ClodConfig
   , lastMode       :: !Bool          -- ^ Whether to use the previous staging directory
   , ignorePatterns :: ![IgnorePattern] -- ^ Patterns from .gitignore and .clodignore
   } deriving stock (Show, Eq, Generic)
-    deriving anyclass (Typeable)
 
 -- | Result of processing a file
 -- 
@@ -135,7 +133,6 @@ data FileResult
   = Success              -- ^ File was successfully processed
   | Skipped !String      -- ^ File was skipped with the given reason
   deriving stock (Show, Eq, Generic)
-  deriving anyclass (Typeable)
 
 -- | Errors that can occur during Clod operation
 --
@@ -149,7 +146,6 @@ data ClodError
   | DatabaseError !String              -- ^ Error related to checksums database
   | ChecksumError !String              -- ^ Error related to checksum calculation
   deriving stock (Show, Eq, Generic)
-  deriving anyclass (Typeable)
 
 -- | Newtype for file checksums to prevent mixing with other string types
 newtype Checksum = Checksum { unChecksum :: String }
@@ -169,7 +165,7 @@ data FileEntry = FileEntry
   , entryLastModified :: !UTCTime        -- ^ Last modified time
   , entryOptimizedName :: !OptimizedName -- ^ Name in staging directory
   } deriving stock (Show, Eq, Generic)
-    deriving anyclass (Typeable, FromDhall, ToDhall, FromJSON, ToJSON)
+    deriving anyclass (FromDhall, ToDhall, FromJSON, ToJSON)
 
 -- | Main database structure
 data ClodDatabase = ClodDatabase
@@ -178,7 +174,6 @@ data ClodDatabase = ClodDatabase
   , dbLastStagingDir :: !(Maybe FilePath)          -- ^ Previous staging directory
   , dbLastRunTime    :: !UTCTime                  -- ^ Time of last run
   } deriving stock (Show, Eq, Generic)
-    deriving anyclass (Typeable)
 
 -- | Serialization-friendly version of ClodDatabase
 data SerializableClodDatabase = SerializableClodDatabase
@@ -187,7 +182,7 @@ data SerializableClodDatabase = SerializableClodDatabase
   , serializedLastStagingDir :: !(Maybe FilePath)          -- ^ Previous staging directory
   , serializedLastRunTime    :: !UTCTime                  -- ^ Time of last run
   } deriving stock (Show, Eq, Generic)
-    deriving anyclass (Typeable, FromDhall, ToDhall, FromJSON, ToJSON)
+    deriving anyclass (FromDhall, ToDhall, FromJSON, ToJSON)
 
 -- | Convert to serializable form
 toSerializable :: ClodDatabase -> SerializableClodDatabase

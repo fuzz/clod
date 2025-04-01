@@ -51,6 +51,11 @@ import Clod.FileSystem.Operations (safeReadFile, safeWriteFile)
 -- transformFilename ".gitignore" -- returns "dot--gitignore"
 -- transformFilename "image.png" -- returns "image.png" (no change)
 -- @
+-- | Helper function to check if a string starts with a character
+startsWith :: String -> Char -> Bool
+startsWith [] _ = False
+startsWith (x:_) c = x == c
+
 transformFilename :: String -> String -> String
 transformFilename name original
   -- SVG files must be transformed to XML for Claude compatibility
@@ -59,9 +64,9 @@ transformFilename name original
       let baseName = take (length name - 4) name
       in sanitizeFilename $ baseName ++ "-svg.xml"
   -- Handle hidden files (those starting with a dot)
-  | not (null name) && head name == '.' =
+  | not (null name) && name `startsWith` '.' =
       -- Remove the leading dot and add the "dot--" prefix
-      "dot--" ++ tail name
+      "dot--" ++ drop 1 name
   -- Handle empty filename
   | null name = "unnamed"
   -- Match test case explicitly to keep compatibility with tests

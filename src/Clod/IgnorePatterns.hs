@@ -482,6 +482,11 @@ matchFromRoot ptn = \path ->
 -- simpleGlobMatch "file[0-9].txt" "file5.txt"  -- Returns True
 -- simpleGlobMatch "*.txt" "file.md"  -- Returns False
 -- @
+
+-- | Helper function to check if a string starts with a character
+startsWith :: String -> Char -> Bool
+startsWith [] _ = False
+startsWith (x:_) c = x == c
 simpleGlobMatch :: String -> FilePath -> Bool
 simpleGlobMatch ptn = \filepath -> matchGlob ptn filepath
   where
@@ -529,14 +534,14 @@ simpleGlobMatch ptn = \filepath -> matchGlob ptn filepath
       -- Beginning of character class: [
       ((CharClassStart cs), (c:path')) ->
         let (classSpec, rest) = span (/= ']') cs
-            negated = not (null classSpec) && head classSpec == '!'
-            actualClass = if negated then tail classSpec else classSpec
+            negated = not (null classSpec) && classSpec `startsWith` '!'
+            actualClass = if negated then drop 1 classSpec else classSpec
         in if null rest  -- Malformed pattern, no closing ]
            then False
            else 
              let matches = matchCharacterClass actualClass c
                  result = if negated then not matches else matches
-             in result && matchGlob (tail rest) path'
+             in result && matchGlob (drop 1 rest) path'
         
       -- Regular character matching
       ((p:ps), (c:cs)) ->

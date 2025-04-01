@@ -241,9 +241,11 @@ changeDetectionSpec = describe "File change detection" $ do
           -- Should have one change (just the text file)
           length changes `shouldBe` 1
           -- The change should be for the text file only
-          let (path, status) = head changes
-          path `shouldBe` "text.txt"
-          status `shouldBe` New
+          case changes of
+            (path, status):_ -> do
+              path `shouldBe` "text.txt"
+              status `shouldBe` New
+            [] -> expectationFailure "Expected at least one change"
           -- The binary file should not be present in the changes
           any (("binary.bin" ==) . fst) changes `shouldBe` False
   
@@ -271,9 +273,11 @@ changeDetectionSpec = describe "File change detection" $ do
           -- Should have one change
           length changes `shouldBe` 1
           -- The change should be a new file
-          let (path, status) = head changes
-          path `shouldBe` "new.txt"
-          status `shouldBe` New
+          case changes of
+            (path, status):_ -> do
+              path `shouldBe` "new.txt"
+              status `shouldBe` New
+            [] -> expectationFailure "Expected at least one change"
   
   it "identifies modified files" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
@@ -321,9 +325,11 @@ changeDetectionSpec = describe "File change detection" $ do
           -- Should have one change
           length changes `shouldBe` 1
           -- The change should be a modified file
-          let (path, status) = head changes
-          path `shouldBe` "test.txt"
-          status `shouldBe` Modified
+          case changes of
+            (path, status):_ -> do
+              path `shouldBe` "test.txt"
+              status `shouldBe` Modified
+            [] -> expectationFailure "Expected at least one change"
 
   it "identifies renamed files" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
@@ -378,14 +384,18 @@ changeDetectionSpec = describe "File change detection" $ do
           -- Should have one change
           length changes `shouldBe` 1
           -- The change should be a renamed file
-          let (path, status) = head changes
-          path `shouldBe` "renamed.txt"
-          case status of
-            Renamed oldPath -> oldPath `shouldBe` "original.txt"
-            _ -> expectationFailure $ "Expected renamed status, got: " ++ show status
+          case changes of
+            (path, status):_ -> do
+              path `shouldBe` "renamed.txt"
+              case status of
+                Renamed oldPath -> oldPath `shouldBe` "original.txt"
+                _ -> expectationFailure $ "Expected renamed status, got: " ++ show status
+            [] -> expectationFailure "Expected at least one change"
           
           -- Should include the renamed file in the renamed list
           length renamed `shouldBe` 1
-          let (newPath, oldPath) = head renamed
-          newPath `shouldBe` "renamed.txt"
-          oldPath `shouldBe` "original.txt"
+          case renamed of
+            (newPath, oldPath):_ -> do
+              newPath `shouldBe` "renamed.txt"
+              oldPath `shouldBe` "original.txt"
+            [] -> expectationFailure "Expected at least one renamed file"

@@ -334,10 +334,13 @@ createOptimizedName relPath = OptimizedName finalOptimizedName
       -- Remove trailing slash if present
       let cleanDir = if L.isSuffixOf "/" dir then init dir else dir
       -- Apply hidden file transformation if needed
-      in if not (null cleanDir) && head cleanDir == '.'
-         then "dot--" ++ tail cleanDir
+      in if not (null cleanDir) && cleanDir `startsWith` '.'
+         then "dot--" ++ drop 1 cleanDir
          else cleanDir
-         
+      where
+        startsWith :: String -> Char -> Bool
+        startsWith [] _ = False
+        startsWith (x:_) c = x == c
     -- Split a path into its directory components
     splitPath :: FilePath -> [String]
     splitPath path = filter (not . null) $ map getSegment $ L.groupBy sameGroup path

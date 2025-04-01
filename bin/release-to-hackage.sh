@@ -28,7 +28,26 @@ cabal check
 echo "=== Testing build ==="
 cabal build --disable-documentation
 
-# 6. Create tag
+# 6. Update man pages
+echo "=== Updating man pages ==="
+bin/generate-man-pages.sh
+
+# 7. Commit updated man pages
+echo "=== Committing updated man pages ==="
+echo "Do you want to commit updated man pages? [y/N]"
+read -r man_response
+if [[ "$man_response" =~ ^[Yy] ]]; then
+  git add man/
+  git commit -m "Update man pages for release $VERSION"
+  
+  echo "Do you want to push the commit to origin? [y/N]"
+  read -r push_man_response
+  if [[ "$push_man_response" =~ ^[Yy] ]]; then
+    git push origin
+  fi
+fi
+
+# 8. Create tag
 echo "=== Creating Git tag ==="
 echo "Do you want to create git tag v$VERSION? [y/N]"
 read -r response
@@ -42,7 +61,7 @@ if [[ "$response" =~ ^[Yy] ]]; then
   fi
 fi
 
-# 7. Upload to Hackage
+# 9. Upload to Hackage
 echo "=== Ready to upload to Hackage ==="
 echo "The following commands will upload the package to Hackage:"
 echo
