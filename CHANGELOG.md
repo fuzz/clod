@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.10] - 2025-04-01
+## [0.1.11] - 2025-04-01
 
 Version bump to pick up script changes
 
