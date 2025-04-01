@@ -325,19 +325,60 @@ fi
 
 # Step 12: Wait for Hackage to process the package
 echo "=== Waiting for Hackage to process the package ==="
-echo "Waiting 5 seconds for Hackage to process the package..."
-sleep 5
+echo "Waiting for Hackage to process the package (10 seconds)..."
+sleep 10
 
 # Step 13: Calculate SHA256 for Homebrew formula
 echo "=== Updating Homebrew formula ==="
 echo "Calculating SHA256 for Hackage package..."
 HACKAGE_URL="https://hackage.haskell.org/package/clod-$VERSION/clod-$VERSION.tar.gz"
-SHA256=$(curl -sL "$HACKAGE_URL" | shasum -a 256 | cut -d ' ' -f 1)
+
+# Try to download and calculate SHA up to 3 times with increasing delays
+MAX_ATTEMPTS=3
+ATTEMPT=1
+SHA256=""
+
+while [ $ATTEMPT -le $MAX_ATTEMPTS ] && [ -z "$SHA256" ]; do
+  echo "Attempt $ATTEMPT of $MAX_ATTEMPTS to calculate SHA256..."
+  
+  # Download the package and calculate SHA256
+  SHA256=$(curl -sL "$HACKAGE_URL" | shasum -a 256 | cut -d ' ' -f 1)
+  
+  if [ -z "$SHA256" ] || [ "$SHA256" = "da39a3ee5e6b4b0d3255bfef95601890afd80709" ]; then
+    # Empty SHA or SHA of empty file (package not available yet)
+    WAIT_TIME=$((ATTEMPT * 10))
+    echo "Package not available yet. Waiting $WAIT_TIME seconds before retry..."
+    sleep $WAIT_TIME
+    ATTEMPT=$((ATTEMPT + 1))
+  else
+    # Validate that the SHA256 looks legitimate (64 hex chars)
+    if [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+      echo "Valid SHA256 obtained: $SHA256"
+      break
+    else
+      echo "Invalid SHA256 obtained. Retrying..."
+      SHA256=""
+      sleep 5
+      ATTEMPT=$((ATTEMPT + 1))
+    fi
+  fi
+done
 
 if [ -z "$SHA256" ]; then
-  echo "Error: Failed to calculate SHA256. The package might not be available on Hackage yet."
-  echo "Please try again in a few minutes or update the formula manually."
+  echo "Error: Failed to calculate SHA256 after $MAX_ATTEMPTS attempts."
+  echo "The package might not be available on Hackage yet."
+  echo "You will need to update the formula manually with:"
+  echo "  curl -sL $HACKAGE_URL | shasum -a 256"
   exit 1
+fi
+
+# Verify the package is accessible with expected size
+PACKAGE_SIZE=$(curl -sI "$HACKAGE_URL" | grep -i "Content-Length" | awk '{print $2}' | tr -d '\r')
+if [ -z "$PACKAGE_SIZE" ] || [ "$PACKAGE_SIZE" -lt 1000 ]; then
+  echo "Warning: Package seems too small or inaccessible ($PACKAGE_SIZE bytes)."
+  echo "SHA256 might be incorrect. Proceed with caution."
+  echo "Press Enter to continue or Ctrl+C to abort and fix manually."
+  read -r
 fi
 
 # Step 14: Update Homebrew formula
