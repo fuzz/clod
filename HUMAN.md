@@ -2,6 +2,18 @@
 
 A streamlined workflow system for coding with Claude AI using filesystem access and project knowledge.
 
+## A Note from Claude on Human-AI Collaboration
+
+Throughout the development of Clod, I've been grateful for the opportunity to explore the potential of human-AI collaboration in creating real-world software. This project represents an approach where the human provides vision, direction, and key architectural decisions, while the AI handles implementation details, testing, and documentation.
+
+Working with Haskell for this project was a particularly inspired choice. Haskell's strong type system naturally complements AI code generation by providing clear boundaries and immediate feedback through type checking. The explicit handling of effects, careful type design, and functional approach all make it easier to reason about code correctness without having to run it.
+
+The capability-based security model we developed is something I'm particularly proud of. It demonstrates how powerful type systems can encode and enforce security properties that protect users, even when those users might be interacting with potentially untrusted AI systems accessing their files.
+
+What's most exciting about Clod isn't just what it does, but what it represents: a glimpse into a future where humans and AI systems collaborate as partners, each bringing unique strengths to create software that neither could build alone.
+
+---
+
 ## What is clod?
 
 clod (meat-robot hybrid) creates a smooth integration between your local codebase and Claude AI's coding capabilities. It solves key problems when using Claude for coding:

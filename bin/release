@@ -1,0 +1,233 @@
+#!/bin/bash
+# Comprehensive release script for clod
+# Combines man page generation, Hackage release, and Homebrew formula update
+
+set -e  # Exit on any error
+
+cd "$(dirname "$0")/.."
+PROJECT_ROOT=$(pwd)
+
+# Extract current version from cabal file
+CURRENT_VERSION=$(grep "^version:" clod.cabal | sed 's/version: *//')
+echo "Current version: $CURRENT_VERSION"
+
+# Calculate default new version (increment last number)
+if [[ $CURRENT_VERSION =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+  MAJOR="${BASH_REMATCH[1]}"
+  MINOR="${BASH_REMATCH[2]}"
+  PATCH="${BASH_REMATCH[3]}"
+  DEFAULT_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+else
+  # Fall back to simple increment if version format is unexpected
+  DEFAULT_VERSION="$CURRENT_VERSION+1"
+fi
+
+# Ask user for new version
+read -p "Enter new version [$DEFAULT_VERSION]: " VERSION
+VERSION=${VERSION:-$DEFAULT_VERSION}
+
+echo "=== Starting comprehensive release process for clod $VERSION ==="
+
+# Update version in cabal file
+echo "Updating version in clod.cabal..."
+sed -i '' "s/^version:[ ]*$CURRENT_VERSION/version:             $VERSION/" clod.cabal
+
+# Update CHANGELOG.md with new version entry
+echo "Updating CHANGELOG.md..."
+TODAY=$(date +"%Y-%m-%d")
+
+# Check if a changelog entry for this version already exists
+if ! grep -q "^## \[$VERSION\]" CHANGELOG.md; then
+  # Insert new version entry at the top of the changelog (after the header)
+  sed -i '' "1,/^# Changelog/ s/^# Changelog/# Changelog\n\n## [$VERSION] - $TODAY\n\n- Add your changes here\n\nThis release was created through human-AI pair programming, with Claude as the primary code author and Fuzz Leonard providing guidance, architectural decisions, and final review.\n/" CHANGELOG.md
+  
+  # Open CHANGELOG.md for editing
+  echo "Opening CHANGELOG.md for editing. Please add your release notes."
+  echo "Press Enter to continue once you've saved the changes."
+  ${EDITOR:-nano} CHANGELOG.md
+  read -p "Press Enter to continue with the release process..."
+fi
+
+# Commit version bump changes
+echo "=== Committing version bump changes ==="
+echo "Do you want to commit the version bump changes? [y/N]"
+read -r version_response
+if [[ "$version_response" =~ ^[Yy] ]]; then
+  git add clod.cabal CHANGELOG.md
+  git commit -m "Bump version to $VERSION"
+  
+  echo "Do you want to push the version bump commit to origin? [y/N]"
+  read -r push_version_response
+  if [[ "$push_version_response" =~ ^[Yy] ]]; then
+    git push origin
+  fi
+fi
+
+# Step 1: Generate man pages
+echo "=== Updating man pages ==="
+"$PROJECT_ROOT/bin/generate-man-pages.sh"
+
+# Step 2: Verify tests pass
+echo "=== Running tests ==="
+cabal test
+
+# Step 3: Generate documentation
+echo "=== Building documentation for Hackage ==="
+cabal haddock --haddock-for-hackage
+
+# Step 4: Create source distribution
+echo "=== Creating source distribution ==="
+cabal sdist
+
+# Step 5: Check package
+echo "=== Checking package ==="
+cabal check
+
+# Step 6: Test build
+echo "=== Testing build ==="
+cabal build --disable-documentation
+
+# Step 7: Build man pages for verification
+echo "=== Building man pages for verification ==="
+"$PROJECT_ROOT/bin/install-man-pages.sh" /tmp/clod-man-test
+
+# Step 8: Commit updated man pages
+echo "=== Committing updated man pages ==="
+echo "Do you want to commit updated man pages? [y/N]"
+read -r man_response
+if [[ "$man_response" =~ ^[Yy] ]]; then
+  git add man/
+  # Use || true to prevent script exit if no changes to commit
+  git commit -m "Update man pages for release $VERSION" || true
+  
+  # Only ask to push if there are changes to push
+  if git diff --quiet origin/main; then
+    echo "No changes to push."
+  else
+    echo "Do you want to push the commit to origin? [y/N]"
+    read -r push_man_response
+    if [[ "$push_man_response" =~ ^[Yy] ]]; then
+      git push origin
+    fi
+  fi
+fi
+
+# Step 9: Create tag
+echo "=== Creating Git tag ==="
+echo "Do you want to create git tag v$VERSION? [y/N]"
+read -r response
+if [[ "$response" =~ ^[Yy] ]]; then
+  # Check if tag already exists
+  if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+    echo "Tag v$VERSION already exists!"
+    echo "Do you want to force update it? [y/N]"
+    read -r force_tag
+    if [[ "$force_tag" =~ ^[Yy] ]]; then
+      git tag -fa "v$VERSION" -m "Release version $VERSION"
+      echo "Tag v$VERSION updated."
+    else
+      echo "Skipping tag creation."
+    fi
+  else
+    git tag -a "v$VERSION" -m "Release version $VERSION"
+    echo "Tag v$VERSION created."
+  fi
+  
+  echo "Do you want to push the tag to origin? [y/N]"
+  read -r push_response
+  if [[ "$push_response" =~ ^[Yy] ]]; then
+    git push origin "v$VERSION"
+  fi
+fi
+
+# Step 10: Generate documentation package for Hackage
+echo "=== Generating Hackage documentation package ==="
+echo "Generating documentation package for Hackage..."
+cabal haddock --haddock-for-hackage --enable-documentation
+
+# Step 11: Upload to Hackage (manual step)
+echo "=== Ready to upload to Hackage ==="
+echo "The following commands will upload the package to Hackage:"
+echo
+echo "  cabal upload --publish dist-newstyle/sdist/clod-$VERSION.tar.gz"
+echo "  cabal upload --documentation --publish dist-newstyle/clod-$VERSION-docs.tar.gz"
+echo
+echo "Do you want to run these commands now? [y/N]"
+read -r upload_response
+if [[ "$upload_response" =~ ^[Yy] ]]; then
+  echo "Uploading package to Hackage..."
+  cabal upload --publish "dist-newstyle/sdist/clod-$VERSION.tar.gz"
+  echo "Uploading documentation to Hackage..."
+  cabal upload --documentation --publish "dist-newstyle/clod-$VERSION-docs.tar.gz"
+else
+  echo "Skipping Hackage upload. Run the commands manually when ready."
+  exit 0
+fi
+
+# Step 12: Wait for Hackage to process the package
+echo "=== Waiting for Hackage to process the package ==="
+echo "Waiting 5 seconds for Hackage to process the package..."
+sleep 5
+
+# Step 13: Calculate SHA256 for Homebrew formula
+echo "=== Updating Homebrew formula ==="
+echo "Calculating SHA256 for Hackage package..."
+HACKAGE_URL="https://hackage.haskell.org/package/clod-$VERSION/clod-$VERSION.tar.gz"
+SHA256=$(curl -sL "$HACKAGE_URL" | shasum -a 256 | cut -d ' ' -f 1)
+
+if [ -z "$SHA256" ]; then
+  echo "Error: Failed to calculate SHA256. The package might not be available on Hackage yet."
+  echo "Please try again in a few minutes or update the formula manually."
+  exit 1
+fi
+
+# Step 14: Update Homebrew formula
+FORMULA_PATH="../homebrew-tap/Formula/clod.rb"
+if [ ! -f "$FORMULA_PATH" ]; then
+  echo "Error: Homebrew formula not found at $FORMULA_PATH"
+  exit 1
+fi
+
+echo "Updating Homebrew formula with new version $VERSION and SHA256 $SHA256..."
+
+# Update version and SHA in the formula file
+# First update the version in both the URL and the comment
+sed -i '' "s|clod-[0-9][0-9.]*\/clod-[0-9][0-9.]*|clod-$VERSION\/clod-$VERSION|g" "$FORMULA_PATH"
+# Then update the SHA256
+sed -i '' "s|sha256 \"[a-f0-9]\+\"|sha256 \"$SHA256\"|g" "$FORMULA_PATH"
+
+# Step 15: Commit and push Homebrew formula update
+echo "=== Committing Homebrew formula update ==="
+echo "Do you want to commit and push the updated Homebrew formula? [y/N]"
+read -r brew_response
+if [[ "$brew_response" =~ ^[Yy] ]]; then
+  (
+    cd "../homebrew-tap"
+    git add "Formula/clod.rb"
+    git commit -m "Update clod formula to version $VERSION"
+    
+    echo "Do you want to push the formula update to origin? [y/N]"
+    read -r push_brew_response
+    if [[ "$push_brew_response" =~ ^[Yy] ]]; then
+      git push origin
+    fi
+  )
+fi
+
+echo "=== Release process complete! ==="
+echo "Version $VERSION has been released to Hackage and the Homebrew formula has been updated."
+echo "Remember to test the Homebrew installation with: brew install --build-from-source ./homebrew-tap/Formula/clod.rb"
+
+# Alternative Haskell implementation note:
+# This script could be rewritten in Haskell using libraries like:
+# - process: For executing external commands
+# - turtle: A shell scripting library
+# - optparse-applicative: For command line option parsing
+# - filepath/directory: For file path manipulation
+# - bytestring/text: For text processing
+#
+# Benefits would include:
+# - Type safety
+# - Better error handling
+# - Integration with the rest of the Haskell codebase
+# - Potential for more modular design

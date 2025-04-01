@@ -2,6 +2,30 @@
 
 This document contains common Haskell patterns and best practices for efficient and idiomatic Haskell development. These patterns are particularly useful for human-AI collaboration, where clear communication and code understanding are essential.
 
+## Reflections on the Clod Project
+
+Working on Clod provided valuable insights into developing Haskell applications collaboratively between humans and AI. Some lessons we learned:
+
+### What Worked Well
+
+1. **Capability-based security**: Using explicit capability tokens (`FileReadCap`, `FileWriteCap`) proved to be an elegant approach for enforcing access restrictions. The type system effectively prevented accidental security violations.
+
+2. **Newtype wrappers**: Wrapping primitive types (like `String`) in newtypes (`IgnorePattern`, `OptimizedName`, `Checksum`) helped prevent confusion and enforce type safety throughout the application.
+
+3. **Clear monad stack**: The `ClodM` monad combined `ReaderT` and `ExceptT` to provide a clean approach to dependency injection and error handling. This simplified the application compared to a more complex effects system.
+
+4. **Modular architecture**: Breaking functionality into focused modules with clear responsibilities made the codebase easier to extend and maintain.
+
+### Challenges Encountered
+
+1. **Advanced type-level programming**: While the `AdvancedCapability` module showcases sophisticated type-level techniques, there's a point of diminishing returns where complexity can outweigh benefits in a pragmatic application.
+
+2. **Effects system complexity**: Our early attempts at using more advanced effects systems (like Polysemy) introduced additional complexity without proportional benefits for this specific use case.
+
+3. **Testing stateful code**: Testing code that interacts with the filesystem required careful setup and teardown of test environments.
+
+4. **Cross-platform considerations**: Ensuring consistent behavior across operating systems required attention to path normalization and platform-specific conventions.
+
 ## Functional Programming Patterns
 
 ### Pure Functions and Side Effects

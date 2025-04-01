@@ -12,6 +12,17 @@ The key principles are:
 3. **Restricted Paths**: Capabilities only allow operations within specific directory trees
 4. **Capability Verification**: All operations verify capabilities before execution
 
+## Why This Matters
+
+When an AI assistant like Claude interacts with a filesystem, strict security boundaries are essential. The capability system in Clod ensures that:
+
+1. Operations can only access files in explicitly allowed directories
+2. Path traversal attacks (using `../` or symbolic links) are prevented
+3. Capabilities must be explicitly passed to functions that need them
+4. The security model is made visible in the code through explicit tokens
+
+This approach significantly reduces the risk of accidentally exposing sensitive files or allowing unauthorized modifications.
+
 ## Implementation Approaches
 
 Clod implements two capability-based security approaches:

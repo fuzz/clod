@@ -28,6 +28,11 @@ description:         Clod (Claude Loader) is a utility for preparing and uploadi
                      with the file system, and uses checksum-based file tracking with XXH3 hashes 
                      for detecting modified or renamed files. It uses libmagic for robust, content-based 
                      file type detection.
+                     .
+                     META NOTE: This project represents a breakthrough in human-AI collaboration, with Claude
+                     (the AI assistant from Anthropic) writing 99% of the code based on guidance from Fuzz 
+                     Leonard. The result demonstrates how powerful AI tools are best created through 
+                     collaborative approaches where humans and AI systems leverage their respective strengths.
 license:             MIT
 license-file:        LICENSE
 author:              Fuzz Leonard
