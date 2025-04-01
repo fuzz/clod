@@ -16,6 +16,7 @@ import Test.Hspec
 import System.Directory (doesFileExist)
 import System.Process (readProcess)
 import Control.Exception (try, SomeException)
+import Data.List (isInfixOf)
 
 -- | Test that man page source files exist
 spec :: Spec
@@ -31,10 +32,15 @@ spec = do
       man7Exists `shouldBe` True
       man8Exists `shouldBe` True
       
-    it "has a working generate-man-pages.sh script" $ do
-      -- Check that the generate-man-pages.sh script exists
-      scriptExists <- doesFileExist "bin/generate-man-pages.sh"
+    it "has man page generation in the release script" $ do
+      -- Check that the release script exists and contains man page generation
+      scriptExists <- doesFileExist "bin/release"
       scriptExists `shouldBe` True
+      
+      -- Verify the release script contains man page generation logic
+      releaseScript <- readFile "bin/release"
+      let containsManPageGen = "Generating man pages" `isInfixOf` releaseScript
+      containsManPageGen `shouldBe` True
       
     it "can find pandoc for man page generation" $ do
       -- This test is not critical - it's okay if pandoc isn't available
