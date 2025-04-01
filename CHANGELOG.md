@@ -1,9 +1,10 @@
-# Changelog for Clod
+# Changelog
 
-All notable changes to this project will be documented in this file.
+## [0.1.7] - 2025-04-01
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+This entire project was created through human-AI pair programming, with Claude
+as the sole code and documentation author and Fuzz providing guidance,
+architectural decision, and final review.
 
 ## [0.1.6] - 2025-03-31
 ### Changed
