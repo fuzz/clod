@@ -48,24 +48,189 @@ if ! grep -q "^## \[$VERSION\]" CHANGELOG.md; then
   read -p "Press Enter to continue with the release process..."
 fi
 
-# Commit version bump changes
-echo "=== Committing version bump changes ==="
-echo "Do you want to commit the version bump changes? [y/N]"
+# Step 1: Generate man pages
+echo "=== Generating man pages ==="
+
+# Inline implementation of generate-man-pages.sh
+# Ensure pandoc is available
+if ! command -v pandoc &> /dev/null; then
+    echo "Error: pandoc is required to generate man pages"
+    echo "Please install pandoc: https://pandoc.org/installing.html"
+    exit 1
+fi
+
+# Make sure the source man directory exists
+mkdir -p "$PROJECT_ROOT/man"
+
+# Generate clod(1) - Command reference
+echo "Generating clod(1).md source file..."
+cat > "$PROJECT_ROOT/man/clod.1.md" << EOF
+% CLOD(1) Clod $VERSION
+% Fuzz Leonard & Claude <cyborg@bionicfuzz.com>
+% March 2025
+
+# NAME
+
+clod - Claude Loader for preparing files for Claude AI's Project Knowledge
+
+# SYNOPSIS
+
+**clod** [*OPTIONS*]
+
+# DESCRIPTION
+
+Clod is a utility for preparing and uploading files to Claude AI's Project Knowledge feature. 
+It tracks file changes, respects .gitignore and .clodignore patterns, and optimizes filenames 
+for Claude's UI.
+
+# OPTIONS
+
+**--all**, **-a**
+: Process all files (respecting .gitignore and .clodignore)
+
+**--test**, **-t**
+: Run in test mode (no prompts, useful for CI)
+
+**--staging-dir** *DIR*, **-d** *DIR*
+: Specify a directory for test mode (only used with --test)
+
+**--verbose**, **-v**
+: Enable verbose output
+
+**--flush**, **-f**
+: Remove missing entries from the database
+
+**--last**, **-l**
+: Reuse the previous staging directory
+
+**--help**
+: Show help information
+
+**--version**
+: Show version information
+
+# EXAMPLES
+
+Run clod (first run processes all files, subsequent runs process only modified files):
+    clod
+
+Force processing of all files:
+    clod --all
+
+Run in test mode with an optional test directory:
+    clod --test --staging-dir /path/to/test/dir
+    
+Reuse the previous staging directory:
+    clod --last
+    
+Remove missing entries from the database:
+    clod --flush
+
+# ENVIRONMENT VARIABLES
+
+**CLOD_DIR**
+: Override the default .clod directory name
+
+**CLODIGNORE**
+: Override the default .clodignore filename
+
+# FILES
+
+**.clodignore**
+: Pattern file similar to .gitignore for excluding files
+
+**.clod/database.dhall**
+: Database of file checksums and metadata
+
+# SEE ALSO
+
+**clod(7)** for information about project instructions and safeguards.
+**clod(8)** for a complete workflow guide to using clod with Claude AI.
+EOF
+
+# Generate clod(7) - Project instructions and safeguards
+if [ -f "$PROJECT_ROOT/project-instructions.md" ] && [ -f "$PROJECT_ROOT/guardrails.md" ]; then
+  echo "Generating clod(7).md source file..."
+  
+  # Create the header section
+  cat > "$PROJECT_ROOT/man/clod.7.md" << EOF
+% CLOD(7) Clod $VERSION
+% Fuzz Leonard & Claude <cyborg@bionicfuzz.com>
+% March 2025
+
+# NAME
+
+clod - project instructions and safeguards for Claude AI integration
+
+# DESCRIPTION
+
+This man page contains guidance on how to structure project instructions for Claude AI
+and implement safeguards when using clod with Claude AI's Project Knowledge feature.
+# PROJECT INSTRUCTIONS
+EOF
+
+  # Append project-instructions.md content
+  cat "$PROJECT_ROOT/project-instructions.md" >> "$PROJECT_ROOT/man/clod.7.md"
+
+  # Append guardrails.md content
+  echo "" >> "$PROJECT_ROOT/man/clod.7.md"
+  echo "# SAFEGUARDS" >> "$PROJECT_ROOT/man/clod.7.md"
+  cat "$PROJECT_ROOT/guardrails.md" >> "$PROJECT_ROOT/man/clod.7.md"
+else
+  echo "Warning: Cannot generate clod(7).md, source files missing"
+fi
+
+# Generate clod(8) - Complete workflow guide
+if [ -f "$PROJECT_ROOT/HUMAN.md" ]; then
+  echo "Generating clod(8).md source file..."
+  
+  # Create the header section
+  cat > "$PROJECT_ROOT/man/clod.8.md" << EOF
+% CLOD(8) Clod $VERSION
+% Fuzz Leonard & Claude <cyborg@bionicfuzz.com>
+% March 2025
+
+# NAME
+
+clod - complete workflow guide for using clod with Claude AI
+
+# DESCRIPTION
+
+This man page contains a comprehensive guide to using clod with Claude AI,
+including best practices, workflow details, and integration tips.
+
+# ABOUT CLAUDE'S INVOLVEMENT
+
+This project represents a novel approach to software development, where Claude
+(the AI assistant from Anthropic) served as the primary programmer, implementing 
+nearly 100% of the codebase based on guidance from Fuzz Leonard. This
+human-AI collaboration model leverages each collaborator's strengths, with
+the human providing vision, requirements and architectural decisions, and the
+AI handling implementation details, testing, and most documentation.
+EOF
+
+  # Append HUMAN.md content
+  cat "$PROJECT_ROOT/HUMAN.md" >> "$PROJECT_ROOT/man/clod.8.md"
+else
+  echo "Warning: Cannot generate clod(8).md, HUMAN.md missing"
+fi
+
+echo "Man page markdown generation completed"
+
+# Commit version bump changes and man pages together
+echo "=== Committing version bump and man page changes ==="
+echo "Do you want to commit these changes? [y/N]"
 read -r version_response
 if [[ "$version_response" =~ ^[Yy] ]]; then
-  git add clod.cabal CHANGELOG.md
-  git commit -m "Bump version to $VERSION"
+  git add clod.cabal CHANGELOG.md man/
+  git commit -m "Bump version to $VERSION and update man pages"
   
-  echo "Do you want to push the version bump commit to origin? [y/N]"
+  echo "Do you want to push the commit to origin? [y/N]"
   read -r push_version_response
   if [[ "$push_version_response" =~ ^[Yy] ]]; then
     git push origin
   fi
 fi
-
-# Step 1: Generate man pages
-echo "=== Updating man pages ==="
-"$PROJECT_ROOT/bin/generate-man-pages.sh"
 
 # Step 2: Verify tests pass
 echo "=== Running tests ==="
