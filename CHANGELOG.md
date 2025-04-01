@@ -5,12 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2025-03-31
+### Changed
+- Simplified man page installation in Homebrew formula
+- Improved cross-platform compatibility
+- Removed complex installation scripts in favor of more standard approaches
+- Enhanced Homebrew formula based on best practices
+
 ## [0.1.5] - 2025-03-31
 ### Changed
-- Improved robustness of man page installation scripts
-- Enhanced debugging for installation issues
-- Made scripts more resilient to various environment configurations
-- Fixed path handling edge cases in installation process
+- Major improvements to man page installation script:
+  - Added detailed logging to aid in debugging installation issues
+  - Enhanced pandoc detection to work in multiple environment configurations
+  - Ensured script gracefully handles missing files or tools
+  - Added fallbacks for all error conditions to prevent build failures
+  - Fixed path handling edge cases in installation process
+- Updated Homebrew formula to better handle installation requirements
 
 ## [0.1.4] - 2025-03-31
 ### Changed
