@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.9] - 2025-04-01
+
+Version bump to pick up script changes
+
 ## [0.1.8] - 2025-04-01
 
 Version bump to pick up script changes
