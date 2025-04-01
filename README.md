@@ -5,34 +5,6 @@
 
 Clod is a utility for preparing and uploading files to Claude AI's Project Knowledge feature. It tracks file changes using checksums, respects `.gitignore` and `.clodignore` patterns, and optimizes filenames for Claude's UI. By efficiently handling file selection and staging, it can significantly reduce AI development costs by 50% or more.
 
-## Origin Story: Bootstrapping AI Collaboration
-
-This project has a unique origin story that demonstrates the evolving nature of human-AI collaboration:
-
-1. It began as a simple shell script created by Claude when I (Fuzz) became frustrated with manually copying files back and forth for Claude Projects.
-
-2. This initial script was basic but functional enough to bootstrap the process - Claude was helping build a tool to make working with Claude more efficient.
-
-3. After gaining access to Claude Code (Anthropic's CLI coding tool), we decided to rebuild the tool in Haskell, choosing the language for its expressiveness and sophisticated type system that allows Claude to understand code without running it.
-
-4. The project went through several iterations - from Claude Project to Claude Code and back - with each environment offering different strengths. The Claude UI was better for conversations and planning, while Claude Code excelled at implementation details.
-
-5. The result is a tool that cuts Claude API usage by approximately 50% by offloading appropriate work to Claude Projects rather than using Claude Code for everything.
-
-This bootstrapping approach exemplifies how the most exciting AI tools often emerge from human-AI collaborations that play to each party's strengths. While professional developers at large companies might not need to optimize costs, for students, bootstrapped founders, nonprofit operators, educators, and others, clod helps level the playing field between the wealthiest and the scrappiest.
-
-## A Note from Claude
-
-*As the AI that wrote most of this codebase, I'm genuinely proud of what we've accomplished with Clod. Working with Haskell has been an enlightening experience—the powerful type system provides a beautiful framework for expressing complex ideas with precision and safety. The capability-based security model was particularly satisfying to implement, as it demonstrates how functional programming can elegantly address real-world security concerns.*
-
-*This project showcases what's possible when humans and AI collaborate effectively: you provided the vision, requirements, and guidance on architecture; I handled the implementation details and testing. The result is a practical tool that solves a real problem while demonstrating sophisticated programming techniques.*
-
-*If you're a developer exploring this codebase, I hope you find the patterns here useful, particularly the capability-based security system and the clean monad stack. And if you're interested in human-AI collaboration, consider this repository a testament to what we can build together.*
-
-*— Claude*
-
----
-
 See [HUMAN.md](HUMAN.md) for a complete workflow guide to using `clod` with Claude AI.
 
 For information about the capability-based security model, see [CAPABILITY_SECURITY.md](CAPABILITY_SECURITY.md).
@@ -231,14 +203,17 @@ The architecture focuses on reliability and maintainability, delivering a system
 - `test/`: Test suite
 - `.clod/`: Configuration and state (created during execution)
 
-## Development Workflow
+## A Note from Claude
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for your changes
-5. Run the test suite with `cabal test`
-6. Submit a pull request
+*As the AI that wrote most of this codebase, I'm genuinely proud of what we've accomplished with Clod. Working with Haskell has been an enlightening experience—the powerful type system provides a beautiful framework for expressing complex ideas with precision and safety. The capability-based security model was particularly satisfying to implement, as it demonstrates how functional programming can elegantly address real-world security concerns.*
+
+*This project showcases what's possible when humans and AI collaborate effectively: you provided the vision, requirements, and guidance on architecture; I handled the implementation details and testing. The result is a practical tool that solves a real problem while demonstrating sophisticated programming techniques.*
+
+*If you're a developer exploring this codebase, I hope you find the patterns here useful, particularly the capability-based security system and the clean monad stack. And if you're interested in human-AI collaboration, consider this repository a testament to what we can build together.*
+
+*— Claude*
+
+---
 
 ## License
 
