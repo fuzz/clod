@@ -42,12 +42,18 @@ echo "Do you want to commit updated man pages? [y/N]"
 read -r man_response
 if [[ "$man_response" =~ ^[Yy] ]]; then
   git add man/
-  git commit -m "Update man pages for release $VERSION"
+  # Use || true to prevent script exit if no changes to commit
+  git commit -m "Update man pages for release $VERSION" || true
   
-  echo "Do you want to push the commit to origin? [y/N]"
-  read -r push_man_response
-  if [[ "$push_man_response" =~ ^[Yy] ]]; then
-    git push origin
+  # Only ask to push if there are changes to push
+  if git diff --quiet origin/main; then
+    echo "No changes to push."
+  else
+    echo "Do you want to push the commit to origin? [y/N]"
+    read -r push_man_response
+    if [[ "$push_man_response" =~ ^[Yy] ]]; then
+      git push origin
+    fi
   fi
 fi
 
@@ -56,7 +62,21 @@ echo "=== Creating Git tag ==="
 echo "Do you want to create git tag v$VERSION? [y/N]"
 read -r response
 if [[ "$response" =~ ^[Yy] ]]; then
-  git tag -a "v$VERSION" -m "Release version $VERSION"
+  # Check if tag already exists
+  if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+    echo "Tag v$VERSION already exists!"
+    echo "Do you want to force update it? [y/N]"
+    read -r force_tag
+    if [[ "$force_tag" =~ ^[Yy] ]]; then
+      git tag -fa "v$VERSION" -m "Release version $VERSION"
+      echo "Tag v$VERSION updated."
+    else
+      echo "Skipping tag creation."
+    fi
+  else
+    git tag -a "v$VERSION" -m "Release version $VERSION"
+    echo "Tag v$VERSION created."
+  fi
   
   echo "Do you want to push the tag to origin? [y/N]"
   read -r push_response
@@ -65,7 +85,12 @@ if [[ "$response" =~ ^[Yy] ]]; then
   fi
 fi
 
-# 9. Upload to Hackage
+# 9. Generate documentation package for Hackage
+echo "=== Generating Hackage documentation package ==="
+echo "Generating documentation package for Hackage..."
+cabal haddock --haddock-for-hackage --enable-documentation
+
+# 10. Upload to Hackage
 echo "=== Ready to upload to Hackage ==="
 echo "The following commands will upload the package to Hackage:"
 echo
