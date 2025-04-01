@@ -1,5 +1,5 @@
-% CLOD(1) Clod 0.1.6
-% Fuzz Leonard
+% CLOD(1) Clod 0.1.8
+% Fuzz Leonard & Claude <cyborg@bionicfuzz.com>
 % March 2025
 
 # NAME
