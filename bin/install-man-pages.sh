@@ -29,25 +29,42 @@ if [ ! -d "$PROJECT_ROOT/man" ]; then
     exit 1
 fi
 
-# Check that all required man page source files exist
+# Check for man page source files, but don't fail the build if missing
+missing_files=0
+
 if [ ! -f "$PROJECT_ROOT/man/clod.1.md" ]; then
-    echo "Error: clod.1.md not found"
-    exit 1
+    echo "Warning: clod.1.md not found - man1 page will not be installed"
+    missing_files=1
 fi
 
 if [ ! -f "$PROJECT_ROOT/man/clod.7.md" ]; then
-    echo "Error: clod.7.md not found"
-    exit 1
+    echo "Warning: clod.7.md not found - man7 page will not be installed"
+    missing_files=1
 fi
 
 if [ ! -f "$PROJECT_ROOT/man/clod.8.md" ]; then
-    echo "Error: clod.8.md not found"
-    exit 1
+    echo "Warning: clod.8.md not found - man8 page will not be installed"
+    missing_files=1
 fi
 
-# Generate the man pages from the pre-existing markdown files
-pandoc -s -t man "$PROJECT_ROOT/man/clod.1.md" -o "$OUTPUT_DIR/man1/clod.1"
-pandoc -s -t man "$PROJECT_ROOT/man/clod.7.md" -o "$OUTPUT_DIR/man7/clod.7"
-pandoc -s -t man "$PROJECT_ROOT/man/clod.8.md" -o "$OUTPUT_DIR/man8/clod.8"
+if [ "$missing_files" -eq 1 ]; then
+    echo "Some man pages are missing but continuing with installation"
+fi
 
-echo "Man pages installed to $OUTPUT_DIR/man{1,7,8}/"
+# Generate only the man pages that exist
+if [ -f "$PROJECT_ROOT/man/clod.1.md" ]; then
+    pandoc -s -t man "$PROJECT_ROOT/man/clod.1.md" -o "$OUTPUT_DIR/man1/clod.1"
+    echo "Man page installed to $OUTPUT_DIR/man1/"
+fi
+
+if [ -f "$PROJECT_ROOT/man/clod.7.md" ]; then
+    pandoc -s -t man "$PROJECT_ROOT/man/clod.7.md" -o "$OUTPUT_DIR/man7/clod.7"
+    echo "Man page installed to $OUTPUT_DIR/man7/"
+fi
+
+if [ -f "$PROJECT_ROOT/man/clod.8.md" ]; then
+    pandoc -s -t man "$PROJECT_ROOT/man/clod.8.md" -o "$OUTPUT_DIR/man8/clod.8"
+    echo "Man page installed to $OUTPUT_DIR/man8/"
+fi
+
+echo "Man page installation completed"

@@ -1,4 +1,4 @@
-% CLOD(8) Clod 0.1.2
+% CLOD(8) Clod 0.1.3
 % Fuzz Leonard
 % March 2025
 
@@ -147,7 +147,7 @@ SVG files are automatically converted to XML files when processed by clod. This 
 - Claude can fully view and edit SVG content just like any other XML file
 - Your project structure remains clean with proper SVG extensions
 
-These special handling features allow you to leverage Claude's capabilities with all types of files while ensuring compatibility with the Project Knowledge system.
+This feature allows you to leverage Claude's capabilities with SVG files while ensuring compatibility with the Project Knowledge system.
 
 ## Example Workflow
 
@@ -177,7 +177,7 @@ Here's a typical workflow using clod:
 
 5. **Next Iteration**:
    ```bash
-   clod  # Automatically processes only modified files on subsequent runs
+   clod  # Now only shows files modified since last run
    ```
    - Upload the new files from the staging directory
    - **Important**: Before starting a new conversation, manually delete the previous versions of these files from Project Knowledge

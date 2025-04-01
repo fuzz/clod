@@ -1,4 +1,4 @@
-% CLOD(7) Clod 0.1.2
+% CLOD(7) Clod 0.1.3
 % Fuzz Leonard
 % March 2025
 
@@ -11,6 +11,7 @@ clod - project instructions and safeguards for Claude AI integration
 This man page contains guidance on how to structure project instructions for Claude AI
 and implement safeguards when using clod with Claude AI's Project Knowledge feature.
 # PROJECT INSTRUCTIONS
+# Project Instructions
 *These instructions should be pasted into the Project Instructions section of your Claude Project.*
 *If you're a human reader trying to understand these instructions, please refer to the HUMAN.md file for more detailed explanations*
 
@@ -26,11 +27,11 @@ Files in the project knowledge section follow this structure:
    - Example: `components/Header.jsx` becomes `components-Header.jsx`
    - Example: `app/config/settings.js` becomes `app-config-settings.js`
 
-2. **Path Manifest**: A file named `_path_manifest.dhall` contains the mapping between the optimized filenames and their original paths. This is crucial for writing files back to the correct locations.
+2. **Path Manifest**: A file named `_path_manifest.dhall` contains the mapping between the optimized filenames and their original paths. This is crucial for writing files back to the correct locations. The file uses the Dhall configuration language.
 
 ## Expected Workflow
 
-When the user requests changes to the codebase:
+When the user requests changes to the codebase through Claude AI:
 
 1. Read and understand the user's request for changes
 2. Identify which files need to be modified by examining the project knowledge

@@ -4,7 +4,7 @@ A streamlined workflow system for coding with Claude AI using filesystem access 
 
 ## What is clod?
 
-Clod creates a smooth integration between your local codebase and Claude AI's coding capabilities. It solves key problems when using Claude for coding:
+clod (meat-robot hybrid) creates a smooth integration between your local codebase and Claude AI's coding capabilities. It solves key problems when using Claude for coding:
 
 1. It optimizes your files for Claude's project knowledge UI
 2. It tracks which files have changed since your last upload
@@ -82,6 +82,33 @@ clod provides a complete, end-to-end workflow for coding with Claude AI:
 ## Special File Handling
 
 clod includes special handling for certain file types to ensure optimal compatibility with Claude's Project Knowledge system.
+
+### Hidden Files and Directories
+
+Hidden files and directories (those starting with a `.` character) are transformed to ensure visibility in file browsers when uploading to Claude.
+
+#### How Hidden File Handling Works
+
+1. When clod processes hidden files or directories, it transforms them with a consistent format:
+   - `.gitignore` becomes `dot--gitignore`
+   - `.env` becomes `dot--env`
+   - `.config/settings.ini` becomes `dot--config-settings.ini`
+
+2. The original file path with the leading dot is preserved in the `_path_manifest.dhall` file, ensuring Claude writes back to the correct location with the proper hidden file format.
+
+3. In your conversations with Claude, you can refer to these files using either name:
+   - "Can you modify the .env file?"
+   - "Can you update the dot--env file?"
+
+4. When Claude writes the file back to your filesystem, it will use the original path with the leading dot.
+
+#### Benefits
+
+- Hidden files are visible in macOS Finder and Windows Explorer when selecting files to upload
+- Consistent naming convention makes hidden files easy to identify
+- No manual renaming is needed - transformation happens automatically
+- Your project structure remains clean with proper dot-prefixed files
+- Hidden directories within paths are also properly transformed
 
 ### SVG Files
 

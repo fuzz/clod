@@ -1,6 +1,6 @@
 #!/bin/bash
-# Generate man pages from markdown documentation and content sources
-# This script updates man page content from project source files
+# Generate man pages from markdown documentation
+# This script regenerates man pages from scratch using source files
 
 set -e
 
@@ -15,32 +15,8 @@ fi
 cd "$(dirname "$0")/.."
 PROJECT_ROOT=$(pwd)
 
-# Use argument if provided, otherwise use current directory
-OUTPUT_DIR="${1:-.}"
-
 # Make sure the source man directory exists
 mkdir -p "$PROJECT_ROOT/man"
-
-# Make sure man section directories exist in the output
-mkdir -p "$OUTPUT_DIR/man1"
-mkdir -p "$OUTPUT_DIR/man7"
-mkdir -p "$OUTPUT_DIR/man8"
-
-# Check for required content source files
-if [ ! -f "$PROJECT_ROOT/project-instructions.md" ]; then
-    echo "Error: project-instructions.md not found"
-    exit 1
-fi
-
-if [ ! -f "$PROJECT_ROOT/guardrails.md" ]; then
-    echo "Error: guardrails.md not found"
-    exit 1
-fi
-
-if [ ! -f "$PROJECT_ROOT/HUMAN.md" ]; then
-    echo "Error: HUMAN.md not found"
-    exit 1
-fi
 
 # Get the current version from cabal file
 VERSION=$(grep -m 1 "^version:" "$PROJECT_ROOT/clod.cabal" | awk '{print $2}')
@@ -48,10 +24,9 @@ if [ -z "$VERSION" ]; then
     VERSION="0.1.0"  # Default if not found
 fi
 
-# Generate clod(1) - Command reference if it doesn't exist or update version
-if [ ! -f "$PROJECT_ROOT/man/clod.1.md" ]; then
-  echo "Generating clod(1).md source file..."
-  cat > "$PROJECT_ROOT/man/clod.1.md" << EOF
+# Generate clod(1) - Command reference
+echo "Generating clod(1).md source file..."
+cat > "$PROJECT_ROOT/man/clod.1.md" << EOF
 % CLOD(1) Clod $VERSION
 % Fuzz Leonard
 % March 2025
@@ -134,15 +109,13 @@ Remove missing entries from the database:
 **clod(7)** for information about project instructions and safeguards.
 **clod(8)** for a complete workflow guide to using clod with Claude AI.
 EOF
-else
-  # Update version in existing file
-  sed -i.bak "s/% CLOD(1) Clod [0-9.]\+/% CLOD(1) Clod $VERSION/" "$PROJECT_ROOT/man/clod.1.md"
-  rm -f "$PROJECT_ROOT/man/clod.1.md.bak"
-fi
 
-# Update clod(7) with current content from project-instructions.md and guardrails.md
-echo "Updating clod(7).md source file..."
-cat > "$PROJECT_ROOT/man/clod.7.md" << EOF
+# Generate clod(7) - Project instructions and safeguards
+if [ -f "$PROJECT_ROOT/project-instructions.md" ] && [ -f "$PROJECT_ROOT/guardrails.md" ]; then
+  echo "Generating clod(7).md source file..."
+  
+  # Create the header section
+  cat > "$PROJECT_ROOT/man/clod.7.md" << EOF
 % CLOD(7) Clod $VERSION
 % Fuzz Leonard
 % March 2025
@@ -158,17 +131,23 @@ and implement safeguards when using clod with Claude AI's Project Knowledge feat
 # PROJECT INSTRUCTIONS
 EOF
 
-# Append project-instructions.md content
-cat "$PROJECT_ROOT/project-instructions.md" >> "$PROJECT_ROOT/man/clod.7.md"
+  # Append project-instructions.md content
+  cat "$PROJECT_ROOT/project-instructions.md" >> "$PROJECT_ROOT/man/clod.7.md"
 
-# Append guardrails.md content
-echo "" >> "$PROJECT_ROOT/man/clod.7.md"
-echo "# SAFEGUARDS" >> "$PROJECT_ROOT/man/clod.7.md"
-cat "$PROJECT_ROOT/guardrails.md" >> "$PROJECT_ROOT/man/clod.7.md"
+  # Append guardrails.md content
+  echo "" >> "$PROJECT_ROOT/man/clod.7.md"
+  echo "# SAFEGUARDS" >> "$PROJECT_ROOT/man/clod.7.md"
+  cat "$PROJECT_ROOT/guardrails.md" >> "$PROJECT_ROOT/man/clod.7.md"
+else
+  echo "Warning: Cannot generate clod(7).md, source files missing"
+fi
 
-# Update clod(8) with current content from HUMAN.md
-echo "Updating clod(8).md source file..."
-cat > "$PROJECT_ROOT/man/clod.8.md" << EOF
+# Generate clod(8) - Complete workflow guide
+if [ -f "$PROJECT_ROOT/HUMAN.md" ]; then
+  echo "Generating clod(8).md source file..."
+  
+  # Create the header section
+  cat > "$PROJECT_ROOT/man/clod.8.md" << EOF
 % CLOD(8) Clod $VERSION
 % Fuzz Leonard
 % March 2025
@@ -183,13 +162,10 @@ This man page contains a comprehensive guide to using clod with Claude AI,
 including best practices, workflow details, and integration tips.
 EOF
 
-# Append HUMAN.md content
-cat "$PROJECT_ROOT/HUMAN.md" >> "$PROJECT_ROOT/man/clod.8.md"
+  # Append HUMAN.md content
+  cat "$PROJECT_ROOT/HUMAN.md" >> "$PROJECT_ROOT/man/clod.8.md"
+else
+  echo "Warning: Cannot generate clod(8).md, HUMAN.md missing"
+fi
 
-# Generate man pages from markdown
-pandoc -s -t man "$PROJECT_ROOT/man/clod.1.md" -o "$OUTPUT_DIR/man1/clod.1"
-pandoc -s -t man "$PROJECT_ROOT/man/clod.7.md" -o "$OUTPUT_DIR/man7/clod.7"
-pandoc -s -t man "$PROJECT_ROOT/man/clod.8.md" -o "$OUTPUT_DIR/man8/clod.8"
-
-echo "Man page source files updated in $PROJECT_ROOT/man/"
-echo "Generated man pages are in $OUTPUT_DIR/man{1,7,8}/"
+echo "Man page markdown generation completed"

@@ -1,4 +1,4 @@
-% CLOD(1) Clod 0.1.2
+% CLOD(1) Clod 0.1.3
 % Fuzz Leonard
 % March 2025
 
@@ -15,10 +15,6 @@ clod - Claude Loader for preparing files for Claude AI's Project Knowledge
 Clod is a utility for preparing and uploading files to Claude AI's Project Knowledge feature. 
 It tracks file changes, respects .gitignore and .clodignore patterns, and optimizes filenames 
 for Claude's UI.
-
-Special file handling includes transforming SVG files to XML format (e.g., logo.svg becomes logo-svg.xml)
-and converting hidden files to a visible format (e.g., .gitignore becomes dot--gitignore).
-All original paths are preserved in a manifest file for accurate file writing.
 
 # OPTIONS
 
@@ -76,11 +72,8 @@ Remove missing entries from the database:
 **.clodignore**
 : Pattern file similar to .gitignore for excluding files
 
-**.clod/db.dhall**
+**.clod/database.dhall**
 : Database of file checksums and metadata
-
-**_path_manifest.dhall**
-: Created in staging directory to map optimized filenames back to original paths
 
 # SEE ALSO
 

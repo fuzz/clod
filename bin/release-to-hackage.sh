@@ -28,9 +28,13 @@ cabal check
 echo "=== Testing build ==="
 cabal build --disable-documentation
 
-# 6. Update man pages
-echo "=== Updating man pages ==="
+# 6. Update man page markdown
+echo "=== Updating man page markdown ==="
 bin/generate-man-pages.sh
+
+# 6a. Build man pages for verification
+echo "=== Building man pages for verification ==="
+bin/install-man-pages.sh /tmp/clod-man-test
 
 # 7. Commit updated man pages
 echo "=== Committing updated man pages ==="
