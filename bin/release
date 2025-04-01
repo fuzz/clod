@@ -351,9 +351,16 @@ echo "Updating Homebrew formula with new version $VERSION and SHA256 $SHA256..."
 
 # Update version and SHA in the formula file
 # First update the version in both the URL and the comment
-sed -i '' "s|clod-[0-9][0-9.]*\/clod-[0-9][0-9.]*|clod-$VERSION\/clod-$VERSION|g" "$FORMULA_PATH"
+sed -i '' "s|clod-[0-9][0-9.]*\/clod-[0-9][0-9.]*\.tar\.gz|clod-$VERSION\/clod-$VERSION.tar.gz|g" "$FORMULA_PATH"
 # Then update the SHA256
 sed -i '' "s|sha256 \"[a-f0-9]\+\"|sha256 \"$SHA256\"|g" "$FORMULA_PATH"
+
+# Verify the URL format is correct (making sure it has .tar.gz extension)
+if ! grep -q "\.tar\.gz\"" "$FORMULA_PATH"; then
+  echo "ERROR: Formula URL format issue detected. Please check $FORMULA_PATH manually."
+  cat "$FORMULA_PATH" | grep -A 2 "url"
+  exit 1
+fi
 
 # Step 15: Commit and push Homebrew formula update
 echo "=== Committing Homebrew formula update ==="
