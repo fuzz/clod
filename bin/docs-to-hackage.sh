@@ -2,7 +2,7 @@
 set -e
 
 # Extract version from cabal file
-VERSION=$(grep "^version:" ../clod.cabal | sed 's/version: *//')
+VERSION=$(grep "^version:" clod.cabal | sed 's/version: *//')
 
 echo "Uploading documentation for clod-$VERSION"
 
