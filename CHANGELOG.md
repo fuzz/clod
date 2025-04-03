@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.13] - 2025-04-03
+
+Update maintainer email
+
 ## [0.1.12] - 2025-04-01
 
 Version bump to pick up script changes
