@@ -5,7 +5,7 @@
 -- Description : Configuration handling for the Clod application
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : cyborg@bionicfuzz.com
+-- Maintainer  : ink@fuzz.ink
 -- Stability   : experimental
 --
 -- This module provides functions for handling configuration options

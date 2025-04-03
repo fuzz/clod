@@ -66,7 +66,7 @@ mkdir -p "$PROJECT_ROOT/man"
 echo "Generating clod(1).md source file..."
 cat > "$PROJECT_ROOT/man/clod.1.md" << EOF
 % CLOD(1) Clod $VERSION
-% Fuzz Leonard & Claude <cyborg@bionicfuzz.com>
+% Fuzz Leonard & Claude <ink@fuzz.ink>
 % March 2025
 
 # NAME
@@ -155,7 +155,7 @@ if [ -f "$PROJECT_ROOT/project-instructions.md" ] && [ -f "$PROJECT_ROOT/guardra
   # Create the header section
   cat > "$PROJECT_ROOT/man/clod.7.md" << EOF
 % CLOD(7) Clod $VERSION
-% Fuzz Leonard & Claude <cyborg@bionicfuzz.com>
+% Fuzz Leonard & Claude <ink@fuzz.ink>
 % March 2025
 
 # NAME
@@ -187,7 +187,7 @@ if [ -f "$PROJECT_ROOT/HUMAN.md" ]; then
   # Create the header section
   cat > "$PROJECT_ROOT/man/clod.8.md" << EOF
 % CLOD(8) Clod $VERSION
-% Fuzz Leonard & Claude <cyborg@bionicfuzz.com>
+% Fuzz Leonard & Claude <ink@fuzz.ink>
 % March 2025
 
 # NAME

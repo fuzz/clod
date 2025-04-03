@@ -8,7 +8,7 @@
 -- Description : Tests for configuration handling
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : cyborg@bionicfuzz.com
+-- Maintainer  : ink@fuzz.ink
 -- Stability   : experimental
 --
 -- This module contains tests for the configuration loading and handling functionality.

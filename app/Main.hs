@@ -5,7 +5,7 @@
 -- Description : Main entry point for the Clod application
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : cyborg@bionicfuzz.com
+-- Maintainer  : ink@fuzz.ink
 -- Stability   : experimental
 --
 -- This module provides the main CLI interface for the Clod application.

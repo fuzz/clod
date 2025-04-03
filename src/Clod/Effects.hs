@@ -17,7 +17,7 @@
 -- Description : Effect types and utilities for Clod
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : cyborg@bionicfuzz.com
+-- Maintainer  : ink@fuzz.ink
 -- Stability   : experimental
 --
 -- This module provides types and utilities for working with effects in Clod.

@@ -26,7 +26,7 @@
 -- Description : Capability-based security for file operations
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : cyborg@bionicfuzz.com
+-- Maintainer  : ink@fuzz.ink
 -- Stability   : experimental
 --
 -- This module implements capability-based security for file operations,

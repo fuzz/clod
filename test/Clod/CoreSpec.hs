@@ -8,7 +8,7 @@
 -- Description : Tests for Core module functionality
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : cyborg@bionicfuzz.com
+-- Maintainer  : ink@fuzz.ink
 -- Stability   : experimental
 --
 -- This module contains tests for core Clod functionality.
