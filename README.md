@@ -3,15 +3,18 @@
 [![Hackage](https://img.shields.io/hackage/v/clod.svg)](https://hackage.haskell.org/package/clod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Clod is a utility for preparing and uploading files to Claude AI's Project Knowledge feature. It tracks file changes using checksums, respects `.gitignore` and `.clodignore` patterns, and optimizes filenames for Claude's UI. By efficiently handling file selection and staging, it can significantly reduce AI development costs by 50% or more.
+Clod is a utility for preparing and uploading files to Claude AI's Project
+Knowledge feature. It tracks file changes using checksums, respects
+`.gitignore` and `.clodignore` patterns, optimizes filenames for Claude's UI
+and provides a filename manifest so Claude can write the files back to their
+original locations. By efficiently handling file selection and staging, it can
+significantly reduce AI development costs by 50% or more. Unlike other tools
+created to solve this problem `clod` does not require any unauthorized access
+to Anthropic products, nor is it affected by changes to Claude's UI.
+Contributions of Automator code to handle the drag and drops and Project
+Knowledge deletes on macOS are welcome, as is similar code for other platforms. 
 
-See [HUMAN.md](HUMAN.md) for a complete workflow guide to using `clod` with Claude AI.
-
-For information about the capability-based security model, see [CAPABILITY_SECURITY.md](CAPABILITY_SECURITY.md).
-
-For details on man page integration, see [MAN_PAGES.md](MAN_PAGES.md) and [INSTALLING.md](INSTALLING.md).
-
-Developed by [BionicFuzz](https://bionicfuzz.com) - World-class technical leadership and execution.
+Developed by [Fuzz, Inc](https://fuzz.ink) - World-class technical leadership and execution
 
 ## Features
 
@@ -28,6 +31,16 @@ Developed by [BionicFuzz](https://bionicfuzz.com) - World-class technical leader
 
 ## Installation
 
+## Homebrew (recommended, binary is Apple Silicon only)
+
+```bash
+# On macOS
+brew tap fuzz/tap
+brew install clod
+# Or in one command:
+brew install fuzz/tap/clod
+```
+
 ### From Hackage
 
 ```bash
@@ -42,19 +55,6 @@ cd clod
 cabal install
 ```
 
-For detailed installation instructions, including how to install man pages, see [INSTALLING.md](INSTALLING.md).
-
-Man pages are automatically installed when using package managers like Homebrew:
-```bash
-# On macOS
-brew tap fuzz/tap
-brew install clod
-# Or in one command:
-brew install fuzz/tap/clod
-```
-
-When installing from Hackage, the man pages are included in the package.
-
 The `clod` program is installed automatically when using `cabal install`.
 
 ### Prerequisites
@@ -62,9 +62,11 @@ The `clod` program is installed automatically when using `cabal install`.
 - GHC (Glasgow Haskell Compiler) 9.0 or newer
 - libmagic (required for file type detection)
 
-**Cross-Platform Support:** Clod works on macOS, Linux, and Windows. The program outputs the path to the staging directory, making it easy to open with your system's file browser or use with any command that accepts a directory path.
+**Cross-Platform Support:** Clod works on macOS, Linux, and Windows. The
+program outputs the path to the staging directory, making it easy to open with
+your system's file browser or use with any command that accepts a directory
+path.
 
-Supported file browsers:
 * macOS: `open`
 * Linux: `xdg-open`, `gio`, `gnome-open`, or `kde-open`
 * Windows: `explorer.exe`
@@ -76,14 +78,11 @@ Pull requests for improved cross-platform support are welcome.
 ### Basic Usage
 
 ```bash
-# Process modified files since last run
+# Process all files (first run) or modified files since last run
 clod
 
-# Process all files (respecting .gitignore and .clodignore)
+# Process all files regardless of last run (respecting .gitignore and .clodignore)
 clod --all
-
-# Run in test mode with an optional test directory
-clod --test
 
 # On macOS, process files and open the staging directory in Finder
 open `clod`
@@ -102,11 +101,12 @@ open `clod`
 
 ### Opening the Staging Directory
 
-Clod outputs the path to the staging directory, which you can use to open it directly in your file browser:
+Clod outputs the path to the staging directory, which you can use to open it
+directly in your file browser:
 
 ```bash
 # On macOS, process files and open the directory in Finder
-open `clod [options]`
+open `clod`
 
 # For scripts, you can capture the output and open it with your preferred application
 STAGING_DIR=$(clod [options])
@@ -133,14 +133,21 @@ On first run, Clod will:
 
 ### Integration with Claude AI
 
+First time: Paste the contents of `project-instructions.md` into the Project
+Instructions section
+ 
 After running Clod:
 
-1. Navigate to Project Knowledge in your Claude Project (Pro or Team account required)
+1. Navigate to Project Knowledge in your Claude Project (Pro or Team account
+   required)
 2. Drag files from the opened staging folder to Project Knowledge
-3. Include the `_path_manifest.dhall` file which maps optimized names back to original paths
-4. Paste the contents of `project-instructions.md` into the Project Instructions section
-5. **Important**: You must manually delete previous versions of these files from Project Knowledge before starting a new conversation to ensure Claude uses the most recent files
-6. Note that the staging directory is temporary and will be cleaned up on your next run of clod (or system reboot)
+3. Include the `_path_manifest.dhall` file which maps optimized names back to
+   original paths
+4. **Important**: You must manually delete previous versions of these files
+   from Project Knowledge before starting a new conversation to ensure Claude
+   uses the most recent files
+5. Note that the staging directory is temporary and will be cleaned up on your
+   next run of clod (or system reboot)
 
 ## Configuration
 
@@ -153,7 +160,9 @@ You can customize Clod's behavior using these environment variables:
 
 ### .clodignore
 
-A `.clodignore` file in your repository root specifies files or patterns to exclude. If this file doesn't exist, Clod will create a default one for you with common patterns for binary files, build directories, and large files.
+A `.clodignore` file in your repository root specifies files or patterns to
+exclude. If this file doesn't exist, Clod will create a default one for you
+with common patterns for binary files, build directories, and large files.
 
 ## Development Utilities
 
