@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.16] - 2025-04-03
+
+Run the tests before the rest of the release process
+
 ## [0.1.15] - 2025-04-03
 
 Another version bump to test the full release process
