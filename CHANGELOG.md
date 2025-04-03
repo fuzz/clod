@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.14] - 2025-04-03
+
+Version bump to test new release script--now with binary distribution for macOS
+Apple Silicon
+
 ## [0.1.13] - 2025-04-03
 
 Update maintainer email
