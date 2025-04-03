@@ -390,25 +390,50 @@ fi
 
 echo "Updating Homebrew formula with new version $VERSION and SHA256 $SHA256..."
 
-# First update the version in both the URL and the comment
-sed -i '' "s|clod-[0-9][0-9.]*\/clod-[0-9][0-9.]*\.tar\.gz|clod-$VERSION\/clod-$VERSION.tar.gz|g" "$FORMULA_PATH"
-
-# Update the tarball SHA256 using the marker comment
-if grep -q "TARBALL_SHA256_MARKER" "$FORMULA_PATH"; then
-  # Update the line after the TARBALL_SHA256_MARKER
-  sed -i '' '/TARBALL_SHA256_MARKER/,+1 s|sha256 "[a-f0-9]\+"|sha256 "'"$SHA256"'"|g' "$FORMULA_PATH"
-else
-  # Fallback to older method if marker doesn't exist yet
-  echo "Warning: TARBALL_SHA256_MARKER not found in formula. Using generic SHA update."
-  sed -i '' "s|sha256 \"[a-f0-9]\+\"|sha256 \"$SHA256\"|" "$FORMULA_PATH"
+# First verify that all required marker comments exist
+if ! grep -q "TARBALL_URL_MARKER" "$FORMULA_PATH"; then
+  echo "ERROR: TARBALL_URL_MARKER not found in formula. Cannot update safely."
+  exit 1
 fi
 
-# Verify the URL format is correct (making sure it has .tar.gz extension)
-if ! grep -q "\.tar\.gz\"" "$FORMULA_PATH"; then
-  echo "ERROR: Formula URL format issue detected. Please check $FORMULA_PATH manually."
+if ! grep -q "TARBALL_SHA256_MARKER" "$FORMULA_PATH"; then
+  echo "ERROR: TARBALL_SHA256_MARKER not found in formula. Cannot update safely."
+  exit 1
+fi
+
+# Create the new lines with proper markers intact
+URL_LINE=$(grep "TARBALL_URL_MARKER" "$FORMULA_PATH")
+SHA_LINE=$(grep "TARBALL_SHA256_MARKER" "$FORMULA_PATH")
+
+# Extract the pattern from the current lines, preserving spacing
+URL_PREFIX=$(echo "$URL_LINE" | sed -E 's/url ".*"/url/') 
+URL_SUFFIX=$(echo "$URL_LINE" | sed -E 's/.*(".*")/\1/')
+
+SHA_PREFIX=$(echo "$SHA_LINE" | sed -E 's/sha256 ".*"/sha256/') 
+SHA_SUFFIX=$(echo "$SHA_LINE" | sed -E 's/.*(".*")/\1/')
+
+# Create new lines with the proper URL and SHA
+NEW_URL="${URL_PREFIX} \"https://hackage.haskell.org/package/clod-$VERSION/clod-$VERSION.tar.gz\"${URL_SUFFIX}"
+NEW_SHA="${SHA_PREFIX} \"$SHA256\"${SHA_SUFFIX}"
+
+# Now update the formula
+sed -i '' "s|.*TARBALL_URL_MARKER.*|$NEW_URL|" "$FORMULA_PATH"
+sed -i '' "s|.*TARBALL_SHA256_MARKER.*|$NEW_SHA|" "$FORMULA_PATH"
+
+# Verify the changes were made correctly
+if ! grep -q "clod-$VERSION.*\.tar\.gz.*TARBALL_URL_MARKER" "$FORMULA_PATH"; then
+  echo "ERROR: Formula URL update failed. Please check $FORMULA_PATH manually."
   cat "$FORMULA_PATH" | grep -A 2 "url"
   exit 1
 fi
+
+if ! grep -q "$SHA256.*TARBALL_SHA256_MARKER" "$FORMULA_PATH"; then
+  echo "ERROR: Formula SHA256 update failed. Please check $FORMULA_PATH manually."
+  cat "$FORMULA_PATH" | grep -A 2 "sha256"
+  exit 1
+fi
+
+echo "Formula updated successfully with new version and SHA256."
 
 # Step 15: Create and update bottle
 echo "=== Building Homebrew bottle ==="
@@ -437,12 +462,13 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     bottle_sha=$(echo "$bottle_output" | grep -i 'sha256' | grep -o '"[a-f0-9]\+"' | tr -d '"')
     echo "Bottle SHA256: $bottle_sha"
     
-    # Extract the macOS version (monterey, ventura, etc.)
+    # Extract the macOS version (monterey, ventura, sequoia, etc.)
     macos_version=$(echo "$bottle_file" | grep -o 'arm64_[a-z0-9]\+' | cut -d'_' -f2)
     echo "macOS version: $macos_version"
     
     if [ -z "$bottle_file" ] || [ -z "$bottle_sha" ] || [ -z "$macos_version" ]; then
       echo "Error: Could not extract bottle information."
+      echo "Bottle file format may have changed. Please check the actual filename: $bottle_file"
       exit 1
     fi
     
@@ -455,17 +481,47 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     # Update the formula with bottle information
     echo "Updating formula with bottle information..."
     
-    # Update the bottle root_url
-    sed -i '' 's|root_url ".*"|root_url "https://github.com/fuzz/clod/releases/download/v'"$VERSION"'"|' Formula/clod.rb
+    # Verify that all required marker comments exist
+    if ! grep -q "BOTTLE_ROOT_URL_MARKER" Formula/clod.rb; then
+      echo "ERROR: BOTTLE_ROOT_URL_MARKER not found in formula. Cannot update safely."
+      exit 1
+    fi
     
-    # Update the bottle SHA using the marker comment
-    if grep -q "BOTTLE_SHA256_MARKER" Formula/clod.rb; then
-      # Update the line after the BOTTLE_SHA256_MARKER
-      sed -i '' '/BOTTLE_SHA256_MARKER/,+1 s|sha256 cellar: :any, arm64_[a-z0-9]*: "[a-f0-9]*"|sha256 cellar: :any, arm64_'"$macos_version"': "'"$bottle_sha"'"|g' Formula/clod.rb
-    else
-      # Update using the older method if marker doesn't exist
-      echo "Warning: BOTTLE_SHA256_MARKER not found in formula. Using generic bottle SHA update."
-      sed -i '' 's|sha256 cellar: :any, arm64_[a-z0-9]*: "[a-f0-9]*"|sha256 cellar: :any, arm64_'"$macos_version"': "'"$bottle_sha"'"|g' Formula/clod.rb
+    if ! grep -q "BOTTLE_SHA256_MARKER" Formula/clod.rb; then
+      echo "ERROR: BOTTLE_SHA256_MARKER not found in formula. Cannot update safely."
+      exit 1
+    fi
+    
+    # Create the new lines with proper markers intact
+    ROOT_URL_LINE=$(grep "BOTTLE_ROOT_URL_MARKER" Formula/clod.rb)
+    BOTTLE_SHA_LINE=$(grep "BOTTLE_SHA256_MARKER" Formula/clod.rb)
+    
+    # Extract the pattern from the current lines, preserving spacing
+    ROOT_URL_PREFIX=$(echo "$ROOT_URL_LINE" | sed -E 's/root_url ".*"/root_url/') 
+    ROOT_URL_SUFFIX=$(echo "$ROOT_URL_LINE" | sed -E 's/.*(".*")/\1/')
+    
+    BOTTLE_SHA_PREFIX=$(echo "$BOTTLE_SHA_LINE" | sed -E 's/sha256.*arm64_.* ".*"/sha256 cellar: :any, arm64_'"$macos_version"'/') 
+    BOTTLE_SHA_SUFFIX=$(echo "$BOTTLE_SHA_LINE" | sed -E 's/.*(".*")/\1/')
+    
+    # Create new lines with the proper values
+    NEW_ROOT_URL="${ROOT_URL_PREFIX} \"https://github.com/fuzz/clod/releases/download/v$VERSION\"${ROOT_URL_SUFFIX}"
+    NEW_BOTTLE_SHA="${BOTTLE_SHA_PREFIX} \"$bottle_sha\"${BOTTLE_SHA_SUFFIX}"
+    
+    # Now update the formula
+    sed -i '' "s|.*BOTTLE_ROOT_URL_MARKER.*|$NEW_ROOT_URL|" Formula/clod.rb
+    sed -i '' "s|.*BOTTLE_SHA256_MARKER.*|$NEW_BOTTLE_SHA|" Formula/clod.rb
+    
+    # Verify the changes were made correctly
+    if ! grep -q "v$VERSION.*BOTTLE_ROOT_URL_MARKER" Formula/clod.rb; then
+      echo "ERROR: Bottle root_url update failed. Please check Formula/clod.rb manually."
+      cat Formula/clod.rb | grep -A 2 "root_url"
+      exit 1
+    fi
+    
+    if ! grep -q "$bottle_sha.*BOTTLE_SHA256_MARKER" Formula/clod.rb; then
+      echo "ERROR: Bottle SHA update failed. Please check Formula/clod.rb manually."
+      cat Formula/clod.rb | grep -A 2 "sha256 cellar"
+      exit 1
     fi
     
     # Ask if the user wants to test the bottle
