@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.17] - 2025-04-03
+
+Update README, remove crufty documentation files, test release again
+
 ## [0.1.16] - 2025-04-03
 
 Run the tests before the rest of the release process
