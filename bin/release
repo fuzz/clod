@@ -1,6 +1,6 @@
 #!/bin/bash
 # Comprehensive release script for clod
-# Combines man page generation, Hackage release, and Homebrew formula update
+# Combines man page generation, Hackage release, Homebrew formula update, and bottle creation
 
 set -e  # Exit on any error
 
@@ -320,7 +320,7 @@ if [[ "$upload_response" =~ ^[Yy] ]]; then
     "https://hackage.haskell.org/package/clod-$VERSION/docs"
 else
   echo "Skipping Hackage upload. Run the commands manually when ready."
-  exit 0
+  # Don't exit here as we still want to update the Homebrew formula
 fi
 
 # Step 12: Wait for Hackage to process the package
@@ -390,11 +390,18 @@ fi
 
 echo "Updating Homebrew formula with new version $VERSION and SHA256 $SHA256..."
 
-# Update version and SHA in the formula file
 # First update the version in both the URL and the comment
 sed -i '' "s|clod-[0-9][0-9.]*\/clod-[0-9][0-9.]*\.tar\.gz|clod-$VERSION\/clod-$VERSION.tar.gz|g" "$FORMULA_PATH"
-# Then update the SHA256
-sed -i '' "s|sha256 \"[a-f0-9]\+\"|sha256 \"$SHA256\"|g" "$FORMULA_PATH"
+
+# Update the tarball SHA256 using the marker comment
+if grep -q "TARBALL_SHA256_MARKER" "$FORMULA_PATH"; then
+  # Update the line after the TARBALL_SHA256_MARKER
+  sed -i '' '/TARBALL_SHA256_MARKER/,+1 s|sha256 "[a-f0-9]\+"|sha256 "'"$SHA256"'"|g' "$FORMULA_PATH"
+else
+  # Fallback to older method if marker doesn't exist yet
+  echo "Warning: TARBALL_SHA256_MARKER not found in formula. Using generic SHA update."
+  sed -i '' "s|sha256 \"[a-f0-9]\+\"|sha256 \"$SHA256\"|" "$FORMULA_PATH"
+fi
 
 # Verify the URL format is correct (making sure it has .tar.gz extension)
 if ! grep -q "\.tar\.gz\"" "$FORMULA_PATH"; then
@@ -403,7 +410,97 @@ if ! grep -q "\.tar\.gz\"" "$FORMULA_PATH"; then
   exit 1
 fi
 
-# Step 15: Commit and push Homebrew formula update
+# Step 15: Create and update bottle
+echo "=== Building Homebrew bottle ==="
+echo "Do you want to build a Homebrew bottle for this release? [y/N]"
+read -r bottle_response
+if [[ "$bottle_response" =~ ^[Yy] ]]; then
+  # First uninstall existing clod formula to ensure clean build
+  echo "Uninstalling any existing clod formula..."
+  brew uninstall --force clod 2>/dev/null || true
+  
+  echo "Building bottle for clod formula..."
+  (
+    cd "../homebrew-tap"
+    # Install with --build-bottle flag
+    brew install --build-bottle --formula ./Formula/clod.rb
+    
+    # Create the bottle
+    bottle_output=$(brew bottle clod)
+    echo "Bottle output: $bottle_output"
+    
+    # Extract the bottle file name
+    bottle_file=$(echo "$bottle_output" | grep -o 'clod--.*\.bottle\.tar\.gz')
+    echo "Bottle file: $bottle_file"
+    
+    # Extract the SHA256 from the bottle
+    bottle_sha=$(echo "$bottle_output" | grep -i 'sha256' | grep -o '"[a-f0-9]\+"' | tr -d '"')
+    echo "Bottle SHA256: $bottle_sha"
+    
+    # Extract the macOS version (monterey, ventura, etc.)
+    macos_version=$(echo "$bottle_file" | grep -o 'arm64_[a-z0-9]\+' | cut -d'_' -f2)
+    echo "macOS version: $macos_version"
+    
+    if [ -z "$bottle_file" ] || [ -z "$bottle_sha" ] || [ -z "$macos_version" ]; then
+      echo "Error: Could not extract bottle information."
+      exit 1
+    fi
+    
+    # Move the bottle to a directory for release
+    mkdir -p bottles
+    mv "$bottle_file" bottles/
+    
+    echo "Bottle created successfully: bottles/$bottle_file"
+    
+    # Update the formula with bottle information
+    echo "Updating formula with bottle information..."
+    
+    # Update the bottle root_url
+    sed -i '' 's|root_url ".*"|root_url "https://github.com/fuzz/clod/releases/download/v'"$VERSION"'"|' Formula/clod.rb
+    
+    # Update the bottle SHA using the marker comment
+    if grep -q "BOTTLE_SHA256_MARKER" Formula/clod.rb; then
+      # Update the line after the BOTTLE_SHA256_MARKER
+      sed -i '' '/BOTTLE_SHA256_MARKER/,+1 s|sha256 cellar: :any, arm64_[a-z0-9]*: "[a-f0-9]*"|sha256 cellar: :any, arm64_'"$macos_version"': "'"$bottle_sha"'"|g' Formula/clod.rb
+    else
+      # Update using the older method if marker doesn't exist
+      echo "Warning: BOTTLE_SHA256_MARKER not found in formula. Using generic bottle SHA update."
+      sed -i '' 's|sha256 cellar: :any, arm64_[a-z0-9]*: "[a-f0-9]*"|sha256 cellar: :any, arm64_'"$macos_version"': "'"$bottle_sha"'"|g' Formula/clod.rb
+    fi
+    
+    # Ask if the user wants to test the bottle
+    echo "Do you want to test installing from the bottle? [y/N]"
+    read -r test_bottle
+    if [[ "$test_bottle" =~ ^[Yy] ]]; then
+      echo "Testing bottle installation..."
+      brew uninstall --force clod 2>/dev/null || true
+      brew install --formula ./Formula/clod.rb
+      
+      echo "Verifying installation..."
+      clod --version
+      
+      echo "Bottle test complete."
+    fi
+    
+    echo "Do you want to upload the bottle to GitHub releases? [y/N]"
+    read -r upload_bottle
+    if [[ "$upload_bottle" =~ ^[Yy] ]]; then
+      echo "To upload the bottle to GitHub releases:"
+      echo "1. Go to: https://github.com/fuzz/clod/releases/tag/v$VERSION"
+      echo "2. Edit the release"
+      echo "3. Upload the file: $(pwd)/bottles/$bottle_file"
+      echo "4. Save the release"
+      
+      echo "Would you like to open the release page in your browser? [y/N]"
+      read -r open_release
+      if [[ "$open_release" =~ ^[Yy] ]]; then
+        open "https://github.com/fuzz/clod/releases/tag/v$VERSION"
+      fi
+    fi
+  )
+fi
+
+# Step 16: Commit and push Homebrew formula update
 echo "=== Committing Homebrew formula update ==="
 echo "Do you want to commit and push the updated Homebrew formula? [y/N]"
 read -r brew_response
@@ -411,7 +508,7 @@ if [[ "$brew_response" =~ ^[Yy] ]]; then
   (
     cd "../homebrew-tap"
     git add "Formula/clod.rb"
-    git commit -m "Update clod formula to version $VERSION"
+    git commit -m "Update clod formula to version $VERSION with bottle support"
     
     echo "Do you want to push the formula update to origin? [y/N]"
     read -r push_brew_response
@@ -423,18 +520,4 @@ fi
 
 echo "=== Release process complete! ==="
 echo "Version $VERSION has been released to Hackage and the Homebrew formula has been updated."
-echo "Remember to test the Homebrew installation with: brew install --build-from-source ./homebrew-tap/Formula/clod.rb"
-
-# Alternative Haskell implementation note:
-# This script could be rewritten in Haskell using libraries like:
-# - process: For executing external commands
-# - turtle: A shell scripting library
-# - optparse-applicative: For command line option parsing
-# - filepath/directory: For file path manipulation
-# - bytestring/text: For text processing
-#
-# Benefits would include:
-# - Type safety
-# - Better error handling
-# - Integration with the rest of the Haskell codebase
-# - Potential for more modular design
+echo "Remember to test the Homebrew installation with: brew install fuzz/tap/clod"
