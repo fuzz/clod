@@ -28,6 +28,15 @@ VERSION=${VERSION:-$DEFAULT_VERSION}
 
 echo "=== Starting comprehensive release process for clod $VERSION ==="
 
+# Step 1: Verify tests pass before proceeding
+echo "=== Running tests ==="
+echo "Verifying all tests pass before making any changes..."
+if ! cabal test; then
+  echo "ERROR: Tests failed. Aborting release process."
+  exit 1
+fi
+echo "All tests passed. Proceeding with release..."
+
 # Update version in cabal file
 echo "Updating version in clod.cabal..."
 sed -i '' "s/^version:[ ]*$CURRENT_VERSION/version:             $VERSION/" clod.cabal
@@ -232,35 +241,39 @@ if [[ "$version_response" =~ ^[Yy] ]]; then
   fi
 fi
 
-# Step 2: Verify tests pass
-echo "=== Running tests ==="
-cabal test
-
-# Step 3: Generate documentation
+# Step 2: Generate documentation
 echo "=== Building documentation for Hackage ==="
 cabal haddock --haddock-for-hackage
 
-# Step 4: Create source distribution
+# Step 3: Create source distribution
 echo "=== Creating source distribution ==="
 cabal sdist
 
-# Step 5: Check package
+# Step 4: Check package
 echo "=== Checking package ==="
 cabal check
 
-# Step 6: Test build
+# Step 5: Test build
 echo "=== Testing build ==="
 cabal build --disable-documentation
 
-# Step 7: Build man pages for verification
+# Step 6: Build man pages for verification
 echo "=== Building man pages for verification ==="
+# Clean temp directory first to ensure we're testing with fresh files
+rm -rf /tmp/clod-man-test
+mkdir -p /tmp/clod-man-test
 "$PROJECT_ROOT/bin/install-man-pages.sh" /tmp/clod-man-test
 
-# Step 8: Verify man pages were generated correctly (no commit needed, already done earlier)
+# Step 7: Verify man pages were generated correctly
 echo "=== Verifying man pages ==="
+echo "Source markdown files:"
 ls -la "$PROJECT_ROOT/man/" | grep -E "\.md$"
+echo "Generated man pages in test directory:"
+ls -la /tmp/clod-man-test | grep -v "^total"
+# Clean up after verification
+rm -rf /tmp/clod-man-test
 
-# Step 9: Create tag
+# Step 8: Create tag
 echo "=== Creating Git tag ==="
 echo "Do you want to create git tag v$VERSION? [y/N]"
 read -r response
@@ -288,12 +301,12 @@ if [[ "$response" =~ ^[Yy] ]]; then
   fi
 fi
 
-# Step 10: Generate documentation package for Hackage
+# Step 9: Generate documentation package for Hackage
 echo "=== Generating Hackage documentation package ==="
 echo "Generating documentation package for Hackage..."
 cabal haddock --haddock-for-hackage --enable-documentation
 
-# Step 11: Upload to Hackage (manual step)
+# Step 10: Upload to Hackage (manual step)
 echo "=== Ready to upload to Hackage ==="
 echo "The following commands will upload the package and documentation to Hackage:"
 echo
@@ -323,12 +336,12 @@ else
   # Don't exit here as we still want to update the Homebrew formula
 fi
 
-# Step 12: Wait for Hackage to process the package
+# Step 11: Wait for Hackage to process the package
 echo "=== Waiting for Hackage to process the package ==="
 echo "Waiting for Hackage to process the package (10 seconds)..."
 sleep 10
 
-# Step 13: Calculate SHA256 for Homebrew formula
+# Step 12: Calculate SHA256 for Homebrew formula
 echo "=== Updating Homebrew formula ==="
 echo "Calculating SHA256 for Hackage package..."
 HACKAGE_URL="https://hackage.haskell.org/package/clod-$VERSION/clod-$VERSION.tar.gz"
@@ -381,7 +394,7 @@ if [ -z "$PACKAGE_SIZE" ] || [ "$PACKAGE_SIZE" -lt 1000 ]; then
   read -r
 fi
 
-# Step 14: Update Homebrew formula
+# Step 13: Update Homebrew formula
 FORMULA_PATH="../homebrew-tap/Formula/clod.rb"
 if [ ! -f "$FORMULA_PATH" ]; then
   echo "Error: Homebrew formula not found at $FORMULA_PATH"
@@ -435,7 +448,7 @@ fi
 
 echo "Formula updated successfully with new version and SHA256."
 
-# Step 15: Create and update bottle
+# Step 14: Create and update bottle
 echo "=== Building Homebrew bottle ==="
 echo "Do you want to build a Homebrew bottle for this release? [y/N]"
 read -r bottle_response
@@ -556,7 +569,7 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   )
 fi
 
-# Step 16: Commit and push Homebrew formula update
+# Step 15: Commit and push Homebrew formula update
 echo "=== Committing Homebrew formula update ==="
 echo "Do you want to commit and push the updated Homebrew formula? [y/N]"
 read -r brew_response
