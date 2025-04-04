@@ -414,6 +414,11 @@ if ! grep -q "TARBALL_SHA256_MARKER" "$FORMULA_PATH"; then
   exit 1
 fi
 
+# Always update the bottle root_url to match the current version
+# even if we're not building a bottle - this prevents version mismatches
+ROOT_URL_TEMPLATE="    root_url \"https://github.com/fuzz/clod/releases/download/v$VERSION\" # BOTTLE_ROOT_URL_MARKER"
+sed -i '' "s|.*BOTTLE_ROOT_URL_MARKER.*|$ROOT_URL_TEMPLATE|" "$FORMULA_PATH"
+
 # Use simple templates for the complete lines
 URL_TEMPLATE="  url \"https://hackage.haskell.org/package/clod-$VERSION/clod-$VERSION.tar.gz\" # TARBALL_URL_MARKER"
 SHA_TEMPLATE="  sha256 \"$SHA256\" # TARBALL_SHA256_MARKER"
@@ -447,12 +452,19 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   (
     cd "../homebrew-tap"
     
-    # Create the bottle with the full formula path to ensure tap prefix
+    # Clean environment and create the bottle
     echo "Creating bottle for this formula..."
-    brew uninstall --force fuzz/tap/clod 2>/dev/null || true
-    brew install --build-bottle fuzz/tap/clod
-    # Use --force-core-tap to treat it as if it were in homebrew/core
-    bottle_output=$(brew bottle --force-core-tap --no-rebuild --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod)
+    
+    # Ensure we have a clean state - uninstall any version of clod
+    brew uninstall --force clod 2>/dev/null || true
+    
+    # Create the bottle
+    echo "Installing formula with --build-bottle flag..."
+    brew install --build-bottle --formula ./Formula/clod.rb
+    
+    echo "Creating bottle file..."
+    # Use simpler bottle command that follows formula version
+    bottle_output=$(brew bottle --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" clod)
     echo "Bottle output: $bottle_output"
     
     # Extract the bottle file name - be flexible with the pattern to catch different formats
@@ -493,12 +505,10 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     # Update the formula with bottle information
     echo "Updating formula with bottle information..."
     
-    # Use simple templates for the bottle lines
-    ROOT_URL_TEMPLATE="    root_url \"https://github.com/fuzz/clod/releases/download/v$VERSION\" # BOTTLE_ROOT_URL_MARKER"
+    # Update just the bottle SHA - root_url is already updated earlier
     BOTTLE_SHA_TEMPLATE="    sha256 cellar: :any_skip_relocation, arm64_${macos_version}: \"$bottle_sha\" # BOTTLE_SHA256_MARKER"
     
-    # Replace the entire lines with the markers
-    sed -i '' "s|.*BOTTLE_ROOT_URL_MARKER.*|$ROOT_URL_TEMPLATE|" Formula/clod.rb
+    # Replace the SHA line with the marker
     sed -i '' "s|.*BOTTLE_SHA256_MARKER.*|$BOTTLE_SHA_TEMPLATE|" Formula/clod.rb
     
     # Verify the changes were made correctly
