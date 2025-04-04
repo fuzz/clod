@@ -449,8 +449,11 @@ read -r bottle_response
 if [[ "$bottle_response" =~ ^[Yy] ]]; then
   # Build bottle in homebrew-tap directory
   echo "Building bottle for clod formula..."
+  echo "DEBUG: Starting bottle build subshell"
   (
+    set -x  # Enable command tracing in this subshell
     cd "../homebrew-tap"
+    echo "DEBUG: Changed directory to homebrew-tap"
     
     # Clean environment and create the bottle
     echo "Creating bottle for this formula..."
@@ -474,7 +477,9 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     
     echo "Creating bottle file..."
     # Now we can reference the formula by its tap name
+    echo "DEBUG: Starting bottle creation command"
     bottle_output=$(brew bottle --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod)
+    echo "DEBUG: Bottle command executed"
     echo "Bottle output: $bottle_output"
     
     # Extract the bottle file name - be flexible with the pattern to catch different formats
@@ -506,11 +511,42 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
       exit 1
     fi
     
+    # Make sure the bottle file exists
+    if [ ! -f "$bottle_file" ]; then
+      echo "ERROR: Bottle file not found: $bottle_file"
+      ls -la
+      exit 1
+    fi
+    
     # Move the bottle to a directory for release
     mkdir -p bottles
     mv "$bottle_file" bottles/
     
     echo "Bottle created successfully: bottles/$bottle_file"
+    
+    # Check for GitHub CLI and upload bottle
+    echo "Checking for GitHub CLI (gh)..."
+    if ! command -v gh &> /dev/null; then
+      echo "ERROR: GitHub CLI (gh) not found. Please install it to automate bottle uploads."
+      echo "See: https://cli.github.com/"
+      exit 1
+    fi
+    
+    echo "Do you want to upload bottle to GitHub? [y/N]"
+    read -r upload_bottle
+    if [[ "$upload_bottle" =~ ^[Yy] ]]; then
+      echo "Checking if release for v$VERSION exists..."
+      if ! gh release view "v$VERSION" &>/dev/null; then
+        echo "Release v$VERSION doesn't exist. Creating it now..."
+        gh release create "v$VERSION" --title "Release v$VERSION" --notes "Release v$VERSION with Homebrew bottle support."
+      fi
+      
+      echo "Uploading bottle to GitHub release v$VERSION..."
+      gh release upload "v$VERSION" "bottles/$bottle_file" --clobber
+      
+      echo "Bottle uploaded successfully to GitHub release!"
+      echo "URL: https://github.com/fuzz/clod/releases/download/v$VERSION/$bottle_file"
+    fi
     
     # Update the formula with bottle information
     echo "Updating formula with bottle information..."
@@ -534,7 +570,7 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
       exit 1
     fi
     
-    # Ask if the user wants to test the bottle
+    # Ask if the user wants to test the bottle installation
     echo "Do you want to test installing from the bottle? [y/N]"
     read -r test_bottle
     if [[ "$test_bottle" =~ ^[Yy] ]]; then
@@ -548,22 +584,12 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
       echo "Bottle test complete."
     fi
     
-    echo "Do you want to upload the bottle to GitHub releases? [y/N]"
-    read -r upload_bottle
-    if [[ "$upload_bottle" =~ ^[Yy] ]]; then
-      echo "To upload the bottle to GitHub releases:"
-      echo "1. Go to: https://github.com/fuzz/clod/releases/tag/v$VERSION"
-      echo "2. Edit the release"
-      echo "3. Upload the file: $(pwd)/bottles/$bottle_file"
-      echo "4. Save the release"
-      
-      echo "Would you like to open the release page in your browser? [y/N]"
-      read -r open_release
-      if [[ "$open_release" =~ ^[Yy] ]]; then
-        open "https://github.com/fuzz/clod/releases/tag/v$VERSION"
-      fi
-    fi
+    # Extra debugging to catch any script execution issues
+    echo "DEBUG: Completed bottle testing section"
+    echo "DEBUG: End of bottle building subshell"
+    set +x  # Disable command tracing
   )
+  echo "DEBUG: After bottle building subshell"
 fi
 
 # Step 15: Commit and push Homebrew formula update
