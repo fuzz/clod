@@ -1,39 +1,8 @@
 # Changelog
 
-## [0.1.18] - 2025-04-03
+## [0.1.19] - 2025-04-03
 
-Test release process again
-
-## [0.1.17] - 2025-04-03
-
-Update README, remove crufty documentation files, test release again
-
-## [0.1.16] - 2025-04-03
-
-Run the tests before the rest of the release process
-
-## [0.1.15] - 2025-04-03
-
-Another version bump to test the full release process
-
-## [0.1.14] - 2025-04-03
-
-Version bump to test new release script--now with binary distribution for macOS
-Apple Silicon
-
-## [0.1.13] - 2025-04-03
-
-Update maintainer email
-
-## [0.1.12] - 2025-04-01
-
-Version bump to pick up script changes
-
-## [0.1.7] - 2025-04-01
-
-This entire project was created through human-AI pair programming, with Claude
-as the sole code and documentation author and Fuzz providing guidance,
-architectural decision, and final review.
+- Automate release process
 
 ## [0.1.6] - 2025-03-31
 ### Changed
