@@ -447,7 +447,18 @@ echo "Formula updated successfully with new version and SHA256."
 # Step 14: Create and update bottle
 echo "=== Building Homebrew bottle ==="
 echo "Do you want to build a Homebrew bottle for this release? [y/N]"
+
+# Debug input behavior
+echo "Debug: TTY status: $([ -t 0 ] && echo 'Input is from terminal' || echo 'Input is NOT from terminal')" >&2
+echo "Debug: Input source: $(tty 2>/dev/null || echo 'unknown')" >&2
+
+# For debugging, force a delay and make prompt more visible
+echo -e "\033[1;31mWAITING FOR INPUT (y/N):\033[0m" >&2
+sleep 1
+
 read -r bottle_response
+echo "Debug: User entered: '$bottle_response'" >&2
+
 if [[ "$bottle_response" =~ ^[Yy] ]]; then
   # Build bottle directly, no subshell so errors propagate
   echo "Building bottle for clod formula..."
