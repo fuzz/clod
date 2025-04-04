@@ -504,8 +504,8 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   
   # Use more basic file detection
   echo "DEBUG: Trying to find bottle file..." >&2
-  # Just grab the line that contains the .tar.gz filename (usually the 3rd line)
-  bottle_file=$(echo "$bottle_output" | grep '\.tar\.gz' | head -1 | awk '{print $1}')
+  # Get the proper bottle filename - it's the line after "Bottling" that ends with .tar.gz
+  bottle_file=$(echo "$bottle_output" | grep -A 1 'Bottling' | grep '\.tar\.gz')
   echo "Extracted bottle file name: $bottle_file" >&2
   echo "Bottle file: $bottle_file"
   
