@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                clod
-version:             0.1.17
+version:             0.1.18
 synopsis:            Project file manager for Claude AI integrations
 description:         Clod (Claude Loader) is a utility for preparing and uploading files to Claude AI's 
                      Project Knowledge feature. It tracks file changes, respects .gitignore and .clodignore 
@@ -44,18 +44,9 @@ build-type:          Simple
 
 extra-source-files:
   README.md
-  CONTRIBUTING.md 
-  RELEASING.md
   HUMAN.md
-  HASKELL_PATTERNS.md
-  INSTALLING.md
-  CAPABILITY_SECURITY.md
   CRITICAL.md
-  MAN_PAGES.md
-  PROJECT_ARCHITECTURE.md
-  SERIALIZATION.md
   SPEC.md
-  TEST_SAFETY.md
   guardrails.md
   project-instructions.md
   LICENSE

@@ -1,4 +1,4 @@
-% CLOD(7) Clod 0.1.17
+% CLOD(7) Clod 0.1.18
 % Fuzz Leonard & Claude <ink@fuzz.ink>
 % March 2025
 
