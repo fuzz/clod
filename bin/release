@@ -23,7 +23,7 @@ else
 fi
 
 # Ask user for new version
-read -p "Enter new version [$DEFAULT_VERSION]: " VERSION
+read -r -p "Enter new version [$DEFAULT_VERSION]: " VERSION
 VERSION=${VERSION:-$DEFAULT_VERSION}
 
 echo "=== Starting comprehensive release process for clod $VERSION ==="
@@ -54,7 +54,7 @@ if ! grep -q "^## \[$VERSION\]" CHANGELOG.md; then
   echo "Opening CHANGELOG.md for editing. Please add your release notes."
   echo "Press Enter to continue once you've saved the changes."
   ${EDITOR:-nano} CHANGELOG.md
-  read -p "Press Enter to continue with the release process..."
+  read -r -p "Press Enter to continue with the release process..."
 fi
 
 # Step 1: Generate man pages
@@ -178,13 +178,15 @@ and implement safeguards when using clod with Claude AI's Project Knowledge feat
 # PROJECT INSTRUCTIONS
 EOF
 
-  # Append project-instructions.md content
-  cat "$PROJECT_ROOT/project-instructions.md" >> "$PROJECT_ROOT/man/clod.7.md"
-
-  # Append guardrails.md content
-  echo "" >> "$PROJECT_ROOT/man/clod.7.md"
-  echo "# SAFEGUARDS" >> "$PROJECT_ROOT/man/clod.7.md"
-  cat "$PROJECT_ROOT/guardrails.md" >> "$PROJECT_ROOT/man/clod.7.md"
+  # Append project-instructions.md and guardrails.md content with a single redirection
+  {
+    # Append project-instructions.md content
+    cat "$PROJECT_ROOT/project-instructions.md"
+    # Add safeguards section
+    echo ""
+    echo "# SAFEGUARDS" 
+    cat "$PROJECT_ROOT/guardrails.md"
+  } >> "$PROJECT_ROOT/man/clod.7.md"
 else
   echo "Warning: Cannot generate clod(7).md, source files missing"
 fi
@@ -267,9 +269,9 @@ mkdir -p /tmp/clod-man-test
 # Step 7: Verify man pages were generated correctly
 echo "=== Verifying man pages ==="
 echo "Source markdown files:"
-ls -la "$PROJECT_ROOT/man/" | grep -E "\.md$"
+find "$PROJECT_ROOT/man/" -name "*.md" -type f -exec ls -la {} \;
 echo "Generated man pages in test directory:"
-ls -la /tmp/clod-man-test | grep -v "^total"
+find /tmp/clod-man-test -maxdepth 1 -not -name "." -not -name ".." -exec ls -la {} \;
 # Clean up after verification
 rm -rf /tmp/clod-man-test
 
@@ -430,13 +432,13 @@ sed -i '' "s|.*TARBALL_SHA256_MARKER.*|$SHA_TEMPLATE|" "$FORMULA_PATH"
 # Verify the changes were made correctly
 if ! grep -q "clod-$VERSION.*\.tar\.gz.*TARBALL_URL_MARKER" "$FORMULA_PATH"; then
   echo "ERROR: Formula URL update failed. Please check $FORMULA_PATH manually."
-  cat "$FORMULA_PATH" | grep -A 2 "url"
+  grep -A 2 "url" "$FORMULA_PATH"
   exit 1
 fi
 
 if ! grep -q "$SHA256.*TARBALL_SHA256_MARKER" "$FORMULA_PATH"; then
   echo "ERROR: Formula SHA256 update failed. Please check $FORMULA_PATH manually."
-  cat "$FORMULA_PATH" | grep -A 2 "sha256"
+  grep -A 2 "sha256" "$FORMULA_PATH"
   exit 1
 fi
 
@@ -447,149 +449,149 @@ echo "=== Building Homebrew bottle ==="
 echo "Do you want to build a Homebrew bottle for this release? [y/N]"
 read -r bottle_response
 if [[ "$bottle_response" =~ ^[Yy] ]]; then
-  # Build bottle in homebrew-tap directory
+  # Build bottle directly, no subshell so errors propagate
   echo "Building bottle for clod formula..."
-  echo "DEBUG: Starting bottle build subshell"
-  (
-    set -x  # Enable command tracing in this subshell
-    cd "../homebrew-tap"
-    echo "DEBUG: Changed directory to homebrew-tap"
+  
+  # Change to homebrew-tap directory, with error handling
+  if ! cd "../homebrew-tap"; then
+    echo "ERROR: Failed to change to homebrew-tap directory"
+    exit 1
+  fi
+  
+  # Clean environment and create the bottle
+  echo "Creating bottle for this formula..."
+  
+  # Ensure we have a clean state - uninstall any version of clod
+  brew uninstall --force clod 2>/dev/null || true
+  
+  # Make sure our tap is properly set up
+  echo "Ensuring tap is properly set up..."
+  # Commit any changes to ensure the tap repo is clean
+  git add Formula/clod.rb
+  git commit -m "Update formula for version $VERSION" || true
+  
+  # Point the tap to our local repo
+  brew untap fuzz/tap 2>/dev/null || true
+  brew tap fuzz/tap "$(pwd)"
+  
+  # Now install using the tap reference, not the file path
+  echo "Installing formula with --build-bottle flag..."
+  brew install --build-bottle fuzz/tap/clod
+  
+  echo "Creating bottle file..."
+  # Now we can reference the formula by its tap name
+  echo "Creating bottle..."
+  bottle_output=$(brew bottle --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod)
+  if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to create bottle"
+    exit 1
+  fi
+  echo "Bottle output: $bottle_output"
+  
+  # Extract the bottle file name - be flexible with the pattern to catch different formats
+  bottle_file=$(echo "$bottle_output" | grep -o '[a-zA-Z0-9_/-]*clod[a-zA-Z0-9_/-]*\.bottle\.tar\.gz')
+  echo "Bottle file: $bottle_file"
+  
+  # Extract the SHA256 from the bottle
+  bottle_sha=$(echo "$bottle_output" | grep -i 'sha256' | grep -o '"[a-f0-9]\+"' | tr -d '"')
+  echo "Bottle SHA256: $bottle_sha"
+  
+  # Extract the macOS version (monterey, ventura, sequoia, etc.)
+  macos_version=$(echo "$bottle_output" | grep -o 'arm64_[a-z0-9]\+' | head -1 | cut -d'_' -f2)
+  # If we couldn't extract it, use the current OS version as a fallback
+  if [ -z "$macos_version" ]; then
+    macos_version=$(sw_vers -productVersion | cut -d. -f1)
+    case "$macos_version" in
+      14) macos_version="sequoia" ;;
+      13) macos_version="ventura" ;;
+      12) macos_version="monterey" ;;
+      11) macos_version="big_sur" ;;
+      *) macos_version="sonoma" ;; # Default to latest as fallback
+    esac
+  fi
+  echo "macOS version: $macos_version"
+  
+  if [ -z "$bottle_file" ] || [ -z "$bottle_sha" ] || [ -z "$macos_version" ]; then
+    echo "Error: Could not extract bottle information."
+    echo "Bottle file format may have changed. Please check the actual filename: $bottle_file"
+    exit 1
+  fi
+  
+  # Make sure the bottle file exists
+  if [ ! -f "$bottle_file" ]; then
+    echo "ERROR: Bottle file not found: $bottle_file"
+    ls -la
+    exit 1
+  fi
+  
+  # Move the bottle to a directory for release
+  mkdir -p bottles
+  mv "$bottle_file" bottles/
+  
+  echo "Bottle created successfully: bottles/$bottle_file"
+  
+  # Check for GitHub CLI and upload bottle
+  echo "Checking for GitHub CLI (gh)..."
+  if ! command -v gh &> /dev/null; then
+    echo "ERROR: GitHub CLI (gh) not found. Please install it to automate bottle uploads."
+    echo "See: https://cli.github.com/"
+    exit 1
+  fi
+  
+  echo "Do you want to upload bottle to GitHub? [y/N]"
+  read -r upload_bottle
+  if [[ "$upload_bottle" =~ ^[Yy] ]]; then
+    echo "Checking if release for v$VERSION exists..."
+    if ! gh release view "v$VERSION" &>/dev/null; then
+      echo "Release v$VERSION doesn't exist. Creating it now..."
+      gh release create "v$VERSION" --title "Release v$VERSION" --notes "Release v$VERSION with Homebrew bottle support."
+    fi
     
-    # Clean environment and create the bottle
-    echo "Creating bottle for this formula..."
+    echo "Uploading bottle to GitHub release v$VERSION..."
+    gh release upload "v$VERSION" "bottles/$bottle_file" --clobber
     
-    # Ensure we have a clean state - uninstall any version of clod
+    echo "Bottle uploaded successfully to GitHub release!"
+    echo "URL: https://github.com/fuzz/clod/releases/download/v$VERSION/$bottle_file"
+  fi
+  
+  # Update the formula with bottle information
+  echo "Updating formula with bottle information..."
+  
+  # Update just the bottle SHA - root_url is already updated earlier
+  BOTTLE_SHA_TEMPLATE="    sha256 cellar: :any_skip_relocation, arm64_${macos_version}: \"$bottle_sha\" # BOTTLE_SHA256_MARKER"
+  
+  # Replace the SHA line with the marker
+  sed -i '' "s|.*BOTTLE_SHA256_MARKER.*|$BOTTLE_SHA_TEMPLATE|" Formula/clod.rb
+  
+  # Verify the changes were made correctly
+  if ! grep -q "v$VERSION.*BOTTLE_ROOT_URL_MARKER" Formula/clod.rb; then
+    echo "ERROR: Bottle root_url update failed. Please check Formula/clod.rb manually."
+    grep -A 2 "root_url" Formula/clod.rb
+    exit 1
+  fi
+  
+  if ! grep -q "arm64_${macos_version}.*$bottle_sha.*BOTTLE_SHA256_MARKER" Formula/clod.rb; then
+    echo "ERROR: Bottle SHA update failed. Please check Formula/clod.rb manually."
+    grep -A 2 "sha256 cellar" Formula/clod.rb
+    exit 1
+  fi
+  
+  # Ask if the user wants to test the bottle installation
+  echo "Do you want to test installing from the bottle? [y/N]"
+  read -r test_bottle
+  if [[ "$test_bottle" =~ ^[Yy] ]]; then
+    echo "Testing bottle installation..."
     brew uninstall --force clod 2>/dev/null || true
+    brew install --formula ./Formula/clod.rb
     
-    # Make sure our tap is properly set up
-    echo "Ensuring tap is properly set up..."
-    # Commit any changes to ensure the tap repo is clean
-    git add Formula/clod.rb
-    git commit -m "Update formula for version $VERSION" || true
+    echo "Verifying installation..."
+    clod --version
     
-    # Point the tap to our local repo
-    brew untap fuzz/tap 2>/dev/null || true
-    brew tap fuzz/tap "$(pwd)"
-    
-    # Now install using the tap reference, not the file path
-    echo "Installing formula with --build-bottle flag..."
-    brew install --build-bottle fuzz/tap/clod
-    
-    echo "Creating bottle file..."
-    # Now we can reference the formula by its tap name
-    echo "DEBUG: Starting bottle creation command"
-    bottle_output=$(brew bottle --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod)
-    echo "DEBUG: Bottle command executed"
-    echo "Bottle output: $bottle_output"
-    
-    # Extract the bottle file name - be flexible with the pattern to catch different formats
-    bottle_file=$(echo "$bottle_output" | grep -o '[a-zA-Z0-9_/-]*clod[a-zA-Z0-9_/-]*\.bottle\.tar\.gz')
-    echo "Bottle file: $bottle_file"
-    
-    # Extract the SHA256 from the bottle
-    bottle_sha=$(echo "$bottle_output" | grep -i 'sha256' | grep -o '"[a-f0-9]\+"' | tr -d '"')
-    echo "Bottle SHA256: $bottle_sha"
-    
-    # Extract the macOS version (monterey, ventura, sequoia, etc.)
-    macos_version=$(echo "$bottle_output" | grep -o 'arm64_[a-z0-9]\+' | head -1 | cut -d'_' -f2)
-    # If we couldn't extract it, use the current OS version as a fallback
-    if [ -z "$macos_version" ]; then
-      macos_version=$(sw_vers -productVersion | cut -d. -f1)
-      case "$macos_version" in
-        14) macos_version="sequoia" ;;
-        13) macos_version="ventura" ;;
-        12) macos_version="monterey" ;;
-        11) macos_version="big_sur" ;;
-        *) macos_version="sonoma" ;; # Default to latest as fallback
-      esac
-    fi
-    echo "macOS version: $macos_version"
-    
-    if [ -z "$bottle_file" ] || [ -z "$bottle_sha" ] || [ -z "$macos_version" ]; then
-      echo "Error: Could not extract bottle information."
-      echo "Bottle file format may have changed. Please check the actual filename: $bottle_file"
-      exit 1
-    fi
-    
-    # Make sure the bottle file exists
-    if [ ! -f "$bottle_file" ]; then
-      echo "ERROR: Bottle file not found: $bottle_file"
-      ls -la
-      exit 1
-    fi
-    
-    # Move the bottle to a directory for release
-    mkdir -p bottles
-    mv "$bottle_file" bottles/
-    
-    echo "Bottle created successfully: bottles/$bottle_file"
-    
-    # Check for GitHub CLI and upload bottle
-    echo "Checking for GitHub CLI (gh)..."
-    if ! command -v gh &> /dev/null; then
-      echo "ERROR: GitHub CLI (gh) not found. Please install it to automate bottle uploads."
-      echo "See: https://cli.github.com/"
-      exit 1
-    fi
-    
-    echo "Do you want to upload bottle to GitHub? [y/N]"
-    read -r upload_bottle
-    if [[ "$upload_bottle" =~ ^[Yy] ]]; then
-      echo "Checking if release for v$VERSION exists..."
-      if ! gh release view "v$VERSION" &>/dev/null; then
-        echo "Release v$VERSION doesn't exist. Creating it now..."
-        gh release create "v$VERSION" --title "Release v$VERSION" --notes "Release v$VERSION with Homebrew bottle support."
-      fi
-      
-      echo "Uploading bottle to GitHub release v$VERSION..."
-      gh release upload "v$VERSION" "bottles/$bottle_file" --clobber
-      
-      echo "Bottle uploaded successfully to GitHub release!"
-      echo "URL: https://github.com/fuzz/clod/releases/download/v$VERSION/$bottle_file"
-    fi
-    
-    # Update the formula with bottle information
-    echo "Updating formula with bottle information..."
-    
-    # Update just the bottle SHA - root_url is already updated earlier
-    BOTTLE_SHA_TEMPLATE="    sha256 cellar: :any_skip_relocation, arm64_${macos_version}: \"$bottle_sha\" # BOTTLE_SHA256_MARKER"
-    
-    # Replace the SHA line with the marker
-    sed -i '' "s|.*BOTTLE_SHA256_MARKER.*|$BOTTLE_SHA_TEMPLATE|" Formula/clod.rb
-    
-    # Verify the changes were made correctly
-    if ! grep -q "v$VERSION.*BOTTLE_ROOT_URL_MARKER" Formula/clod.rb; then
-      echo "ERROR: Bottle root_url update failed. Please check Formula/clod.rb manually."
-      cat Formula/clod.rb | grep -A 2 "root_url"
-      exit 1
-    fi
-    
-    if ! grep -q "arm64_${macos_version}.*$bottle_sha.*BOTTLE_SHA256_MARKER" Formula/clod.rb; then
-      echo "ERROR: Bottle SHA update failed. Please check Formula/clod.rb manually."
-      cat Formula/clod.rb | grep -A 2 "sha256 cellar"
-      exit 1
-    fi
-    
-    # Ask if the user wants to test the bottle installation
-    echo "Do you want to test installing from the bottle? [y/N]"
-    read -r test_bottle
-    if [[ "$test_bottle" =~ ^[Yy] ]]; then
-      echo "Testing bottle installation..."
-      brew uninstall --force clod 2>/dev/null || true
-      brew install --formula ./Formula/clod.rb
-      
-      echo "Verifying installation..."
-      clod --version
-      
-      echo "Bottle test complete."
-    fi
-    
-    # Extra debugging to catch any script execution issues
-    echo "DEBUG: Completed bottle testing section"
-    echo "DEBUG: End of bottle building subshell"
-    set +x  # Disable command tracing
-  )
-  echo "DEBUG: After bottle building subshell"
+    echo "Bottle test complete."
+  fi
+  
+  # Return to original directory
+  cd "$PROJECT_ROOT" || exit 1
 fi
 
 # Step 15: Commit and push Homebrew formula update
