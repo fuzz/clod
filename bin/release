@@ -442,18 +442,17 @@ echo "=== Building Homebrew bottle ==="
 echo "Do you want to build a Homebrew bottle for this release? [y/N]"
 read -r bottle_response
 if [[ "$bottle_response" =~ ^[Yy] ]]; then
-  # First uninstall existing clod formula to ensure clean build
-  echo "Uninstalling any existing clod formula..."
-  brew uninstall --force clod 2>/dev/null || true
-  
+  # Build bottle in homebrew-tap directory
   echo "Building bottle for clod formula..."
   (
     cd "../homebrew-tap"
-    # Install with --build-bottle flag
-    brew install --build-bottle --formula ./Formula/clod.rb
     
-    # Create the bottle
-    bottle_output=$(brew bottle --no-rebuild --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" clod)
+    # Create the bottle with the full formula path to ensure tap prefix
+    echo "Creating bottle for this formula..."
+    brew uninstall --force fuzz/tap/clod 2>/dev/null || true
+    brew install --build-bottle fuzz/tap/clod
+    # Use --force-core-tap to treat it as if it were in homebrew/core
+    bottle_output=$(brew bottle --force-core-tap --no-rebuild --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod)
     echo "Bottle output: $bottle_output"
     
     # Extract the bottle file name - be flexible with the pattern to catch different formats
