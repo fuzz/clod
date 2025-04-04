@@ -531,9 +531,13 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   # Note: We already checked each variable individually with better error messages
   
   # Make sure the bottle file exists
+  echo "Checking if bottle file exists: $bottle_file" >&2
+  ls -la "$bottle_file" >&2 || echo "Bottle file not found" >&2
+  
   if [ ! -f "$bottle_file" ]; then
     echo "ERROR: Bottle file not found: $bottle_file"
-    ls -la
+    echo "Contents of current directory:" >&2
+    ls -la >&2
     exit 1
   fi
   
@@ -544,6 +548,7 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   echo "Bottle created successfully: bottles/$bottle_file"
   
   # Check for GitHub CLI and upload bottle
+  echo "===== BEGIN GITHUB UPLOAD SECTION =====" >&2
   echo "Checking for GitHub CLI (gh)..."
   if ! command -v gh &> /dev/null; then
     echo "ERROR: GitHub CLI (gh) not found. Please install it to automate bottle uploads."
@@ -551,8 +556,11 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     exit 1
   fi
   
+  echo "==> INTERACTIVE PROMPT: GitHub Upload" >&2
   echo "Do you want to upload bottle to GitHub? [y/N]"
   read -r upload_bottle
+  echo "User response to upload prompt: $upload_bottle" >&2
+  
   if [[ "$upload_bottle" =~ ^[Yy] ]]; then
     echo "Checking if release for v$VERSION exists..."
     if ! gh release view "v$VERSION" &>/dev/null; then
@@ -565,7 +573,10 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     
     echo "Bottle uploaded successfully to GitHub release!"
     echo "URL: https://github.com/fuzz/clod/releases/download/v$VERSION/$bottle_file"
+  else
+    echo "Skipping GitHub upload as requested."
   fi
+  echo "===== END GITHUB UPLOAD SECTION =====" >&2
   
   # Update the formula with bottle information
   echo "Updating formula with bottle information..."
