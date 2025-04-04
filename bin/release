@@ -618,6 +618,16 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   # Replace the SHA line with the marker
   sed -i '' "s|.*BOTTLE_SHA256_MARKER.*|$BOTTLE_SHA_TEMPLATE|" Formula/clod.rb
   
+  # Handle the double-hyphen in the bottle filename by adding a custom URL
+  # Recent Homebrew versions use double-hyphen in bottle filenames
+  echo "Adapting formula for double-hyphen bottle filename ($bottle_file)..."
+  
+  # Add a custom bottle download URL directly in the bottle block
+  # Looking for the pattern "    sha256 cellar" and adding our URL line after it
+  sed -i '' "/sha256 cellar/a\\
+    # Custom URL to handle double-hyphen in bottle filename\\
+    url \"https://github.com/fuzz/clod/releases/download/v$VERSION/$bottle_file\"" Formula/clod.rb
+  
   # Verify the changes were made correctly
   if ! grep -q "v$VERSION.*BOTTLE_ROOT_URL_MARKER" Formula/clod.rb; then
     echo "ERROR: Bottle root_url update failed. Please check Formula/clod.rb manually."
@@ -631,29 +641,45 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     exit 1
   fi
   
-  # Ask if the user wants to test the bottle installation
-  echo "Do you want to test installing from the bottle? [y/N]"
+  # Ask if the user wants to PUSH and then test the bottle installation
+  echo "IMPORTANT: You must push formula changes to GitHub before testing bottle installation."
+  echo "Do you want to push changes to GitHub and then test the bottle? [y/N]"
   read -r test_bottle
   if [[ "$test_bottle" =~ ^[Yy] ]]; then
-    echo "Testing bottle installation..."
+    echo "Preparing to push formula changes to GitHub..."
     
     # Show the formula's bottle section for reference
     echo "Current formula bottle section:"
     grep -A 5 "bottle do" Formula/clod.rb
     
-    # Uninstall any existing version
-    brew uninstall --force clod 2>/dev/null || true
+    # Show the bottle filename for reference
+    echo "Bottle filename: $bottle_file"
     
-    # Commit changes to ensure the formula being tested reflects our updates
+    # Commit changes 
     git add Formula/clod.rb
     git commit -m "Update bottle references for version $VERSION" || true
     
-    # Re-tap the formula to use our latest changes
+    # Push changes to GitHub
+    echo "Pushing formula changes to GitHub..."
+    git push origin main
+    if [ $? -ne 0 ]; then
+      echo "ERROR: Failed to push changes to GitHub. Test installation will fail."
+      echo "Please push changes manually and then test installation."
+      exit 1
+    fi
+    
+    echo "Changes pushed to GitHub. Waiting 10 seconds for changes to propagate..."
+    sleep 10
+    
+    # Uninstall any existing version
+    brew uninstall --force clod 2>/dev/null || true
+    
+    # Untap and retap to get the latest formula from GitHub
     brew untap fuzz/tap 2>/dev/null || true
-    brew tap fuzz/tap "$(pwd)"
+    brew tap fuzz/tap
     
     # Install with debugging
-    echo "Installing from updated formula..."
+    echo "Installing from GitHub formula..."
     brew install --verbose fuzz/tap/clod 
     
     # Show what was installed
