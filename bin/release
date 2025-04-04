@@ -485,7 +485,7 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     
     # Use simple templates for the bottle lines
     ROOT_URL_TEMPLATE="    root_url \"https://github.com/fuzz/clod/releases/download/v$VERSION\" # BOTTLE_ROOT_URL_MARKER"
-    BOTTLE_SHA_TEMPLATE="    sha256 cellar: :any, arm64_$macos_version: \"$bottle_sha\" # BOTTLE_SHA256_MARKER"
+    BOTTLE_SHA_TEMPLATE="    sha256 cellar: :any, arm64_ventura: \"$bottle_sha\" # BOTTLE_SHA256_MARKER"
     
     # Replace the entire lines with the markers
     sed -i '' "s|.*BOTTLE_ROOT_URL_MARKER.*|$ROOT_URL_TEMPLATE|" Formula/clod.rb
