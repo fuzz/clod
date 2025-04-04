@@ -618,15 +618,22 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   # Replace the SHA line with the marker
   sed -i '' "s|.*BOTTLE_SHA256_MARKER.*|$BOTTLE_SHA_TEMPLATE|" Formula/clod.rb
   
-  # Handle the double-hyphen in the bottle filename by adding a custom URL
+  # Handle the double-hyphen in the bottle filename by updating the custom URL
   # Recent Homebrew versions use double-hyphen in bottle filenames
   echo "Adapting formula for double-hyphen bottle filename ($bottle_file)..."
   
-  # Add a custom bottle download URL directly in the bottle block
-  # Looking for the pattern "    sha256 cellar" and adding our URL line after it
-  sed -i '' "/sha256 cellar/a\\
-    # Custom URL to handle double-hyphen in bottle filename\\
-    url \"https://github.com/fuzz/clod/releases/download/v$VERSION/$bottle_file\"" Formula/clod.rb
+  # Check if BOTTLE_URL_MARKER exists in the formula
+  if ! grep -q "BOTTLE_URL_MARKER" Formula/clod.rb; then
+    echo "ERROR: BOTTLE_URL_MARKER not found in formula. Cannot update safely."
+    exit 1
+  fi
+  
+  # Update the bottle URL using the marker
+  BOTTLE_URL_TEMPLATE="    # Custom URL to handle double-hyphen in bottle filename\\
+    url \"https://github.com/fuzz/clod/releases/download/v$VERSION/$bottle_file\" # BOTTLE_URL_MARKER"
+  
+  # Replace the entire line with the marker
+  sed -i '' "s|.*BOTTLE_URL_MARKER.*|$BOTTLE_URL_TEMPLATE|" Formula/clod.rb
   
   # Verify the changes were made correctly
   if ! grep -q "v$VERSION.*BOTTLE_ROOT_URL_MARKER" Formula/clod.rb; then
