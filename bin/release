@@ -481,8 +481,7 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   echo "Creating bottle file..."
   # Now we can reference the formula by its tap name
   echo "Creating bottle..."
-  bottle_output=$(brew bottle --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod)
-  if [ $? -ne 0 ]; then
+  if ! bottle_output=$(brew bottle --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod); then
     echo "ERROR: Failed to create bottle"
     exit 1
   fi
