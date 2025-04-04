@@ -515,8 +515,8 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   
   # Use more basic file detection
   echo "DEBUG: Trying to find bottle file..." >&2
-  # Get the proper bottle filename - it's the line after "Bottling" that ends with .tar.gz
-  bottle_file=$(echo "$bottle_output" | grep -A 1 'Bottling' | grep '\.tar\.gz')
+  # Extract just the bottle filename directly using sed
+  bottle_file=$(echo "$bottle_output" | sed -n 's/.*\(clod--.*\.tar\.gz\).*/\1/p' | head -1)
   echo "Extracted bottle file name: $bottle_file" >&2
   echo "Bottle file: $bottle_file"
   
