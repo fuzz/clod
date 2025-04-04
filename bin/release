@@ -458,13 +458,23 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     # Ensure we have a clean state - uninstall any version of clod
     brew uninstall --force clod 2>/dev/null || true
     
-    # Create the bottle
+    # Make sure our tap is properly set up
+    echo "Ensuring tap is properly set up..."
+    # Commit any changes to ensure the tap repo is clean
+    git add Formula/clod.rb
+    git commit -m "Update formula for version $VERSION" || true
+    
+    # Point the tap to our local repo
+    brew untap fuzz/tap 2>/dev/null || true
+    brew tap fuzz/tap "$(pwd)"
+    
+    # Now install using the tap reference, not the file path
     echo "Installing formula with --build-bottle flag..."
-    brew install --build-bottle --formula ./Formula/clod.rb
+    brew install --build-bottle fuzz/tap/clod
     
     echo "Creating bottle file..."
-    # Use simpler bottle command that follows formula version
-    bottle_output=$(brew bottle --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" clod)
+    # Now we can reference the formula by its tap name
+    bottle_output=$(brew bottle --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod)
     echo "Bottle output: $bottle_output"
     
     # Extract the bottle file name - be flexible with the pattern to catch different formats
