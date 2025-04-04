@@ -481,14 +481,24 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   echo "Creating bottle file..."
   # Now we can reference the formula by its tap name
   echo "Creating bottle..."
+  
+  # Add explicit flushing to make sure output is visible
+  echo "About to run bottle command" >&2
+  set -x  # Turn on command tracing for debugging
+  
   if ! bottle_output=$(brew bottle --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod); then
-    echo "ERROR: Failed to create bottle"
+    echo "ERROR: Failed to create bottle" >&2
     exit 1
   fi
+  
+  set +x  # Turn off command tracing
+  echo "Bottle command completed successfully" >&2
   echo "Bottle output: $bottle_output"
   
   # Extract the bottle file name - be flexible with the pattern to catch different formats
+  echo "Processing bottle command output..." >&2
   bottle_file=$(echo "$bottle_output" | grep -o '[a-zA-Z0-9_/-]*clod[a-zA-Z0-9_/-]*\.bottle\.tar\.gz')
+  echo "Extracted bottle file name: $bottle_file" >&2
   echo "Bottle file: $bottle_file"
   
   # Extract the SHA256 from the bottle
