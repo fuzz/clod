@@ -592,7 +592,27 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   # Update the formula with bottle information
   echo "Updating formula with bottle information..."
   
-  # Update just the bottle SHA - root_url is already updated earlier
+  # Extract rebuild number from the filename if present
+  rebuild_num=$(echo "$bottle_file" | sed -n 's/.*\.bottle\.\([0-9]\+\)\.tar\.gz$/\1/p')
+  
+  # Handle the rebuild directive in the formula
+  if [ -n "$rebuild_num" ]; then
+    echo "Setting rebuild to $rebuild_num based on bottle filename"
+    # If rebuild directive exists, update it
+    if grep -q "^    rebuild " Formula/clod.rb; then
+      sed -i '' "s/^    rebuild [0-9]\+$/    rebuild $rebuild_num/" Formula/clod.rb
+    else
+      # If it doesn't exist, add it after the root_url line
+      sed -i '' "/root_url/a\\
+    rebuild $rebuild_num" Formula/clod.rb
+    fi
+  else
+    echo "No rebuild number in filename, removing rebuild directive if present"
+    # If no rebuild number in filename, remove the rebuild directive if it exists
+    sed -i '' '/^    rebuild [0-9]\+$/d' Formula/clod.rb
+  fi
+  
+  # Update the bottle SHA
   BOTTLE_SHA_TEMPLATE="    sha256 cellar: :any_skip_relocation, arm64_${macos_version}: \"$bottle_sha\" # BOTTLE_SHA256_MARKER"
   
   # Replace the SHA line with the marker
@@ -616,11 +636,30 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   read -r test_bottle
   if [[ "$test_bottle" =~ ^[Yy] ]]; then
     echo "Testing bottle installation..."
-    brew uninstall --force clod 2>/dev/null || true
-    brew install --formula ./Formula/clod.rb
     
+    # Show the formula's bottle section for reference
+    echo "Current formula bottle section:"
+    grep -A 5 "bottle do" Formula/clod.rb
+    
+    # Uninstall any existing version
+    brew uninstall --force clod 2>/dev/null || true
+    
+    # Commit changes to ensure the formula being tested reflects our updates
+    git add Formula/clod.rb
+    git commit -m "Update bottle references for version $VERSION" || true
+    
+    # Re-tap the formula to use our latest changes
+    brew untap fuzz/tap 2>/dev/null || true
+    brew tap fuzz/tap "$(pwd)"
+    
+    # Install with debugging
+    echo "Installing from updated formula..."
+    brew install --verbose fuzz/tap/clod 
+    
+    # Show what was installed
     echo "Verifying installation..."
     clod --version
+    brew info clod
     
     echo "Bottle test complete."
   fi
