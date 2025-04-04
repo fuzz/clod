@@ -1,8 +1,9 @@
 # Changelog
 
-## [0.1.24] - 2025-04-04
+## [0.1.25] - 2025-04-04
 
-- Automate release process
+- [Automate release process](https://www.youtube.com/watch?v=MK6TXMsvgQg)
+
 
 ## [0.1.6] - 2025-03-31
 ### Changed
