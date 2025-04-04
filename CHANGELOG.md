@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.20] - 2025-04-03
+## [0.1.21] - 2025-04-04
 
 - Automate release process
 
