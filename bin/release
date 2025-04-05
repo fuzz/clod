@@ -491,51 +491,85 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   
   echo "Creating bottle file..."
   # Now we can reference the formula by its tap name
-  echo "Creating bottle..."
+  echo "Creating bottle with JSON output..."
+  
+  # Check if jq is available - we need it to parse the JSON
+  if ! command -v jq &> /dev/null; then
+    echo "ERROR: jq is required but not installed. Please install jq."
+    exit 1
+  fi
   
   # Add explicit flushing to make sure output is visible
-  echo "About to run bottle command" >&2
+  echo "About to run bottle command with JSON output" >&2
   set -x  # Turn on command tracing for debugging
   
-  if ! bottle_output=$(brew bottle --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod); then
+  # Run brew bottle with JSON output to get both filename and local_filename
+  if ! brew bottle --json --root-url="https://github.com/fuzz/clod/releases/download/v$VERSION" fuzz/tap/clod; then
     echo "ERROR: Failed to create bottle" >&2
     exit 1
   fi
   
   set +x  # Turn off command tracing
   echo "Bottle command completed successfully" >&2
-  echo "Bottle output: $bottle_output"
   
-  # Extract the bottle file name - be flexible with the pattern to catch different formats
-  echo "Processing bottle command output..." >&2
+  # Find the JSON file created by brew bottle
+  bottle_json=$(find . -name "*.json" -newer "$(pwd)/.git/index" -print | head -1)
+  echo "Found JSON file: $bottle_json"
   
-  # Print out the complete bottle output for debugging
-  echo "DEBUG: Complete bottle output: " >&2
-  echo "$bottle_output" >&2
+  if [ -z "$bottle_json" ] || [ ! -f "$bottle_json" ]; then
+    echo "ERROR: Could not find bottle JSON file" >&2
+    exit 1
+  fi
   
-  # Use more basic file detection
-  echo "DEBUG: Trying to find bottle file..." >&2
-  # Extract just the bottle filename directly using sed
-  bottle_file=$(echo "$bottle_output" | sed -n 's/.*\(clod--.*\.tar\.gz\).*/\1/p' | head -1)
-  echo "Extracted bottle file name: $bottle_file" >&2
+  # Extract both filenames from the JSON
+  # The JSON structure has the filenames under the "tags" key for the specific platform
+  expected_filename=$(jq -r '.[] | .bottle.tags | to_entries[0].value.filename' "$bottle_json")
+  local_filename=$(jq -r '.[] | .bottle.tags | to_entries[0].value.local_filename' "$bottle_json")
+  
+  # Fail if we couldn't extract the filenames
+  if [ -z "$expected_filename" ] || [ -z "$local_filename" ]; then
+    echo "ERROR: Failed to extract expected_filename or local_filename from JSON" >&2
+    echo "JSON content:" >&2
+    cat "$bottle_json" >&2
+    exit 1
+  fi
+  
+  echo "Expected filename (for Homebrew): $expected_filename"
+  echo "Local filename (generated): $local_filename"
+  
+  # Use the local_filename as our bottle_file
+  bottle_file=$local_filename
+  
+  # Verify the bottle file exists
+  if [ ! -f "$bottle_file" ]; then
+    echo "ERROR: Bottle file not found: $bottle_file" >&2
+    exit 1
+  fi
+  
   echo "Bottle file: $bottle_file"
   
-  # Extract the SHA256 from the bottle
-  echo "DEBUG: Extracting SHA256..." >&2
-  sha256_line=$(echo "$bottle_output" | grep -i 'sha256')
-  echo "DEBUG: SHA256 line: $sha256_line" >&2
+  # Extract the SHA256 from the JSON
+  echo "Extracting SHA256 from JSON..." >&2
+  bottle_sha=$(jq -r '.[] | .bottle.tags | to_entries[0].value.sha256' "$bottle_json")
   
-  bottle_sha=$(echo "$sha256_line" | grep -o '"[a-f0-9]\+"' | tr -d '"')
-  echo "DEBUG: Extracted SHA256: $bottle_sha" >&2
+  if [ -z "$bottle_sha" ]; then
+    echo "ERROR: Failed to extract SHA256 from JSON" >&2
+    echo "JSON content:" >&2
+    cat "$bottle_json" >&2
+    exit 1
+  fi
+  
   echo "Bottle SHA256: $bottle_sha"
   
-  # Extract the macOS version (monterey, ventura, sequoia, etc.)
-  macos_version=$(echo "$bottle_output" | grep -o 'arm64_[a-z0-9]\+' | head -1 | cut -d'_' -f2)
+  # Extract the macOS version from the JSON
+  macos_version=$(jq -r '.[] | .bottle.tags | keys[0]' "$bottle_json" | cut -d'_' -f2)
   echo "macOS version: $macos_version"
   
   # Fail if we can't extract the macOS version
   if [ -z "$macos_version" ]; then
-    echo "ERROR: Failed to extract macOS version from output"
+    echo "ERROR: Failed to extract macOS version from JSON"
+    echo "JSON content:" >&2
+    cat "$bottle_json" >&2
     exit 1
   fi
   
@@ -573,17 +607,36 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   echo "User response to upload prompt: $upload_bottle" >&2
   
   if [[ "$upload_bottle" =~ ^[Yy] ]]; then
+    # Change directory to the clod repository for GitHub operations
+    cd "$PROJECT_ROOT"
+    
     echo "Checking if release for v$VERSION exists..."
     if ! gh release view "v$VERSION" &>/dev/null; then
       echo "Release v$VERSION doesn't exist. Creating it now..."
       gh release create "v$VERSION" --title "Release v$VERSION" --notes "Release v$VERSION with Homebrew bottle support."
     fi
     
-    echo "Uploading bottle to GitHub release v$VERSION..."
-    gh release upload "v$VERSION" "bottles/$bottle_file" --clobber
+    echo "Renaming bottle file to match Homebrew's expected filename..."
+    # Use the exact filename from the JSON file
+    mv "../homebrew-tap/bottles/$bottle_file" "../homebrew-tap/bottles/$expected_filename"
+    if [ $? -ne 0 ]; then
+      echo "ERROR: Failed to rename bottle file to match Homebrew's expected filename." >&2
+      exit 1
+    fi
+    
+    echo "Successfully renamed bottle file to: $expected_filename"
+    
+    echo "Uploading bottle to GitHub release v$VERSION in fuzz/clod repository..."
+    if ! gh release upload "v$VERSION" "../homebrew-tap/bottles/$expected_filename" --clobber; then
+      echo "ERROR: Failed to upload bottle to GitHub." >&2 
+      exit 1
+    fi
     
     echo "Bottle uploaded successfully to GitHub release!"
-    echo "URL: https://github.com/fuzz/clod/releases/download/v$VERSION/$bottle_file"
+    echo "URL: https://github.com/fuzz/clod/releases/download/v$VERSION/$expected_filename"
+    
+    # Change back to homebrew-tap directory
+    cd "../homebrew-tap"
   else
     echo "Skipping GitHub upload as requested."
   fi
@@ -622,8 +675,6 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   
   # Replace the SHA line with the marker
   sed -i '' "s|.*BOTTLE_SHA256_MARKER.*|$BOTTLE_SHA_TEMPLATE|" Formula/clod.rb
-  
-  # Verify the changes were made correctly
   if ! grep -q "v$VERSION.*BOTTLE_ROOT_URL_MARKER" Formula/clod.rb; then
     echo "ERROR: Bottle root_url update failed. Please check Formula/clod.rb manually."
     grep -A 2 "root_url" Formula/clod.rb
