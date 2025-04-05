@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.26] - 2025-04-04
+## [0.1.27] - 2025-04-04
 
 - [Automate release process](https://www.youtube.com/watch?v=MK6TXMsvgQg)
 
