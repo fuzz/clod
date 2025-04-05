@@ -670,8 +670,8 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     sed -i '' '/^    rebuild [0-9]\+$/d' Formula/clod.rb
   fi
   
-  # Update the bottle SHA
-  BOTTLE_SHA_TEMPLATE="    sha256 cellar: :any_skip_relocation, arm64_${macos_version}: \"$bottle_sha\" # BOTTLE_SHA256_MARKER"
+  # Update the bottle SHA - use :any for cellar since we link against libmagic
+  BOTTLE_SHA_TEMPLATE="    sha256 cellar: :any, arm64_${macos_version}: \"$bottle_sha\" # BOTTLE_SHA256_MARKER"
   
   # Replace the SHA line with the marker
   sed -i '' "s|.*BOTTLE_SHA256_MARKER.*|$BOTTLE_SHA_TEMPLATE|" Formula/clod.rb
