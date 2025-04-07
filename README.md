@@ -97,7 +97,7 @@ open `clod`
 - `--flush`, `-f`: Flush stale entries from the checksums database
 - `--last`, `-l`: Reuse the previous staging directory
 - `--help`: Show help information
-- `--version`: Show version information
+- `--version`, `-V`: Show version information
 
 ### Opening the Staging Directory
 
