@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0] - 2025-04-07
+
+### Added
+- Added -V as a shortcut for --version option (consistent with GHC)
+- Fixed bug in bin/release script where tags were created in the wrong repository
+- Improved release script with better directory handling and error checking
+- First official major version release (0.2.0)
+
+### Changed
+- Enhanced release process automation 
+- Fixed shell script best practices issues reported by shellcheck
+- Improved error handling during release process
+- Refined directory handling in release automation
+
 ## [0.1.41] - 2025-04-07
 
 - [Automate release process](https://www.youtube.com/watch?v=MK6TXMsvgQg)

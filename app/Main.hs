@@ -23,6 +23,8 @@ import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Hashable (hash)
 import Control.Exception (try, IOException)
 import Data.List (isInfixOf)
+import Data.Version (showVersion)
+import qualified Paths_clod as Meta
 
 import Clod.Core (runClodApp)
 import Clod.Types (ClodConfig(..))
@@ -164,7 +166,11 @@ main = do
           exitFailure
         Right _ -> return ()
   where
-    opts = info (optionsParser <**> helper)
+    opts = info (optionsParser <**> helper <**> version)
       ( fullDesc
      <> progDesc "Prepare files from a git repository for upload to Claude's Project Knowledge"
      <> header "clod - Claude Git Project File Uploader" )
+    version = infoOption (showVersion Meta.version)
+      ( long "version"
+     <> short 'V'
+     <> help "Show version information" )

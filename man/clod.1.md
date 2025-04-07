@@ -1,4 +1,4 @@
-% CLOD(1) Clod 0.1.41
+% CLOD(1) Clod 0.2.0
 % Fuzz Leonard & Claude <ink@fuzz.ink>
 % March 2025
 
@@ -39,7 +39,7 @@ for Claude's UI.
 **--help**
 : Show help information
 
-**--version**
+**--version**, **-V**
 : Show version information
 
 # EXAMPLES
