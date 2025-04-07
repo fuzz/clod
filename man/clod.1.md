@@ -39,7 +39,7 @@ for Claude's UI.
 **--help**
 : Show help information
 
-**--version**, **-V**
+**--version**
 : Show version information
 
 # EXAMPLES
