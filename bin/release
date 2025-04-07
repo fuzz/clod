@@ -625,8 +625,7 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     
     echo "Renaming bottle file to match Homebrew's expected filename..."
     # Use the exact filename from the JSON file
-    mv "bottles/$bottle_file" "bottles/$expected_filename"
-    if [ $? -ne 0 ]; then
+    if ! mv "bottles/$bottle_file" "bottles/$expected_filename"; then
       echo "ERROR: Failed to rename bottle file to match Homebrew's expected filename." >&2
       exit 1
     fi
@@ -661,23 +660,27 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     rebuild_num="${BASH_REMATCH[1]}"
     echo "Found rebuild number $rebuild_num in bottle filename: $bottle_file"
     
-    # Update the rebuild directive in the formula
-    echo "Setting rebuild to $rebuild_num based on bottle filename"
-    # Use awk to properly match and replace the rebuild line
-    awk -v num="$rebuild_num" '{if ($1 == "rebuild") {print "    rebuild " num;} else {print $0;}}' Formula/clod.rb > Formula/clod.rb.new
-    mv Formula/clod.rb.new Formula/clod.rb
-    
-    # Verify the rebuild was updated correctly
-    echo "Verifying rebuild number in formula:"
-    grep "rebuild" Formula/clod.rb
+    # Check if rebuild directive already exists
+    if grep -q "^[[:space:]]*rebuild" Formula/clod.rb; then
+      # Update the rebuild directive in the formula
+      echo "Setting rebuild to $rebuild_num based on bottle filename"
+      # Use awk to properly match and replace the rebuild line
+      awk -v num="$rebuild_num" '{if ($1 == "rebuild") {print "    rebuild " num;} else {print $0;}}' Formula/clod.rb > Formula/clod.rb.new
+      mv Formula/clod.rb.new Formula/clod.rb
+      
+      # Verify the rebuild was updated correctly
+      echo "Verifying rebuild number in formula:"
+      grep "rebuild" Formula/clod.rb
     else
+      # Add rebuild directive if it doesn't exist
+      echo "Adding rebuild directive with value $rebuild_num"
       sed -i '' "/root_url/a\\
     rebuild $rebuild_num" Formula/clod.rb
     fi
   else
     echo "No rebuild number found in filename, removing rebuild directive if present"
     # Remove rebuild directive if it exists
-    sed -i '' '/^    rebuild [0-9]\+$/d' Formula/clod.rb
+    sed -i '' '/^[[:space:]]*rebuild [0-9]\+$/d' Formula/clod.rb
   fi
   
   # Update the bottle SHA - use :any for cellar since we link against libmagic
@@ -717,8 +720,7 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
     
     # Push changes to GitHub
     echo "Pushing formula changes to GitHub..."
-    git push origin main
-    if [ $? -ne 0 ]; then
+    if ! git push origin main; then
       echo "ERROR: Failed to push changes to GitHub. Test installation will fail."
       echo "Please push changes manually and then test installation."
       exit 1
@@ -748,24 +750,6 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   
   # Return to original directory
   cd "$CLOD_DIR" || exit 1
-fi
-
-# Step 15: Commit and push Homebrew formula update
-echo "=== Committing Homebrew formula update ==="
-echo "Do you want to commit and push the updated Homebrew formula? [y/N]"
-read -r brew_response
-if [[ "$brew_response" =~ ^[Yy] ]]; then
-  (
-    cd "../homebrew-tap"
-    git add "Formula/clod.rb"
-    git commit -m "Update clod formula to version $VERSION with bottle support"
-    
-    echo "Do you want to push the formula update to origin? [y/N]"
-    read -r push_brew_response
-    if [[ "$push_brew_response" =~ ^[Yy] ]]; then
-      git push origin
-    fi
-  )
 fi
 
 # Return to clod directory no matter what
