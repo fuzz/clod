@@ -416,6 +416,10 @@ if ! grep -q "TARBALL_SHA256_MARKER" "$FORMULA_PATH"; then
   exit 1
 fi
 
+# Remember we're in the clod directory for this part
+# Save current directory to return to it for homebrew operations
+CLOD_DIR="$(pwd)"
+
 # Always update the bottle root_url to match the current version
 # even if we're not building a bottle - this prevents version mismatches
 ROOT_URL_TEMPLATE="    root_url \"https://github.com/fuzz/clod/releases/download/v$VERSION\" # BOTTLE_ROOT_URL_MARKER"
@@ -608,7 +612,7 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   
   if [[ "$upload_bottle" =~ ^[Yy] ]]; then
     # Change directory to the clod repository for GitHub operations
-    cd "$PROJECT_ROOT"
+    cd "$CLOD_DIR"
     
     echo "Checking if release for v$VERSION exists..."
     if ! gh release view "v$VERSION" &>/dev/null; then
@@ -616,15 +620,21 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
       gh release create "v$VERSION" --title "Release v$VERSION" --notes "Release v$VERSION with Homebrew bottle support."
     fi
     
+    # Go back to homebrew-tap directory to access the bottle file
+    cd "../homebrew-tap"
+    
     echo "Renaming bottle file to match Homebrew's expected filename..."
     # Use the exact filename from the JSON file
-    mv "../homebrew-tap/bottles/$bottle_file" "../homebrew-tap/bottles/$expected_filename"
+    mv "bottles/$bottle_file" "bottles/$expected_filename"
     if [ $? -ne 0 ]; then
       echo "ERROR: Failed to rename bottle file to match Homebrew's expected filename." >&2
       exit 1
     fi
     
     echo "Successfully renamed bottle file to: $expected_filename"
+    
+    # Go back to clod directory for GitHub operations
+    cd "$CLOD_DIR"
     
     echo "Uploading bottle to GitHub release v$VERSION in fuzz/clod repository..."
     if ! gh release upload "v$VERSION" "../homebrew-tap/bottles/$expected_filename" --clobber; then
@@ -737,7 +747,7 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   fi
   
   # Return to original directory
-  cd "$PROJECT_ROOT" || exit 1
+  cd "$CLOD_DIR" || exit 1
 fi
 
 # Step 15: Commit and push Homebrew formula update
@@ -757,6 +767,9 @@ if [[ "$brew_response" =~ ^[Yy] ]]; then
     fi
   )
 fi
+
+# Return to clod directory no matter what
+cd "$CLOD_DIR" || exit 1
 
 echo "=== Release process complete! ==="
 echo "Version $VERSION has been released to Hackage and the Homebrew formula has been updated."
