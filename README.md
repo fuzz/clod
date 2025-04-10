@@ -20,6 +20,19 @@ I hand it over to Claude Code and let him solve the final problems with local
 access and also have him double-check the other Claude’s work. I say “save 50%”
 but really I probably save more like 90% with this approach.
 
+While this project was built with filesystem access in mind I usually find
+myself instead having Claude generate a shell script for me that will apply his
+changes to the codebase, then I review the script, request changes if needed,
+download it through the UI and run it. I usually have his script create a tmp
+directory, create the needed patch files (actual patch files for patch(1) to
+apply--sometimes Claude just rolls his own patch system if you're not careful)
+in it, apply the patches, remove the tmp directory if all the patches apply
+cleanly. Claude usually defaults to `sed` for this sort of thing, but it's
+error prone even for the best frontier AI.
+
+*Some ~~people~~ entities, when confronted with a problem, think “I know, I’ll
+use regular expressions.” Now they have two problems.* --Jamie Zawinski
+
 Developed by [Fuzz, Inc](https://fuzz.ink) - World-class technical leadership and execution
 
 ## Features
