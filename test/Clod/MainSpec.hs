@@ -28,7 +28,7 @@ import Control.Exception (SomeException)
 import Control.Monad.IO.Class ()
 
 import qualified Clod.Core as Core
-import Clod.Types (ClodConfig(..), runClodM, fileReadCap, fileWriteCap)
+import qualified Clod.Types as T
 import qualified Options.Applicative as Opt
 import Clod.TestHelpers (defaultTestConfig)
 
@@ -169,12 +169,13 @@ cliWorkflowSpec = describe "CLI workflow" $ do
       System.IO.writeFile (projectDir </> "file2.txt") "original content"
       
       -- Create a basic config
-      let config = (defaultTestConfig projectDir) {
-            stagingDir = stagingDir,
-            currentStaging = stagingDir,
-            configDir = configDir,
-            databaseFile = configDir </> "checksums.dhall"
-          }
+      let stagingDirPath = stagingDir
+          configDirPath = configDir
+          config = defaultTestConfig projectDir
+            T.& T.stagingDir T..~ stagingDirPath
+            T.& T.currentStaging T..~ stagingDirPath
+            T.& T.configDir T..~ configDirPath
+            T.& T.databaseFile T..~ configDirPath </> "checksums.dhall"
       
       -- Initialize test environment
       
@@ -192,10 +193,10 @@ cliWorkflowSpec = describe "CLI workflow" $ do
       createDirectoryIfMissing True stagingDir2
       
       -- Update config for second run
-      let config2 = config {
-            stagingDir = stagingDir2,
-            currentStaging = stagingDir2
-          }
+      let stagingDir2Path = stagingDir2
+          config2 = config
+            T.& T.stagingDir T..~ stagingDir2Path
+            T.& T.currentStaging T..~ stagingDir2Path
       
       -- Make no changes to files
       result2 <- Core.runClodApp config2 stagingDir2 False False
@@ -225,10 +226,10 @@ cliWorkflowSpec = describe "CLI workflow" $ do
       createDirectoryIfMissing True stagingDir3
       
       -- Update config for third run
-      let config3 = config {
-            stagingDir = stagingDir3,
-            currentStaging = stagingDir3
-          }
+      let stagingDir3Path = stagingDir3
+          config3 = config
+            T.& T.stagingDir T..~ stagingDir3Path
+            T.& T.currentStaging T..~ stagingDir3Path
       
       -- Run third time - should process only modified file
       _ <- Core.runClodApp config3 stagingDir3 False False
@@ -257,10 +258,10 @@ cliWorkflowSpec = describe "CLI workflow" $ do
       -- Direct execution in production code would need a more sophisticated approach
       result <- Exception.try @SomeException $ do
         -- Create minimal config to use in test (avoiding main which could exit)
-        let config = (defaultTestConfig projectDir) {
-              stagingDir = stagingDir,
-              currentStaging = stagingDir
-            }
+        let stagingDirPath = stagingDir
+            config = defaultTestConfig projectDir
+              T.& T.stagingDir T..~ stagingDirPath
+              T.& T.currentStaging T..~ stagingDirPath
         
         -- Now execute what main would do but in a controlled way
         createDirectoryIfMissing True stagingDir
@@ -274,11 +275,11 @@ cliWorkflowSpec = describe "CLI workflow" $ do
         _ <- Core.runClodApp config stagingDir True False
         
         -- Now explicitly process the test file (since runClodApp doesn't process files by default)
-        let readCap = fileReadCap [projectDir]
-            writeCap = fileWriteCap [stagingDir]
+        let readCap = T.fileReadCap [projectDir]
+            writeCap = T.fileWriteCap [stagingDir]
             
         -- Process the test file manually
-        runClodM config $ 
+        T.runClodM config $ 
           Core.processFile readCap writeCap (projectDir </> "test.txt") "test.txt"
       
       -- Verify directories were created

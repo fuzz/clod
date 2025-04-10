@@ -27,7 +27,6 @@ module Clod.FileSystem.Detection
 import Control.Exception (try, SomeException)
 import Control.Monad.Except (throwError)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (asks)
 import Data.List (isPrefixOf)
 import Data.Time.Clock (UTCTime)
 import System.Directory (doesFileExist, getModificationTime, canonicalizePath)
@@ -37,7 +36,8 @@ import qualified Data.Text as T
 import qualified Dhall
 import Data.FileEmbed (embedStringFile)
 
-import Clod.Types (ClodM, FileReadCap(..), ClodError(..), isPathAllowed, ClodConfig(..))
+import Clod.Types (ClodM, FileReadCap(..), ClodError(..), isPathAllowed, 
+                 allowedReadDirs, configDir, ask, (^.))
 import qualified Magic.Init as Magic
 import qualified Magic.Operations as Magic
 
@@ -68,7 +68,8 @@ parseDefaultTextPatterns = do
 -- and falls back to the embedded default patterns if not found.
 loadTextPatterns :: ClodM TextPatterns
 loadTextPatterns = do
-  clodDir <- asks configDir
+  config <- ask
+  let clodDir = config ^. configDir
   
   -- First check if there's a custom pattern file in the clod directory
   let customPath = clodDir </> "resources" </> "text_patterns.dhall"
@@ -143,7 +144,7 @@ isModifiedSince basePath lastRunTime relPath = do
 -- | Safe file existence check that checks capabilities
 safeFileExists :: FileReadCap -> FilePath -> ClodM Bool
 safeFileExists cap path = do
-  allowed <- liftIO $ isPathAllowed (allowedReadDirs cap) path
+  allowed <- liftIO $ isPathAllowed (cap ^. allowedReadDirs) path
   if allowed
     then liftIO $ doesFileExist path
     else do
@@ -153,7 +154,7 @@ safeFileExists cap path = do
 -- | Safe file type check that checks capabilities
 safeIsTextFile :: FileReadCap -> FilePath -> ClodM Bool
 safeIsTextFile cap path = do
-  allowed <- liftIO $ isPathAllowed (allowedReadDirs cap) path
+  allowed <- liftIO $ isPathAllowed (cap ^. allowedReadDirs) path
   if allowed
     then isTextFile path
     else do

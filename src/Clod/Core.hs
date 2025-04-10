@@ -48,6 +48,7 @@ import Clod.IgnorePatterns (matchesIgnorePattern, readClodIgnore, readGitIgnore)
 import Clod.FileSystem.Detection (safeFileExists, safeIsTextFile)
 import Clod.FileSystem.Operations (safeCopyFile, findAllFiles)
 import Clod.FileSystem.Processing (processFiles, writeManifestFile, createOptimizedName)
+import Clod.Output (whenVerbose)
 import Clod.FileSystem.Checksums (FileStatus(Unchanged, Modified, New, Renamed), detectFileChanges,
                               loadDatabase, saveDatabase, updateDatabase, 
                               cleanupStagingDirectories, flushMissingEntries,
@@ -57,7 +58,8 @@ import qualified Paths_clod as Meta
 -- | Check if a file should be ignored based on ignore patterns
 checkIgnorePatterns :: FilePath -> FilePath -> ClodM (Either String FileResult)
 checkIgnorePatterns _ relPath = do
-  patterns <- ignorePatterns <$> ask
+  config <- ask
+  let patterns = config ^. ignorePatterns
   if not (null patterns) && matchesIgnorePattern patterns relPath
     then pure $ Left "matched .clodignore pattern"
     else pure $ Right Success
@@ -87,7 +89,8 @@ checkIsTextFile readCap fullPath _ = do
 -- | Copy a file to the staging directory
 copyToStaging :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM (Either String FileResult)
 copyToStaging readCap writeCap fullPath relPath = do
-  stagingPath <- currentStaging <$> ask
+  config <- ask
+  let stagingPath = config ^. currentStaging
   
   -- In Core.processFile, use the file's basename directly for test compatibility
   -- In production, the Core.mainLogic function uses createOptimizedName correctly
@@ -98,8 +101,7 @@ copyToStaging readCap writeCap fullPath relPath = do
   safeCopyFile readCap writeCap fullPath destPath
   
   -- Only output if verbose mode is enabled
-  config <- ask
-  when (verbose config) $ do
+  when (config ^. verbose) $ do
     liftIO $ hPutStrLn stderr $ "Copied: " ++ relPath ++ " → " ++ fileName
   pure $ Right Success
 
@@ -156,7 +158,7 @@ processFile readCap writeCap fullPath relPath = do
 -- | Run the main Clod application
 runClodApp :: ClodConfig -> FilePath -> Bool -> Bool -> IO (Either ClodError ())
 runClodApp config _ verboseFlag optAllFiles = 
-  let configWithVerbose = config { verbose = verboseFlag }
+  let configWithVerbose = config & verbose .~ verboseFlag
   in runClodM configWithVerbose $ do
     when verboseFlag $ do
       -- Print version information only in verbose mode
@@ -168,35 +170,42 @@ runClodApp config _ verboseFlag optAllFiles =
 -- | Main application logic
 mainLogic :: Bool -> ClodM ()
 mainLogic optAllFiles = do
-  config@ClodConfig{configDir, stagingDir, projectPath, databaseFile, verbose, flushMode, lastMode} <- ask
+  config <- ask
+  -- Access record fields directly with underscore prefix to avoid recursive definitions
+  let configDir' = _configDir config
+      stagingDir' = _stagingDir config
+      projectPath' = _projectPath config
+      databaseFile' = _databaseFile config
+      isFlushMode = _flushMode config
+      isLastMode = _lastMode config
   
   -- Create directories
-  liftIO $ createDirectoryIfMissing True configDir
-  liftIO $ createDirectoryIfMissing True stagingDir
+  liftIO $ createDirectoryIfMissing True configDir'
+  liftIO $ createDirectoryIfMissing True stagingDir'
   
   -- Only show additional info in verbose mode
-  when verbose $ do
-    liftIO $ hPutStrLn stderr $ "Running with capabilities, safely restricting operations to: " ++ projectPath
-    liftIO $ hPutStrLn stderr $ "Safe staging directory: " ++ stagingDir
+  whenVerbose $ do
+    liftIO $ hPutStrLn stderr $ "Running with capabilities, safely restricting operations to: " ++ projectPath'
+    liftIO $ hPutStrLn stderr $ "Safe staging directory: " ++ stagingDir'
     liftIO $ hPutStrLn stderr "AI safety guardrails active with capability-based security"
   
   -- Load .gitignore and .clodignore patterns
-  gitIgnorePatterns <- readGitIgnore projectPath
-  clodIgnorePatterns <- readClodIgnore projectPath
+  gitIgnorePatterns <- readGitIgnore projectPath'
+  clodIgnorePatterns <- readClodIgnore projectPath'
   let allPatterns = gitIgnorePatterns ++ clodIgnorePatterns
   
   -- Create a new config with the loaded patterns
-  let configWithPatterns = config { ignorePatterns = allPatterns }
+  let configWithPatterns = config & ignorePatterns .~ allPatterns
   
   -- Load or initialize the checksums database
-  database <- loadDatabase databaseFile
+  database <- loadDatabase databaseFile'
 
   -- Handle the --last flag
-  when lastMode $ do
+  when isLastMode $ do
     -- If we're in "last mode", use the previous staging directory
-    case dbLastStagingDir database of
+    case database ^. dbLastStagingDir of
       Just prevStaging -> do
-        when verbose $ liftIO $ hPutStrLn stderr $ "Using previous staging directory: " ++ prevStaging
+        whenVerbose $ liftIO $ hPutStrLn stderr $ "Using previous staging directory: " ++ prevStaging
         -- Output the previous staging directory path and exit
         liftIO $ hPutStrLn stdout prevStaging
         -- Exit early since we're just reusing the last staging directory
@@ -204,47 +213,47 @@ mainLogic optAllFiles = do
         
       Nothing -> do
         -- If no previous staging directory is available, warn and continue normally
-        when verbose $ liftIO $ hPutStrLn stderr "No previous staging directory available, proceeding with new staging"
+        whenVerbose $ liftIO $ hPutStrLn stderr "No previous staging directory available, proceeding with new staging"
   
   -- Clean up previous staging directory if needed (and not in last mode)
-  unless lastMode $ cleanupStagingDirectories
+  unless isLastMode $ cleanupStagingDirectories
   
   -- Find all eligible files in the project
-  allFiles <- findAllFiles projectPath [""]  -- Use empty string to avoid "./" prefix
+  allFiles <- findAllFiles projectPath' [""]  -- Use empty string to avoid "./" prefix
   
   -- Create capabilities for file operations
-  let readCap = fileReadCap [projectPath]
-      writeCap = fileWriteCap [stagingDir]
+  let readCap = fileReadCap [projectPath']
+      writeCap = fileWriteCap [stagingDir']
 
   -- First filter out files that match ignore patterns BEFORE any other processing
   let filteredFiles = filter (\path -> not (matchesIgnorePattern allPatterns path)) allFiles
   
-  when verbose $ do
+  whenVerbose $ do
     liftIO $ hPutStrLn stderr $ "Total files: " ++ show (length allFiles)
     liftIO $ hPutStrLn stderr $ "Filtered files (after ignore patterns): " ++ show (length filteredFiles)
   
   -- Flush missing files from database if in flush mode
-  databaseUpdated <- if flushMode
-                     then flushMissingEntries readCap database projectPath
+  databaseUpdated <- if isFlushMode
+                     then flushMissingEntries readCap database projectPath'
                      else return database
   
   -- Prepare to create the _path_manifest.dhall file
-  let manifestPath = stagingDir </> "_path_manifest.dhall"
+  let manifestPath = stagingDir' </> "_path_manifest.dhall"
   
   -- Detect file changes by comparing checksums with database (using filtered files)
-  (changedFiles, renamedFiles) <- detectFileChanges readCap databaseUpdated filteredFiles projectPath
+  (changedFiles, renamedFiles) <- detectFileChanges readCap databaseUpdated filteredFiles projectPath'
   
   -- Filter files based on database existence
-  let dbExists = not $ null $ dbFiles databaseUpdated
+  let dbExists = not $ null $ databaseUpdated ^. dbFiles
   
   -- Debug output for database existence
-  when verbose $ do
+  whenVerbose $ do
     liftIO $ hPutStrLn stderr $ "Database exists: " ++ show dbExists
-    liftIO $ hPutStrLn stderr $ "Database entries: " ++ show (length $ dbFiles databaseUpdated)
+    liftIO $ hPutStrLn stderr $ "Database entries: " ++ show (length $ databaseUpdated ^. dbFiles)
   
   -- Find unchanged files for debugging
   let unchangedFiles = filter (\(_, status) -> status == Unchanged) changedFiles
-  when verbose $ do
+  whenVerbose $ do
     liftIO $ hPutStrLn stderr $ "Unchanged files: " ++ show (length unchangedFiles) ++ " of " ++ show (length changedFiles)
     
   -- Get paths of changed files
@@ -261,7 +270,7 @@ mainLogic optAllFiles = do
   let filesToProcess = changedPaths
   
   -- Log detailed information about file processing
-  when verbose $ do
+  whenVerbose $ do
     let unchangedCount = length $ filter (\(_, status) -> status == Unchanged) changedFiles
     let newCount = length $ filter (\(_, status) -> status == New) changedFiles
     let modifiedCount = length $ filter (\(_, status) -> status == Modified) changedFiles
@@ -270,7 +279,7 @@ mainLogic optAllFiles = do
                                   Renamed _ -> True
                                   _ -> False) changedFiles
     
-    liftIO $ hPutStrLn stderr $ "Database entries: " ++ show (length $ dbFiles databaseUpdated)
+    liftIO $ hPutStrLn stderr $ "Database entries: " ++ show (length $ databaseUpdated ^. dbFiles)
     liftIO $ hPutStrLn stderr $ "Files to process: " ++ show (length filesToProcess)
     liftIO $ hPutStrLn stderr $ "  - Unchanged: " ++ show unchangedCount
     liftIO $ hPutStrLn stderr $ "  - New: " ++ show newCount
@@ -280,7 +289,7 @@ mainLogic optAllFiles = do
   -- First pass: Add all files to the manifest
   -- Create database entries for all files
   let processFile' path = do
-        let fullPath = projectPath </> path
+        let fullPath = projectPath' </> path
         checksum <- checksumFile readCap fullPath
         modTime <- liftIO $ getModificationTime fullPath
         let optName = createOptimizedName path
@@ -290,7 +299,7 @@ mainLogic optAllFiles = do
   -- This ensures consistency with the filtering we already did earlier
   entries <- filterM (\path -> do
                 -- Check if it's a text file
-                isText <- safeIsTextFile readCap (projectPath </> path)
+                isText <- safeIsTextFile readCap (projectPath' </> path)
                 return isText
              ) filteredFiles >>= 
              mapM processFile'
@@ -302,24 +311,24 @@ mainLogic optAllFiles = do
   -- Write the _path_manifest.dhall file
   _ <- writeManifestFile writeCap manifestPath manifestEntries
   
-  when verbose $ do
+  whenVerbose $ do
     liftIO $ hPutStrLn stderr $ "Added " ++ show (length entries) ++ " files to _path_manifest.dhall"
   
   -- Second pass: Only copy changed files to staging
   if null filesToProcess
-    then when verbose $ do
+    then whenVerbose $ do
       liftIO $ hPutStrLn stderr "No files changed since last run"
     else do
       -- Process files that have changed (copy to staging)
-      when verbose $ do
+      whenVerbose $ do
         liftIO $ hPutStrLn stderr $ "Files to process: " ++ show (length filesToProcess)
       (processed, skipped) <- processFiles configWithPatterns manifestPath filesToProcess False
       
-      when verbose $ do
+      whenVerbose $ do
         liftIO $ hPutStrLn stderr $ "Processed " ++ show processed ++ " files, skipped " ++ show skipped ++ " files"
       
       -- Report renamed files if verbose
-      when (verbose && not (null renamedFiles)) $ do
+      whenVerbose $ when (not (null renamedFiles)) $ do
         liftIO $ hPutStrLn stderr "Detected renamed files:"
         forM_ renamedFiles $ \(newPath, oldPath) -> do
           liftIO $ hPutStrLn stderr $ "  " ++ oldPath ++ " → " ++ newPath
@@ -333,14 +342,13 @@ mainLogic optAllFiles = do
       databaseUpdated entries
       
     -- Set the last staging directory
-    databaseWithStaging = finalDatabase { 
-        dbLastStagingDir = Just stagingDir,
-        dbLastRunTime = dbLastRunTime finalDatabase 
-      }
+    databaseWithStaging = finalDatabase 
+      & dbLastStagingDir .~ Just stagingDir'
+      & dbLastRunTime .~ (finalDatabase ^. dbLastRunTime)
   
   -- Save the updated database with the current staging directory path
-  saveDatabase databaseFile databaseWithStaging
+  saveDatabase databaseFile' databaseWithStaging
   
   -- Output ONLY the staging directory path to stdout for piping to other tools
   -- This follows Unix principles - single line of output for easy piping
-  liftIO $ hPutStrLn stdout stagingDir
+  liftIO $ hPutStrLn stdout stagingDir'

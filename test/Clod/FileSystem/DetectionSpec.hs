@@ -24,7 +24,7 @@ import System.Directory (createDirectoryIfMissing)
 -- import qualified System.IO
 import qualified Data.ByteString as BS
 
-import Clod.Types (runClodM, fileReadCap, ClodConfig(..))
+import Clod.Types (runClodM, fileReadCap, configDir, (&), (.~))
 import Clod.FileSystem.Detection (safeIsTextFile, isTextDescription, needsTransformation)
 import Clod.TestHelpers (defaultTestConfig)
 
@@ -107,7 +107,7 @@ mimeTypeSpec = describe "File description detection" $ do
       setupTestEnvironment tmpDir
       
       -- Set config directory to our test directory
-      let config = (defaultTestConfig tmpDir) { configDir = tmpDir }
+      let config = defaultTestConfig tmpDir & configDir .~ tmpDir
       
       -- Test various text file descriptions
       let textDescriptions = 
@@ -135,7 +135,7 @@ mimeTypeSpec = describe "File description detection" $ do
       setupTestEnvironment tmpDir
       
       -- Set config directory to our test directory
-      let config = (defaultTestConfig tmpDir) { configDir = tmpDir }
+      let config = defaultTestConfig tmpDir & configDir .~ tmpDir
       
       -- Test various non-text file descriptions
       let nonTextDescriptions = 

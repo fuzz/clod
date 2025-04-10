@@ -28,6 +28,7 @@ import qualified Paths_clod as Meta
 
 import Clod.Core (runClodApp)
 import Clod.Types (ClodConfig(..))
+import qualified Clod.Types as T
 
 -- | Command line options for Clod
 data Options = Options
@@ -79,7 +80,7 @@ main = do
   currentDir <- getCurrentDirectory
   
   -- For config dir: use local .clod in project directory
-  let configDir = currentDir </> ".clod"
+  let configDirPath = currentDir </> ".clod"
   
   -- For staging directory: use system temp directory
   tempDir <- getTemporaryDirectory
@@ -93,7 +94,7 @@ main = do
                     else optStagingDir options
   
   -- Load previous staging directory if in "last" mode
-  let dbPath = configDir </> "db.dhall"
+  let dbPath = configDirPath </> "db.dhall"
   previousDir <- if optLast options
                  then do
                    dbExists <- doesFileExist dbPath
@@ -136,23 +137,22 @@ main = do
   do
       -- Create staging directory if it doesn't exist
       createDirectoryIfMissing True finalStagingPath
-      createDirectoryIfMissing True configDir
+      createDirectoryIfMissing True configDirPath
       
       -- Create a basic config
-      let config = ClodConfig {
-            projectPath = currentDir,
-            stagingDir = finalStagingPath,
-            configDir = configDir,
-            databaseFile = dbPath,
-            timestamp = "",  -- Will be set internally
-            currentStaging = finalStagingPath,
-            previousStaging = previousDir,
-            testMode = optTestMode options,
-            verbose = optVerbose options,
-            flushMode = optFlush options,
-            lastMode = optLast options,
-            ignorePatterns = []  -- Will be populated
-          }
+      let config = ClodConfig "" "" "" "" "" "" Nothing False False False False []
+            T.& T.projectPath T..~ currentDir
+            T.& T.stagingDir T..~ finalStagingPath
+            T.& T.configDir T..~ configDirPath
+            T.& T.databaseFile T..~ dbPath
+            T.& T.timestamp T..~ ""  -- Will be set internally
+            T.& T.currentStaging T..~ finalStagingPath
+            T.& T.previousStaging T..~ previousDir
+            T.& T.testMode T..~ optTestMode options
+            T.& T.verbose T..~ optVerbose options
+            T.& T.flushMode T..~ optFlush options
+            T.& T.lastMode T..~ optLast options
+            T.& T.ignorePatterns T..~ []  -- Will be populated
       
       -- Run with effects system
       result <- runClodApp config 

@@ -29,16 +29,19 @@ import System.Directory (doesFileExist)
 import System.FilePath (takeDirectory, takeFileName, (</>))
 import qualified System.IO
 import System.IO (stderr, hPutStrLn)
-import Control.Monad (when)
+-- Control.Monad was only imported for 'when' which is now provided by Clod.Output
 import Control.Monad.Except (throwError)
 
 import qualified System.Directory as D (copyFile)
 
 import Clod.Types (OptimizedName(..), OriginalPath(..), ClodM, ClodConfig(..), 
-                  liftIO, FileWriteCap(..), fileWriteCap, isPathAllowed, ClodError(..))
+                  liftIO, FileWriteCap(..), fileWriteCap, isPathAllowed, ClodError(..),
+                  currentStaging, projectPath, ignorePatterns, stagingDir,
+                  allowedWriteDirs, (^.))
 import Clod.IgnorePatterns (matchesIgnorePattern)
 import Clod.FileSystem.Detection (isTextFile)
 import Clod.FileSystem.Transformations (transformFilename)
+import Clod.Output (whenVerbose)
 
 -- | A manifest entry consisting of an optimized name and original path
 --
@@ -175,7 +178,7 @@ processFiles config manifestPath files includeInManifestOnly = do
     processOneFile :: FilePath -> ClodM (Maybe [ManifestEntry], Int)
     processOneFile file = do
       -- Get full path
-      let fullPath = projectPath config </> file
+      let fullPath = config ^. projectPath </> file
       
       -- Skip if not a regular file
       isFile <- liftIO $ doesFileExist fullPath
@@ -183,9 +186,9 @@ processFiles config manifestPath files includeInManifestOnly = do
         then return (Nothing, 0)
         else do
           -- Skip any files in the staging directory
-          if stagingDir config `L.isInfixOf` fullPath
+          if (config ^. stagingDir) `L.isInfixOf` fullPath
             then do
-              when (verbose config) $ do
+              whenVerbose $ do
                 liftIO $ hPutStrLn stderr $ "Skipping: " ++ fullPath ++ " (in staging directory)"
               return (Nothing, 0)
             else do
@@ -198,7 +201,7 @@ processFiles config manifestPath files includeInManifestOnly = do
     processForManifestOnly :: ClodConfig -> FilePath -> FilePath -> ClodM (Maybe [ManifestEntry], Int)
     processForManifestOnly cfg fullPath relPath = do
       -- Skip if matches ignore patterns
-      let patterns = ignorePatterns cfg
+      let patterns = cfg ^. ignorePatterns
       if not (null patterns) && matchesIgnorePattern patterns relPath
         then return (Nothing, 1)
         else do
@@ -224,7 +227,7 @@ processFiles config manifestPath files includeInManifestOnly = do
           return (Nothing, 1)
       | otherwise = do
           -- Skip if matches ignore patterns
-          let patterns = ignorePatterns cfg
+          let patterns = cfg ^. ignorePatterns
           if not (null patterns) && matchesIgnorePattern patterns relPath
             then return (Nothing, 1)
             else do
@@ -241,10 +244,10 @@ processFiles config manifestPath files includeInManifestOnly = do
                       getOptimizedName (OptimizedName name) = name
                   
                   -- Copy file with optimized name
-                  liftIO $ D.copyFile fullPath (currentStaging cfg </> getOptimizedName optimizedName)
+                  liftIO $ D.copyFile fullPath (cfg ^. currentStaging </> getOptimizedName optimizedName)
                   
                   -- Report the copy operation only when verbose flag is set (to stderr)
-                  when (verbose cfg) $ do
+                  whenVerbose $ do
                     liftIO $ hPutStrLn stderr $ "Copied: " ++ relPath ++ " → " ++ getOptimizedName optimizedName
                   
                   return (Just [entry], 0)
@@ -279,7 +282,7 @@ writeManifestFile writeCap manifestPath entries = do
         in "  " ++ dhallOptimizedName ++ " = " ++ dhallOriginalPath ++ comma
   
   -- Check if path is allowed by capability
-  allowed <- liftIO $ isPathAllowed (allowedWriteDirs writeCap) manifestPath
+  allowed <- liftIO $ isPathAllowed (writeCap ^. allowedWriteDirs) manifestPath
   if not allowed
     then throwError $ CapabilityError $ "Access denied: Cannot write manifest file outside allowed directories: " ++ manifestPath
     else do

@@ -23,8 +23,10 @@ import System.Directory (createDirectoryIfMissing, removeFile)
 import qualified Data.Map.Strict as Map
 import Data.Time.Clock (getCurrentTime)
 
-import Clod.Types (ClodConfig(..), ClodDatabase(..), runClodM, fileReadCap, liftIO, 
-                     OptimizedName(..), IgnorePattern(..))
+import Clod.Types (ClodDatabase(..), runClodM, fileReadCap, liftIO, 
+                     OptimizedName(..), IgnorePattern(..),
+                     flushMode, lastMode, ignorePatterns, dbFiles, dbLastRunTime,
+                     (&), (.~), (^.))
 import Clod.TestHelpers (defaultTestConfig)
 import Clod.FileSystem.Checksums
   ( checksumFile
@@ -56,7 +58,7 @@ flushModeSpec = describe "Flush mode functionality" $ do
       writeFile file2 "Content 2"
       
       -- Create a config and capabilities
-      let config = (defaultTestConfig tmpDir) { flushMode = True }
+      let config = defaultTestConfig tmpDir & flushMode .~ True
           readCap = fileReadCap [tmpDir]
           dbPath = tmpDir </> ".clod" </> "db.dhall"
       
@@ -101,11 +103,11 @@ flushModeSpec = describe "Flush mode functionality" $ do
         Left err -> expectationFailure $ "Flush operation failed: " ++ show err
         Right db -> do
           -- Should have only one file entry (file2) remaining
-          Map.size (dbFiles db) `shouldBe` 1
+          Map.size (db ^. dbFiles) `shouldBe` 1
           -- file1 should be removed
-          Map.member "file1.txt" (dbFiles db) `shouldBe` False
+          Map.member "file1.txt" (db ^. dbFiles) `shouldBe` False
           -- file2 should still be present
-          Map.member "file2.txt" (dbFiles db) `shouldBe` True
+          Map.member "file2.txt" (db ^. dbFiles) `shouldBe` True
 
   it "keeps missing entries without --flush flag" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
@@ -116,7 +118,7 @@ flushModeSpec = describe "Flush mode functionality" $ do
       writeFile file2 "Content 2"
       
       -- Create a config with flush mode OFF
-      let config = (defaultTestConfig tmpDir) { flushMode = False }
+      let config = defaultTestConfig tmpDir & flushMode .~ False
           readCap = fileReadCap [tmpDir]
           dbPath = tmpDir </> ".clod" </> "db.dhall"
       
@@ -161,10 +163,10 @@ flushModeSpec = describe "Flush mode functionality" $ do
         Left err -> expectationFailure $ "Database operation failed: " ++ show err
         Right db -> do
           -- Should still have both file entries
-          Map.size (dbFiles db) `shouldBe` 2
+          Map.size (db ^. dbFiles) `shouldBe` 2
           -- Both files should be present in the database
-          Map.member "file1.txt" (dbFiles db) `shouldBe` True
-          Map.member "file2.txt" (dbFiles db) `shouldBe` True
+          Map.member "file1.txt" (db ^. dbFiles) `shouldBe` True
+          Map.member "file2.txt" (db ^. dbFiles) `shouldBe` True
 
 -- | Tests for last flag functionality
 lastFlagSpec :: Spec
@@ -172,7 +174,7 @@ lastFlagSpec = describe "Last flag functionality" $ do
   it "uses previous staging directory with --last flag" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
       -- Create config with last mode enabled
-      let config = (defaultTestConfig tmpDir) { lastMode = True }
+      let config = defaultTestConfig tmpDir & lastMode .~ True
           dbPath = tmpDir </> ".clod" </> "db.dhall"
           previousDir = tmpDir </> "staging" </> "previous-run"
       
@@ -181,18 +183,13 @@ lastFlagSpec = describe "Last flag functionality" $ do
       
       -- Create a database with a previous staging directory
       currentTime <- getCurrentTime
-      let originalDb = ClodDatabase 
-            { dbFiles = Map.empty
-            , dbChecksums = Map.empty
-            , dbLastStagingDir = Just previousDir
-            , dbLastRunTime = currentTime
-            }
+      let originalDb = ClodDatabase Map.empty Map.empty (Just previousDir) currentTime
       
       -- Save this database
       result <- runClodM config $ do
         -- We'll create a time here just for the database
         updatedTime <- liftIO getCurrentTime
-        let db = originalDb { dbLastRunTime = updatedTime }
+        let db = originalDb & dbLastRunTime .~ updatedTime
         
         -- Save this database
         saveDatabase dbPath db
@@ -224,8 +221,10 @@ filteringAndChangeDetectionSpec = describe "File filtering and change detection"
       writeFile ignoredFile "Should be ignored"
       
       -- Create test config with ignore patterns
-      let ignorePatterns = [IgnorePattern "*.tmp"]
-          config = (defaultTestConfig tmpDir) { flushMode = False, ignorePatterns = ignorePatterns }
+      let ignorePatternsVal = [IgnorePattern "*.tmp"]
+          config = defaultTestConfig tmpDir 
+                   & flushMode .~ False 
+                   & ignorePatterns .~ ignorePatternsVal
           readCap = fileReadCap [tmpDir]
           dbPath = tmpDir </> ".clod" </> "db.dhall"
       
@@ -272,17 +271,17 @@ filteringAndChangeDetectionSpec = describe "File filtering and change detection"
         Left err -> expectationFailure $ "Database loading failed: " ++ show err
         Right db -> do
           -- Should have both tracked files but not the ignored one
-          Map.size (dbFiles db) `shouldBe` 3  -- Currently 3 because we manually added it above
+          Map.size (db ^. dbFiles) `shouldBe` 3  -- Currently 3 because we manually added it above
           
           -- Both files should be present
-          Map.member "file1.txt" (dbFiles db) `shouldBe` True
-          Map.member "file2.txt" (dbFiles db) `shouldBe` True
+          Map.member "file1.txt" (db ^. dbFiles) `shouldBe` True
+          Map.member "file2.txt" (db ^. dbFiles) `shouldBe` True
           
           -- In a real implementation with proper ignore pattern filtering, 
           -- the ignored file wouldn't be added to the database in the first place
           -- This would be handled by the Core.hs logic which we've fixed
           -- But for this specific test where we manually added it, it will be there
-          Map.member "ignored.tmp" (dbFiles db) `shouldBe` True
+          Map.member "ignored.tmp" (db ^. dbFiles) `shouldBe` True
           
   it "detects file changes correctly" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do

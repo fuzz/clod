@@ -26,7 +26,8 @@ import Data.Time.Clock (getCurrentTime)
 import Data.List (isInfixOf)
 
 import Clod.Types (ClodDatabase(..), FileEntry(..), OptimizedName(..), Checksum(..), 
-               runClodM, fileReadCap, liftIO, IgnorePattern(..))
+               runClodM, fileReadCap, liftIO, IgnorePattern(..),
+               dbFiles, entryPath, entryChecksum, (^.))
 import Clod.TestHelpers (defaultTestConfig)
 import qualified Clod.IgnorePatterns
 import Clod.FileSystem.Checksums
@@ -109,7 +110,7 @@ databaseOperationsSpec = describe "Database operations" $ do
       
       case result of
         Left err -> expectationFailure $ "Failed to initialize database: " ++ show err
-        Right db -> Map.size (dbFiles db) `shouldBe` 0
+        Right db -> Map.size (db ^. dbFiles) `shouldBe` 0
   
   it "successfully saves and loads a database" $ do
     withSystemTempDirectory "clod-test" $ \tmpDir -> do
@@ -144,18 +145,18 @@ databaseOperationsSpec = describe "Database operations" $ do
           doesFileExist dbPath >>= (`shouldBe` True)
           
           -- Now with proper Dhall parsing, we should have one file entry
-          Map.size (dbFiles db) `shouldBe` 1
+          Map.size (db ^. dbFiles) `shouldBe` 1
           
           -- Verify the entry is correct
-          Map.member "test.txt" (dbFiles db) `shouldBe` True
+          Map.member "test.txt" (db ^. dbFiles) `shouldBe` True
           
           -- Get the entry and check its attributes
-          let entry = Map.lookup "test.txt" (dbFiles db)
+          let entry = Map.lookup "test.txt" (db ^. dbFiles)
           case entry of
             Nothing -> expectationFailure "Entry for test.txt not found in database"
             Just e -> do
-              entryPath e `shouldBe` "test.txt"
-              entryChecksum e `shouldBe` checksum
+              e ^. entryPath `shouldBe` "test.txt"
+              e ^. entryChecksum `shouldBe` checksum
 
 -- | Tests for change detection
 changeDetectionSpec :: Spec

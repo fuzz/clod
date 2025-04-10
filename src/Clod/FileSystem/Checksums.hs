@@ -73,7 +73,7 @@ module Clod.FileSystem.Checksums
   ) where
 
 import Control.Exception (try, IOException, SomeException)
-import Control.Monad (when, forM)
+import Control.Monad (forM, when)
 import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe, catMaybes)
@@ -83,9 +83,14 @@ import System.Directory (doesFileExist, doesDirectoryExist, getModificationTime,
 import System.FilePath ((</>), takeDirectory)
 import GHC.Generics (Generic)
 import Numeric (showHex)
-import Clod.Types
+import Clod.Types ((^.), (.~), (%~), (&), verbose, flushMode, dbFiles, dbChecksums,
+                  entryChecksum, entryPath, previousStaging, 
+                  ClodDatabase(..), FileEntry(..), 
+                  Checksum(..), ClodM, FileReadCap(..), ClodError(..), OptimizedName(..),
+                  toSerializable, fromSerializable, ask, liftIO, throwError)
 import Clod.FileSystem.Detection (safeFileExists, safeIsTextFile)
 import Clod.FileSystem.Operations (safeReadFile)
+import Clod.Output (whenVerbose)
 
 import qualified Data.Text.IO as TextIO
 import qualified Dhall
@@ -141,10 +146,10 @@ initializeDatabase :: ClodM ClodDatabase
 initializeDatabase = do
   currentTime <- liftIO getCurrentTime
   return $ ClodDatabase
-    { dbFiles = Map.empty
-    , dbChecksums = Map.empty
-    , dbLastStagingDir = Nothing
-    , dbLastRunTime = currentTime
+    { _dbFiles = Map.empty
+    , _dbChecksums = Map.empty
+    , _dbLastStagingDir = Nothing
+    , _dbLastRunTime = currentTime
     }
 
 -- | Load the database from disk using Dhall
@@ -173,7 +178,7 @@ loadDatabase dbPath = do
         Left err -> do
           -- If parsing fails, log the error in verbose mode
           config <- ask
-          when (verbose config) $ 
+          when (config ^. verbose) $ 
             liftIO $ putStrLn $ "Warning: Failed to parse database: " ++ show err
           
           -- Create a new database
@@ -182,10 +187,6 @@ loadDatabase dbPath = do
           -- Save it right away to ensure it's in the right format for next time
           saveDatabase dbPath db
           return db
-  where
-    whenVerbose action = do
-      config <- ask
-      when (verbose config) action
 
 -- | Save the database to disk using Dhall serialization
 saveDatabase :: FilePath -> ClodDatabase -> ClodM ()
@@ -213,10 +214,6 @@ saveDatabase dbPath db = do
   case eitherResult of
     Left err -> throwError $ DatabaseError $ "Failed to save database: " ++ show err
     Right _ -> whenVerbose $ liftIO $ putStrLn $ "Successfully saved database to: " ++ dbPath
-  where
-    whenVerbose action = do
-      config <- ask
-      when (verbose config) action
       
 
 
@@ -226,24 +223,24 @@ updateDatabase db path checksum modTime optName =
   let 
     -- Create new file entry
     newEntry = FileEntry
-      { entryPath = path
-      , entryChecksum = checksum
-      , entryLastModified = modTime
-      , entryOptimizedName = optName
+      { _entryPath = path
+      , _entryChecksum = checksum
+      , _entryLastModified = modTime
+      , _entryOptimizedName = optName
       }
     
-    -- Update maps
-    newFiles = Map.insert path newEntry (dbFiles db)
-    newChecksums = Map.insert (unChecksum checksum) path (dbChecksums db)
+    -- Update maps using lenses
+    db1 = db & dbFiles %~ Map.insert path newEntry
+    db2 = db1 & dbChecksums %~ Map.insert (unChecksum checksum) path
   in
-    db { dbFiles = newFiles, dbChecksums = newChecksums }
+    db2
 
 -- | Detect file status by comparing against database
 getFileStatus :: ClodDatabase -> FilePath -> Checksum -> ClodM FileStatus
 getFileStatus db path checksum = do
   let 
-    files = dbFiles db
-    checksums = dbChecksums db
+    files = db ^. dbFiles
+    checksums = db ^. dbChecksums
     checksumStr = unChecksum checksum
 
   -- Check if file exists in database
@@ -262,7 +259,7 @@ getFileStatus db path checksum = do
     -- File exists in database
     Just entry ->
       -- Check if checksum matches
-      if entryChecksum entry == checksum
+      if entry ^. entryChecksum == checksum
         then return Unchanged
         else return Modified
 
@@ -276,11 +273,6 @@ findChangedFiles db fileInfos = do
     status <- getFileStatus db path checksum
     whenVerbose $ liftIO $ putStrLn $ "File status for " ++ path ++ ": " ++ show status
     return (path, status)
-  
-  where
-    whenVerbose action = do
-      config <- ask
-      when (verbose config) action
 
 -- | Find files that have been renamed
 findRenamedFiles :: ClodDatabase -> [(FilePath, FileStatus)] -> [(FilePath, FilePath)]
@@ -294,7 +286,7 @@ findRenamedFiles _ fileStatuses =
 detectFileChanges :: FileReadCap -> ClodDatabase -> [FilePath] -> FilePath -> ClodM ([(FilePath, FileStatus)], [(FilePath, FilePath)])
 detectFileChanges readCap db filePaths projectRoot = do
   whenVerbose $ liftIO $ putStrLn $ "Detecting changes for " ++ show (length filePaths) ++ " files"
-  whenVerbose $ liftIO $ putStrLn $ "Database has " ++ show (Map.size (dbFiles db)) ++ " entries"
+  whenVerbose $ liftIO $ putStrLn $ "Database has " ++ show (Map.size (db ^. dbFiles)) ++ " entries"
   
   -- For each file, calculate checksum and get modification time
   fileInfos <- catMaybes <$> forM filePaths (\path -> do
@@ -332,10 +324,6 @@ detectFileChanges readCap db filePaths projectRoot = do
   
   return (changedFiles, renamedFiles)
   
-  where
-    whenVerbose action = do
-      config <- ask
-      when (verbose config) action
 
 
 -- | Clean up old staging directories
@@ -344,7 +332,7 @@ cleanupStagingDirectories = do
   config <- ask
   
   -- Check if there's a previous staging directory to clean up
-  case previousStaging config of
+  case config ^. previousStaging of
     Nothing -> return ()
     Just oldDir -> do
       -- Check if directory exists
@@ -356,10 +344,7 @@ cleanupStagingDirectories = do
         case result of
           Left err -> whenVerbose $ liftIO $ putStrLn $ "Warning: Failed to remove old staging directory: " ++ show err
           Right _ -> return ()
-  where
-    whenVerbose action = do
-      config <- ask
-      when (verbose config) action
+
 
 -- | Find and remove missing files from the database
 flushMissingEntries :: FileReadCap -> ClodDatabase -> FilePath -> ClodM ClodDatabase
@@ -367,13 +352,13 @@ flushMissingEntries readCap db projectRoot = do
   config <- ask
   
   -- Don't proceed unless in flush mode
-  if not (flushMode config)
+  if not (config ^. flushMode)
     then return db
     else do
       whenVerbose $ liftIO $ putStrLn "Checking for missing files to flush from database..."
       
       -- Check each file in database to see if it still exists
-      let files = Map.toList (dbFiles db)
+      let files = Map.toList (db ^. dbFiles)
       existingEntries <- forM files $ \(path, entry) -> do
         let fullPath = projectRoot </> path
         fileExists <- safeFileExists readCap fullPath
@@ -386,19 +371,17 @@ flushMissingEntries readCap db projectRoot = do
       
       -- Filter out missing files
       let newFiles = Map.fromList [(path, entry) | (path, Just entry) <- existingEntries]
-          missingCount = length (dbFiles db) - Map.size newFiles
+          missingCount = Map.size (db ^. dbFiles) - Map.size newFiles
           
       -- Rebuild checksums map
       let newChecksums = Map.fromList 
-                       $ map (\entry -> (unChecksum (entryChecksum entry), entryPath entry)) 
+                       $ map (\entry -> (unChecksum (entry ^. entryChecksum), entry ^. entryPath)) 
                        $ Map.elems newFiles
       
       -- Report results
       whenVerbose $ liftIO $ putStrLn $ "Removed " ++ show missingCount ++ " missing files from database"
       
       -- Return updated database
-      return db { dbFiles = newFiles, dbChecksums = newChecksums }
-  where
-    whenVerbose action = do
-      config <- ask
-      when (verbose config) action
+      let db1 = db & dbFiles .~ newFiles
+          db2 = db1 & dbChecksums .~ newChecksums
+      return db2

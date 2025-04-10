@@ -67,7 +67,7 @@ spec = do
     it "handles reader operations correctly" $ do
       let mtlComputation = do
             config <- ask
-            return (projectPath config) :: ClodM String
+            return (config ^. projectPath) :: ClodM String
             
       mtlResult <- runExceptT $ runReaderT mtlComputation (defaultTestConfig "test-dir")
       mtlResult `shouldBe` Right "test-dir"

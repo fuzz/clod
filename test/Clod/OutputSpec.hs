@@ -51,8 +51,8 @@ sanitizeRelativePath path =
 
 -- | Formats file output with either verbose or summary information
 formatFileOutput :: Handle -> Bool -> [String] -> ClodM ()
-formatFileOutput handle verbose paths = do
-  if verbose
+formatFileOutput handle isVerbose paths = do
+  if isVerbose
     then mapM_ (liftIO . hPutStrLn handle) paths
     else liftIO $ hPutStrLn handle $ show (length paths) ++ " files"
 

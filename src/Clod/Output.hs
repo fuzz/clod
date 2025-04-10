@@ -27,6 +27,7 @@ module Clod.Output
   , printSuccess
   , printError
   , printWarning
+  , whenVerbose
   
     -- * User interaction
   , promptUser
@@ -36,10 +37,10 @@ module Clod.Output
   , showNextSteps
   ) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import System.IO (hFlush, stdout)
 
-import Clod.Types
+import Clod.Types (ClodM, ClodConfig(..), testMode, verbose, (^.), ask, liftIO)
 
 -- | ANSI color codes for pretty printing
 red, green, yellow, noColor :: String
@@ -63,6 +64,12 @@ printError msg = liftIO $ putStrLn $ red ++ "✗ " ++ msg ++ noColor
 -- | Print a warning message in yellow
 printWarning :: String -> ClodM ()
 printWarning msg = liftIO $ putStrLn $ yellow ++ "! " ++ msg ++ noColor
+
+-- | Execute an action only when verbose mode is enabled
+whenVerbose :: ClodM () -> ClodM ()
+whenVerbose action = do
+  config <- ask
+  when (config ^. verbose) action
 
 -- | Prompt the user for input with a default value
 --
@@ -114,7 +121,7 @@ promptYesNo prompt defaultYes = do
 showNextSteps :: ClodConfig  -- ^ Program configuration
               -> FilePath    -- ^ Path to the staging directory
               -> ClodM ()
-showNextSteps config _ = unless (testMode config) $ 
+showNextSteps config _ = unless (config ^. testMode) $ 
   mapM_ (liftIO . putStrLn) $ [""] ++ steps ++ [""] ++ notes
   where
     -- Numbered steps for Claude integration

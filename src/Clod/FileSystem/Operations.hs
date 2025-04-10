@@ -29,7 +29,8 @@ import System.Directory (doesDirectoryExist, doesFileExist, getDirectoryContents
 import System.FilePath ((</>))
 import qualified Data.ByteString as BS
 
-import Clod.Types (ClodM, FileReadCap(..), FileWriteCap(..), ClodError(..), isPathAllowed)
+import Clod.Types (ClodM, FileReadCap(..), FileWriteCap(..), ClodError(..), isPathAllowed,
+                   allowedReadDirs, allowedWriteDirs, (^.))
 
 -- | Recursively find all files in a directory
 --
@@ -83,7 +84,7 @@ safeRemoveFile path = do
 -- | Safe file reading that checks capabilities
 safeReadFile :: FileReadCap -> FilePath -> ClodM BS.ByteString
 safeReadFile cap path = do
-  allowed <- liftIO $ isPathAllowed (allowedReadDirs cap) path
+  allowed <- liftIO $ isPathAllowed (cap ^. allowedReadDirs) path
   if allowed
     then liftIO $ BS.readFile path
     else do
@@ -93,7 +94,7 @@ safeReadFile cap path = do
 -- | Safe file writing that checks capabilities
 safeWriteFile :: FileWriteCap -> FilePath -> BS.ByteString -> ClodM ()
 safeWriteFile cap path content = do
-  allowed <- liftIO $ isPathAllowed (allowedWriteDirs cap) path
+  allowed <- liftIO $ isPathAllowed (cap ^. allowedWriteDirs) path
   if allowed
     then liftIO $ BS.writeFile path content
     else do
@@ -103,8 +104,8 @@ safeWriteFile cap path content = do
 -- | Safe file copying that checks capabilities for both read and write
 safeCopyFile :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM ()
 safeCopyFile readCap writeCap src dest = do
-  srcAllowed <- liftIO $ isPathAllowed (allowedReadDirs readCap) src
-  destAllowed <- liftIO $ isPathAllowed (allowedWriteDirs writeCap) dest
+  srcAllowed <- liftIO $ isPathAllowed (readCap ^. allowedReadDirs) src
+  destAllowed <- liftIO $ isPathAllowed (writeCap ^. allowedWriteDirs) dest
   if srcAllowed && destAllowed
     then liftIO $ copyFile src dest
     else do

@@ -27,8 +27,9 @@ import Clod.FileSystem.Checksums (checksumFile)
 
 import Clod.Core
 import Clod.Types 
-  ( ClodConfig(..), FileResult(..), FileReadCap(..), IgnorePattern(..),
-    runClodM, isPathAllowed, fileReadCap, fileWriteCap
+  ( FileResult(..), IgnorePattern(..),
+    runClodM, isPathAllowed, fileReadCap, fileWriteCap,
+    ignorePatterns, allowedReadDirs, (&), (.~), (^.)
   )
 import Clod.TestHelpers (defaultTestConfig)
 
@@ -158,7 +159,7 @@ runClodAppSpec = describe "runClodApp" $ do
       let readCap = fileReadCap [tmpDir]
       
       -- Try to check if a file exists outside our capability
-      allowed <- isPathAllowed (allowedReadDirs readCap) forbiddenDir
+      allowed <- isPathAllowed (readCap ^. allowedReadDirs) forbiddenDir
       allowed `shouldBe` False
 
 -- | Tests for ignore pattern handling
@@ -179,9 +180,8 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
       writeFile (tmpDir </> ".clodignore") "ignored/"
       
       -- Create a test config with ignore patterns
-      let config = (defaultTestConfig tmpDir) {
-            ignorePatterns = [IgnorePattern "ignored/"]
-          }
+      let config = defaultTestConfig tmpDir & 
+            ignorePatterns .~ [IgnorePattern "ignored/"]
       
       -- Create the read capability
       let readCap = fileReadCap [tmpDir]
@@ -253,9 +253,8 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
       writeFile (tmpDir </> ".clodignore") ".git/\nnode_modules/"
       
       -- Create a test config with ignore patterns
-      let config = (defaultTestConfig tmpDir) {
-            ignorePatterns = [IgnorePattern ".git/", IgnorePattern "node_modules/"]
-          }
+      let config = defaultTestConfig tmpDir &
+            ignorePatterns .~ [IgnorePattern ".git/", IgnorePattern "node_modules/"]
       
       -- Run the application
       result <- runClodApp config "" True False
@@ -308,9 +307,8 @@ ignorePatternSpec = describe "Ignore pattern handling" $ do
       
       -- Create a test config that sets the ignorePatterns manually
       -- This is critical - we need to set the patterns explicitly
-      let config = (defaultTestConfig tmpDir) {
-            ignorePatterns = [IgnorePattern "node_modules/", IgnorePattern ".git/"]  -- Set patterns directly
-          }
+      let config = defaultTestConfig tmpDir &
+            ignorePatterns .~ [IgnorePattern "node_modules/", IgnorePattern ".git/"]  -- Set patterns directly
       
       -- Call Core.runClodApp directly, which should use the ignorePatterns in the config
       result <- runClodApp config "" False True
