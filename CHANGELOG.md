@@ -1,6 +1,14 @@
 # Changelog
 
-## [0.2.0] - 2025-04-07
+## [0.2.1] - 2025-04-10
+
+Introduces the lens library to provide composable accessors and traversals for complex nested data structures. This implementation improves code maintainability by reducing boilerplate and enabling more elegant handling of nested record updates.
+
+Key benefits:
+- Simplified access to deeply nested structures
+- Improved composability of record operations
+- Enhanced type safety for record manipulation
+- Add your changes here
 
 ### Added
 - Added -V as a shortcut for --version option (consistent with GHC)
