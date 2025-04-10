@@ -20,6 +20,13 @@ I hand it over to Claude Code and let him solve the final problems with local
 access and also have him double-check the other Claude’s work. I say “save 50%”
 but really I probably save more like 90% with this approach.
 
+Claude App is more conversational than Claude Code and he can render web pages
+and SVGs and so on. Claude Code will often hit a minor roadblock when
+implementing something and turn around and do exactly what you told him not to
+do--this is rarely an issue with Claude App as there's more human in the loop.
+Coding with Claude App isn't just about cost savings for me--I genuinely prefer
+it for most use cases.
+
 While this project was built with filesystem access in mind I usually find
 myself instead having Claude generate a shell script for me that will apply his
 changes to the codebase, then I review the script, request changes if needed,
@@ -227,8 +234,6 @@ The architecture focuses on reliability and maintainability, delivering a system
   - `Clod/Output.hs`: User interface
   - `Clod/Types.hs`: Core types and monad stack
   - `Clod/Effects.hs`: Effect system support
-  - `Clod/Capability.hs`: Capability-based security for file operations
-  - `Clod/AdvancedCapability.hs`: Advanced capability patterns
 - `test/`: Test suite
 - `.clod/`: Configuration and state (created during execution)
 

@@ -15,7 +15,6 @@ description:         Clod (Claude Loader) is a utility for preparing and uploadi
                      * Create optimized filenames for Claude's UI
                      * Generate a path manifest for mapping optimized names back to original paths
                      * Color-coded, user-friendly terminal interface
-                     * Capability-based security model
                      * Path-restricted file access to prevent unauthorized operations
                      .
                      Clod is particularly useful for reducing AI development costs while working with 
@@ -105,8 +104,6 @@ library
     Clod.Output
     Clod.Types
     Clod.Effects
-    Clod.Capability
-    Clod.AdvancedCapability
   other-modules:     Paths_clod
   autogen-modules:   Paths_clod
   build-depends:     
@@ -153,8 +150,6 @@ test-suite clod-test
     Clod.FileSystem.DetectionSpec
     Clod.FileSystem.ChecksumsSpec
     Clod.FileSystem.DatabaseSpec
-    Clod.CapabilitySpec
-    Clod.AdvancedCapabilitySpec
     Clod.EffectsSpec
     Clod.TypesSpec
     Clod.FileSystem.OperationsSpec
