@@ -72,7 +72,7 @@ Remove missing entries from the database:
 **.clodignore**
 : Pattern file similar to .gitignore for excluding files
 
-**.clod/database.dhall**
+**.clod/db.dhall**
 : Database of file checksums and metadata
 
 # SEE ALSO
