@@ -31,10 +31,9 @@ clod (meat-robot hybrid) creates a smooth integration between your local codebas
 
 ## Prerequisites
 
-- **Claude Pro or Team account** with access to:
-  - **Project Knowledge** - Claude's file storage system that keeps files available throughout your project
-  - **Filesystem Access** - Claude's ability to read and write files on your computer (currently available only on macOS and Windows desktop apps)
-- Git repository for your codebase
+- **Claude Pro, Max, Teams or Enterpise account** with access to:
+- **Project Knowledge** - Claude's file storage system that keeps files available throughout your project
+- **Filesystem Access** - Claude's ability to read and write files on your computer (currently available only on macOS and Windows desktop apps)
 - Terminal/command-line access
 
 ## Comparison with Claude Code
@@ -44,14 +43,16 @@ While Anthropic's Claude Code offers powerful agentic capabilities directly in y
 ### When to Use clod vs. Claude Code
 
 - **Cost Efficiency**: clod leverages Claude Pro's project knowledge caching, resulting in significantly lower token usage compared to Claude Code's real-time analysis.
-- **Hybrid Approach**: I find success using clod with Claude Pro as my primary workflow, switching to Claude Code only when hitting Pro plan limits.
-- **Test Integration**: When combined with file watching tools like fswatch (see below), clod offers comparable testing capabilities to Claude Code at a fraction of the token cost.
-- **Seamless Fallback**: If you reach Claude Pro limits, you can continue your work with Claude Code until access is restored without changing your workflow significantly.
+- **Hybrid Approach**: A typical workflow for me is to work with Claude App on a new feature for a few iterations, until he gets stuck trying to get a test to pass or something. Then I hand it over to Claude Code and let him solve the final problems with local access and also have him double-check the other Claude’s work. I say “save 50%” but really I probably save more like 90% with this approach.
+- **Test Integration**: When combined with file watching tools like fswatch (see below), clod offers comparable testing capabilities to Claude Code
+- **Seamless Fallback**: If you reach Claude App limits, you can continue your work with Claude Code until access is restored without changing your workflow significantly. Now that Claude Max has been released it may be more cost effective to upgrade your Claude App plan, depending on your use case.
 
 The workflow I use is:
-1. Use clod with Claude Pro for day-to-day development tasks
+1. Use clod with Claude App for most day-to-day development tasks--he's a
+   better conversationalist than Claude Code, anyway, plus he can render visual
+   elements for live previews
 2. Set up fswatch or similar tools for automated testing
-3. Keep Claude Code as a backup for high-volume days or especially complex tasks requiring whole-codebase analysis
+3. Use Claude Code for final code fixes and code review after iterating with as a backup for high-volume days or especially complex tasks requiring whole-codebase analysis
 
 This hybrid approach optimizes both cost and capability while ensuring continuous productivity.
 

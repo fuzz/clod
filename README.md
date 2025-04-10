@@ -14,6 +14,12 @@ to Anthropic products, nor is it affected by changes to Claude's UI.
 Contributions of Automator code to handle the drag and drops and Project
 Knowledge deletes on macOS are welcome, as is similar code for other platforms. 
 
+A typical workflow for me is to work with Claude App on a new feature for a few
+iterations, until he gets stuck trying to get a test to pass or something. Then
+I hand it over to Claude Code and let him solve the final problems with local
+access and also have him double-check the other Claude’s work. I say “save 50%”
+but really I probably save more like 90% with this approach.
+
 Developed by [Fuzz, Inc](https://fuzz.ink) - World-class technical leadership and execution
 
 ## Features
@@ -59,6 +65,8 @@ The `clod` program is installed automatically when using `cabal install`.
 
 ### Prerequisites
 
+- Claude Pro, Max, Teams or Enteprise account
+- Claude desktop app (currently only macOS and Windows)
 - GHC (Glasgow Haskell Compiler) 9.0 or newer
 - libmagic (required for file type detection)
 
