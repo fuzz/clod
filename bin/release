@@ -516,12 +516,25 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   set +x  # Turn off command tracing
   echo "Bottle command completed successfully" >&2
   
-  # Find the JSON file created by brew bottle
-  bottle_json=$(find . -name "*.json" -newer "$(pwd)/.git/index" -print | head -1)
+  # Find the specific JSON file for the current version
+  bottle_json=$(find . -name "*$VERSION*.json" -print | head -1)
   echo "Found JSON file: $bottle_json"
   
   if [ -z "$bottle_json" ] || [ ! -f "$bottle_json" ]; then
-    echo "ERROR: Could not find bottle JSON file" >&2
+    echo "ERROR: Could not find bottle JSON file for version $VERSION" >&2
+    echo "Looking for pattern: *$VERSION*.json" >&2
+    echo "Available JSON files:" >&2
+    find . -name "*.json" -print >&2
+    exit 1
+  fi
+  
+  # Verify JSON is for the correct version
+  json_version=$(jq -r '.[] | .formula.pkg_version' "$bottle_json")
+  if [ "$json_version" != "$VERSION" ]; then
+    echo "ERROR: JSON file version mismatch!" >&2
+    echo "Expected version: $VERSION" >&2
+    echo "Found version: $json_version" >&2
+    echo "JSON file: $bottle_json" >&2
     exit 1
   fi
   
@@ -654,33 +667,36 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   # Update the formula with bottle information
   echo "Updating formula with bottle information..."
   
-  # Extract rebuild number directly from the bottle filename
-  # Using bash regex with BASH_REMATCH
-  if [[ "$bottle_file" =~ bottle\.([0-9]+) ]]; then
-    rebuild_num="${BASH_REMATCH[1]}"
-    echo "Found rebuild number $rebuild_num in bottle filename: $bottle_file"
-    
+  # Extract rebuild number directly from the JSON file
+  echo "Extracting rebuild number from JSON..." >&2
+  rebuild_num=$(jq -r '.[] | .bottle.rebuild' "$bottle_json")
+  
+  echo "Found rebuild number in JSON: $rebuild_num"
+  
+  # For rebuild = 0, we should remove the directive completely
+  # For rebuild > 0, we should add or update the directive
+  if [ "$rebuild_num" = "0" ] || [ -z "$rebuild_num" ] || [ "$rebuild_num" = "null" ]; then
+    echo "This is a first build (rebuild = 0 or not specified), removing rebuild directive if present"
+    # Remove rebuild directive if it exists
+    sed -i '' '/^[[:space:]]*rebuild [0-9]\+$/d' Formula/clod.rb
+  else
     # Check if rebuild directive already exists
     if grep -q "^[[:space:]]*rebuild" Formula/clod.rb; then
       # Update the rebuild directive in the formula
-      echo "Setting rebuild to $rebuild_num based on bottle filename"
+      echo "Setting rebuild to $rebuild_num from JSON data"
       # Use awk to properly match and replace the rebuild line
       awk -v num="$rebuild_num" '{if ($1 == "rebuild") {print "    rebuild " num;} else {print $0;}}' Formula/clod.rb > Formula/clod.rb.new
       mv Formula/clod.rb.new Formula/clod.rb
-      
-      # Verify the rebuild was updated correctly
-      echo "Verifying rebuild number in formula:"
-      grep "rebuild" Formula/clod.rb
     else
       # Add rebuild directive if it doesn't exist
       echo "Adding rebuild directive with value $rebuild_num"
       sed -i '' "/root_url/a\\
     rebuild $rebuild_num" Formula/clod.rb
     fi
-  else
-    echo "No rebuild number found in filename, removing rebuild directive if present"
-    # Remove rebuild directive if it exists
-    sed -i '' '/^[[:space:]]*rebuild [0-9]\+$/d' Formula/clod.rb
+    
+    # Verify the rebuild was updated correctly
+    echo "Verifying rebuild number in formula:"
+    grep -n "rebuild" Formula/clod.rb || echo "No rebuild line found (as expected for first build)"
   fi
   
   # Update the bottle SHA - use :any for cellar since we link against libmagic
