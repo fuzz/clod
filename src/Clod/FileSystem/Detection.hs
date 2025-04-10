@@ -149,7 +149,7 @@ safeFileExists cap path = do
     then liftIO $ doesFileExist path
     else do
       canonicalPath <- liftIO $ canonicalizePath path
-      throwError $ CapabilityError $ "Access denied: Cannot check existence of file outside allowed directories: " ++ canonicalPath
+      throwError $ CapabilityError canonicalPath "Access denied: Cannot check existence of file outside allowed directories"
 
 -- | Safe file type check that checks capabilities
 safeIsTextFile :: FileReadCap -> FilePath -> ClodM Bool
@@ -159,4 +159,4 @@ safeIsTextFile cap path = do
     then isTextFile path
     else do
       canonicalPath <- liftIO $ canonicalizePath path
-      throwError $ CapabilityError $ "Access denied: Cannot check file type outside allowed directories: " ++ canonicalPath
+      throwError $ CapabilityError canonicalPath "Access denied: Cannot check file type outside allowed directories"

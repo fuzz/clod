@@ -89,7 +89,7 @@ safeReadFile cap path = do
     then liftIO $ BS.readFile path
     else do
       canonicalPath <- liftIO $ canonicalizePath path
-      throwError $ CapabilityError $ "Access denied: Cannot read file outside allowed directories: " ++ canonicalPath
+      throwError $ CapabilityError canonicalPath "Access denied: Cannot read file outside allowed directories"
 
 -- | Safe file writing that checks capabilities
 safeWriteFile :: FileWriteCap -> FilePath -> BS.ByteString -> ClodM ()
@@ -99,7 +99,7 @@ safeWriteFile cap path content = do
     then liftIO $ BS.writeFile path content
     else do
       canonicalPath <- liftIO $ canonicalizePath path
-      throwError $ CapabilityError $ "Access denied: Cannot write file outside allowed directories: " ++ canonicalPath
+      throwError $ CapabilityError canonicalPath "Access denied: Cannot write file outside allowed directories"
 
 -- | Safe file copying that checks capabilities for both read and write
 safeCopyFile :: FileReadCap -> FileWriteCap -> FilePath -> FilePath -> ClodM ()
@@ -111,9 +111,9 @@ safeCopyFile readCap writeCap src dest = do
     else do
       canonicalSrc <- liftIO $ canonicalizePath src
       canonicalDest <- liftIO $ canonicalizePath dest
-      let errorMsg = if not srcAllowed && not destAllowed
-                     then "Access denied: Both source and destination paths violate restrictions"
-                     else if not srcAllowed
-                          then "Access denied: Source path violates restrictions: " ++ canonicalSrc
-                          else "Access denied: Destination path violates restrictions: " ++ canonicalDest
-      throwError $ CapabilityError errorMsg
+      let (path, errorMsg) = if not srcAllowed && not destAllowed
+                             then (canonicalSrc, "Access denied: Both source and destination paths violate restrictions")
+                             else if not srcAllowed
+                                  then (canonicalSrc, "Access denied: Source path violates restrictions")
+                                  else (canonicalDest, "Access denied: Destination path violates restrictions")
+      throwError $ CapabilityError path errorMsg

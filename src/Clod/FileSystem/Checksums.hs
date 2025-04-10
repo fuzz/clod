@@ -87,6 +87,7 @@ import Clod.Types ((^.), (.~), (%~), (&), verbose, flushMode, dbFiles, dbChecksu
                   entryChecksum, entryPath, previousStaging, 
                   ClodDatabase(..), FileEntry(..), 
                   Checksum(..), ClodM, FileReadCap(..), ClodError(..), OptimizedName(..),
+                  DatabaseErrorType(..), -- Add the DatabaseErrorType
                   toSerializable, fromSerializable, ask, liftIO, throwError)
 import Clod.FileSystem.Detection (safeFileExists, safeIsTextFile)
 import Clod.FileSystem.Operations (safeReadFile)
@@ -135,7 +136,7 @@ checksumFile readCap path = do
       -- Check if it's a text file
       isText <- safeIsTextFile readCap path
       if not isText
-        then throwError $ ChecksumError $ "Cannot checksum binary or ineligible file: " ++ path
+        then throwError $ ChecksumError path "Cannot checksum binary or ineligible file"
         else do
           -- Read file content and calculate checksum
           content <- safeReadFile readCap path
@@ -178,8 +179,11 @@ loadDatabase dbPath = do
         Left err -> do
           -- If parsing fails, log the error in verbose mode
           config <- ask
-          when (config ^. verbose) $ 
+          when (config ^. verbose) $ do
             liftIO $ putStrLn $ "Warning: Failed to parse database: " ++ show err
+            -- Log the enhanced error format for better diagnostics
+            liftIO $ putStrLn $ "Database error details: " ++ 
+              show (DatabaseError dbPath (DBCorrupted (show err)))
           
           -- Create a new database
           whenVerbose $ liftIO $ putStrLn "Creating a new empty database"
@@ -212,7 +216,7 @@ saveDatabase dbPath db = do
     renameFile tempPath dbPath
   
   case eitherResult of
-    Left err -> throwError $ DatabaseError $ "Failed to save database: " ++ show err
+    Left err -> throwError $ DatabaseError dbPath (DBOtherError $ "Failed to save: " ++ show err)
     Right _ -> whenVerbose $ liftIO $ putStrLn $ "Successfully saved database to: " ++ dbPath
       
 

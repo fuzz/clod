@@ -96,6 +96,6 @@ safeFileOperationsSpec = describe "Safe file operations" $ do
       
       -- Should fail with capability error
       case result of
-        Left (CapabilityError _) -> return ()  -- Expected error
+        Left (CapabilityError _ _) -> return ()  -- Expected error
         Left other -> expectationFailure $ "Got wrong error: " ++ show other
         Right _ -> expectationFailure "Read succeeded when it should have failed"

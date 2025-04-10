@@ -6,6 +6,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -36,6 +37,7 @@ module Clod.Types
     ClodConfig(..)
   , FileResult(..)
   , ClodError(..)
+  , DatabaseErrorType(..)
   , ClodM
   , FileEntry(..)
   , ClodDatabase(..)
@@ -43,6 +45,11 @@ module Clod.Types
   , toSerializable
   , fromSerializable
   
+    -- * Validation types and functions
+  , Validated(..)
+  , validatedToEither
+  , eitherToValidated
+
     -- * Type conversions and runners
   , runClodM
   , throwError
@@ -106,7 +113,7 @@ module Clod.Types
 import Control.Monad.Except (ExceptT, runExceptT, throwError, catchError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ReaderT, ask, asks, local, runReaderT)
-import Control.Lens (Lens', lens, (^.), (.~), (%~), (&))
+import Control.Lens (Lens', lens, (^.), (.~), (%~), (&), makePrisms)
 import Data.String (IsString(..))
 import GHC.Generics (Generic)
 import Data.List (isPrefixOf)
@@ -217,21 +224,52 @@ data FileResult
   | Skipped !String      -- ^ File was skipped with the given reason
   deriving stock (Show, Eq, Generic)
 
+-- | Database error types for more specific error reporting
+data DatabaseErrorType 
+  = DBFileNotFound      -- ^ Database file could not be found
+  | DBCorrupted String  -- ^ Database file is corrupted with details
+  | DBVersionMismatch   -- ^ Database version is incompatible
+  | DBOtherError String -- ^ Other database error with description
+  deriving stock (Show, Eq, Generic)
+
 -- | Errors that can occur during Clod operation
 --
 -- These represent the different categories of errors that can occur during
 -- file processing, allowing for specific error handling for each case.
 data ClodError 
-  = FileSystemError !FilePath !IOError -- ^ Error related to filesystem operations
-  | ConfigError !String                -- ^ Error related to configuration (e.g., invalid settings)
-  | PatternError !String               -- ^ Error related to pattern matching (e.g., invalid pattern)
-  | CapabilityError !String            -- ^ Error related to capability validation
-  | DatabaseError !String              -- ^ Error related to checksums database
-  | ChecksumError !String              -- ^ Error related to checksum calculation
+  = FileSystemError !FilePath !IOError        -- ^ Error related to filesystem operations
+  | ConfigError !String                       -- ^ Error related to configuration (e.g., invalid settings)
+  | PatternError !String                      -- ^ Error related to pattern matching (e.g., invalid pattern)
+  | CapabilityError !FilePath !String         -- ^ Error related to capability validation with the path
+  | DatabaseError !FilePath !DatabaseErrorType -- ^ Error related to checksums database with file and type
+  | ChecksumError !FilePath !String           -- ^ Error related to checksum calculation with the file
   deriving stock (Show, Eq, Generic)
 
--- | ClodError prisms are skipped for now
--- Will implement manually if needed
+-- Generate prisms for ClodError
+makePrisms ''ClodError
+
+-- | Validation type for collecting multiple errors
+-- This allows us to accumulate errors instead of stopping at the first one
+data Validated a = Invalid [ClodError] | Valid a
+  deriving stock (Functor, Show, Eq)
+
+instance Applicative Validated where
+  pure = Valid
+  Invalid errs1 <*> Invalid errs2 = Invalid (errs1 ++ errs2)
+  Invalid errs <*> _ = Invalid errs
+  _ <*> Invalid errs = Invalid errs
+  Valid f <*> Valid a = Valid (f a)
+
+-- | Convert from Validated to Either for compatibility
+validatedToEither :: Validated a -> Either ClodError a
+validatedToEither (Valid a) = Right a
+validatedToEither (Invalid []) = Left (ConfigError "Unknown error")
+validatedToEither (Invalid (e:_)) = Left e  -- Return first error for simplicity
+
+-- | Convert from Either to Validated for integration
+eitherToValidated :: Either ClodError a -> Validated a
+eitherToValidated (Right a) = Valid a
+eitherToValidated (Left e) = Invalid [e]
 
 -- | Newtype for file checksums to prevent mixing with other string types
 newtype Checksum = Checksum { unChecksum :: String }

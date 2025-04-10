@@ -284,7 +284,7 @@ writeManifestFile writeCap manifestPath entries = do
   -- Check if path is allowed by capability
   allowed <- liftIO $ isPathAllowed (writeCap ^. allowedWriteDirs) manifestPath
   if not allowed
-    then throwError $ CapabilityError $ "Access denied: Cannot write manifest file outside allowed directories: " ++ manifestPath
+    then throwError $ CapabilityError manifestPath "Access denied: Cannot write manifest file outside allowed directories"
     else do
       -- Write the complete manifest file at once, ensuring handles are closed promptly
       let content = unlines manifestLines

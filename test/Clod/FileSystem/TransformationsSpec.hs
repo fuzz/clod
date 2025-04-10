@@ -30,6 +30,7 @@ import Data.List ()
 
 import Clod.Types
 import Clod.FileSystem.Transformations
+import Clod.FileSystem.Detection (needsTransformation)
 import Clod.TestHelpers (defaultTestConfig)
 
 -- | Test the file transformations
@@ -128,7 +129,7 @@ spec = do
           
           -- Verify the operation failed
           case result of
-            Left (CapabilityError _) -> return ()
+            Left (CapabilityError _ _) -> return ()
             _ -> expectationFailure "Expected CapabilityError but got different result"
             
           -- Verify the destination file wasn't created
@@ -164,6 +165,30 @@ spec = do
         xmlContent <- TE.decodeUtf8 <$> BS.readFile xmlPath
         T.unpack xmlContent `shouldBe` svgContent
 
+  describe "SPEC.md compliance" $ do
+    it "transforms filenames according to SPEC.md rules" $ do
+      -- Test examples from the SPEC.md document
+      -- Root files should be unchanged
+      transformFilename "package.json" "package.json" `shouldBe` "package.json"
+      
+      -- Nested path files should be flattened with dashes
+      transformFilename "package.json" "app/lib/plugin/package.json" `shouldBe` "package.json"
+      
+      -- Hidden files should have dots removed and replaced with dot-- prefix
+      transformFilename ".gitignore" ".gitignore" `shouldBe` "dot--gitignore"
+      transformFilename ".env" ".env" `shouldBe` "dot--env"
+      
+      -- SVG files should be transformed to XML
+      transformFilename "logo.svg" "logo.svg" `shouldBe` "logo-svg.xml"
+      -- For nested SVG files, the function uses the filename (first arg), not the path (second arg)
+      transformFilename "logo.svg" "assets/images/logo.svg" `shouldBe` "logo-svg.xml"
+      
+    it "correctly identifies files needing transformation" $ do
+      needsTransformation ".gitignore" `shouldBe` True
+      needsTransformation ".env" `shouldBe` True
+      needsTransformation "logo.svg" `shouldBe` True
+      needsTransformation "regular.txt" `shouldBe` False
+  
   describe "End-to-end transformation" $ do
     it "works with complex transformations" $ do
       -- Create a temp directory
