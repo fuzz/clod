@@ -31,7 +31,6 @@ Developed by [Fuzz, Inc](https://fuzz.ink) - World-class technical leadership an
 - Use system temporary directories for staging files
 - Create optimized filenames for Claude's UI
 - Generate a path manifest for mapping optimized names back to original paths
-- Color-coded, user-friendly terminal interface
 - Capability-based security for file operations
 - Simple, well-structured monad stack for reliable behavior
 
