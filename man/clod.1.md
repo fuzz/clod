@@ -18,28 +18,28 @@ for Claude's UI.
 
 # OPTIONS
 
-**--all**, **-a**
+**\-\-all**, **-a**
 : Process all files (respecting .gitignore and .clodignore)
 
-**--test**, **-t**
+**\-\-test**, **-t**
 : Run in test mode (no prompts, useful for CI)
 
-**--staging-dir** *DIR*, **-d** *DIR*
-: Specify a directory for test mode (only used with --test)
+**\-\-staging-dir** *DIR*, **-d** *DIR*
+: Specify a directory for test mode (only used with \-\-test)
 
-**--verbose**, **-v**
+**\-\-verbose**, **-v**
 : Enable verbose output
 
-**--flush**, **-f**
+**\-\-flush**, **-f**
 : Remove missing entries from the database
 
-**--last**, **-l**
+**\-\-last**, **-l**
 : Reuse the previous staging directory
 
-**--help**
+**\-\-help**
 : Show help information
 
-**--version**
+**\-\-version**
 : Show version information
 
 # EXAMPLES
@@ -48,16 +48,16 @@ Run clod (first run processes all files, subsequent runs process only modified f
     clod
 
 Force processing of all files:
-    clod --all
+    clod \-\-all
 
 Run in test mode with an optional test directory:
-    clod --test --staging-dir /path/to/test/dir
+    clod \-\-test \-\-staging-dir /path/to/test/dir
     
 Reuse the previous staging directory:
-    clod --last
+    clod \-\-last
     
 Remove missing entries from the database:
-    clod --flush
+    clod \-\-flush
 
 # ENVIRONMENT VARIABLES
 
