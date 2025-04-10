@@ -134,6 +134,8 @@ executable clod
     optparse-applicative >= 0.16 && < 0.18
   default-language:  Haskell2010
   ghc-options:       -Wall -threaded -rtsopts -with-rtsopts=-N
+  other-modules:     Paths_clod
+  autogen-modules:   Paths_clod
   
 test-suite clod-test
   import:            deps, extensions
