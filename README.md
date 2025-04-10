@@ -56,7 +56,7 @@ Developed by [Fuzz, Inc](https://fuzz.ink) - World-class technical leadership an
 
 ## Installation
 
-## Homebrew (recommended, binary is Apple Silicon only)
+## Homebrew (binary is Apple Silicon only for now)
 
 ```bash
 # On macOS
@@ -89,10 +89,10 @@ The `clod` program is installed automatically when using `cabal install`.
 - GHC (Glasgow Haskell Compiler) 9.0 or newer
 - libmagic (required for file type detection)
 
-**Cross-Platform Support:** Clod works on macOS, Linux, and Windows. The
-program outputs the path to the staging directory, making it easy to open with
-your system's file browser or use with any command that accepts a directory
-path.
+**Cross-Platform Support:** Clod has been tested on macOS, but should work on
+Linux and Windows. The program outputs the path to the staging directory,
+making it easy to open with your system's file browser or use with any command
+that accepts a directory path.
 
 * macOS: `open`
 * Linux: `xdg-open`, `gio`, `gnome-open`, or `kde-open`
@@ -252,8 +252,3 @@ The architecture focuses on reliability and maintainability, delivering a system
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Claude AI team for the Project Knowledge feature
-- Haskell community for their excellent libraries
