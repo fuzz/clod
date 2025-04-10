@@ -38,7 +38,7 @@ The workflow I use is:
    better conversationalist than Claude Code, anyway, plus he can render visual
    elements for live previews
 2. Use fswatch for automated testing
-3. Use Claude Code for final code fixes and code review after iterating with Claude App, as a backup for high-volume days, for especially complex tasks requiring whole-codebase analysis or exploration with command-line tools
+3. Use Claude Code for final code fixes and code review after iterating with Claude App, as a backup for high-volume days, and for tasks requiring whole-codebase analysis or exploration with command-line tools
 
 This hybrid approach optimizes both cost and capability while ensuring continuous productivity.
 
