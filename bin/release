@@ -673,6 +673,17 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   
   echo "Found rebuild number in JSON: $rebuild_num"
   
+  # First update the root_url because that's required for all bottles
+  ROOT_URL_TEMPLATE="    root_url \"https://github.com/fuzz/clod/releases/download/v$VERSION\" # BOTTLE_ROOT_URL_MARKER"
+  sed -i '' "s|.*BOTTLE_ROOT_URL_MARKER.*|$ROOT_URL_TEMPLATE|" Formula/clod.rb
+  
+  # Verify the root_url was updated correctly
+  if ! grep -q "v$VERSION.*BOTTLE_ROOT_URL_MARKER" Formula/clod.rb; then
+    echo "ERROR: Bottle root_url update failed. Please check Formula/clod.rb manually."
+    grep -A 2 "root_url" Formula/clod.rb
+    exit 1
+  fi
+  
   # For rebuild = 0, we should remove the directive completely
   # For rebuild > 0, we should add or update the directive
   if [ "$rebuild_num" = "0" ] || [ -z "$rebuild_num" ] || [ "$rebuild_num" = "null" ]; then
@@ -704,11 +715,6 @@ if [[ "$bottle_response" =~ ^[Yy] ]]; then
   
   # Replace the SHA line with the marker
   sed -i '' "s|.*BOTTLE_SHA256_MARKER.*|$BOTTLE_SHA_TEMPLATE|" Formula/clod.rb
-  if ! grep -q "v$VERSION.*BOTTLE_ROOT_URL_MARKER" Formula/clod.rb; then
-    echo "ERROR: Bottle root_url update failed. Please check Formula/clod.rb manually."
-    grep -A 2 "root_url" Formula/clod.rb
-    exit 1
-  fi
   
   if ! grep -q "arm64_${macos_version}.*$bottle_sha.*BOTTLE_SHA256_MARKER" Formula/clod.rb; then
     echo "ERROR: Bottle SHA update failed. Please check Formula/clod.rb manually."
