@@ -23,7 +23,6 @@ import qualified Clod.MainSpec
 import qualified Clod.FileSystem.DetectionSpec
 import qualified Clod.FileSystem.ChecksumsSpec
 import qualified Clod.FileSystem.DatabaseSpec
-import qualified Clod.EffectsSpec
 import qualified Clod.TypesSpec
 import qualified Clod.FileSystem.OperationsSpec
 import qualified Clod.FileSystem.ProcessingSpec
@@ -41,7 +40,6 @@ main = hspec $ do
   describe "Clod.Output" Clod.OutputSpec.spec
   describe "Clod.Config" Clod.ConfigSpec.spec
   describe "Clod.Main" Clod.MainSpec.spec
-  describe "Clod.Effects" Clod.EffectsSpec.spec
   describe "Clod.Types" Clod.TypesSpec.spec
   describe "Clod.FileSystem.Operations" Clod.FileSystem.OperationsSpec.spec
   describe "Clod.FileSystem.Processing" Clod.FileSystem.ProcessingSpec.spec
