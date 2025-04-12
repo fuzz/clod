@@ -62,8 +62,6 @@ Developed by [Fuzz, Inc](https://fuzz.ink) - World-class technical leadership an
 # On macOS
 brew tap fuzz/tap
 brew install clod
-# Or in one command:
-brew install fuzz/tap/clod
 ```
 
 ### From Hackage
@@ -85,7 +83,7 @@ The `clod` program is installed automatically when using `cabal install`.
 ### Prerequisites
 
 - Claude Pro, Max, Teams or Enteprise account
-- Claude desktop app (currently only macOS and Windows)
+- Claude desktop app for filesystem access (currently only macOS and Windows)
 - GHC (Glasgow Haskell Compiler) 9.0 or newer
 - libmagic (required for file type detection)
 
