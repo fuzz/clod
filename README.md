@@ -25,9 +25,9 @@ and SVGs and so on. Claude Code will often hit a minor roadblock when
 implementing something and turn around and do exactly what you told him not to
 do--this is rarely an issue with Claude App as there's more human in the loop.
 Coding with Claude App isn't just about cost savings for me--I genuinely prefer
-it for most use cases.
+it for many use cases.
 
-While this project was built with filesystem access in mind I usually find
+While this project was built with filesystem access in mind I often find
 myself instead having Claude generate a shell script for me that will apply his
 changes to the codebase, then I review the script, request changes if needed,
 download it through the UI and run it. I usually have his script create a tmp
@@ -39,6 +39,10 @@ error prone even for the best frontier AI.
 
 *Some ~~people~~ entities, when confronted with a problem, think “I know, I’ll
 use regular expressions.” Now they have two problems.* --Jamie Zawinski
+
+Added April 16, 2025: Claude App has a new 'select all' feature in the Project
+Knowledge section that now makes the easiest workflow to just delete all
+Project Knowledge files and replace them with the contents of `clod --all`. Note this approach could have an impact on your usage limits, although as of today I have not observed this to be the case.
 
 Developed by [Fuzz, Inc](https://fuzz.ink) - World-class technical leadership and execution
 
