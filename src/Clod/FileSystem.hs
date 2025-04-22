@@ -5,7 +5,7 @@
 -- Description : File system operations for the Clod application
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module provides functionality for working with files and directories,

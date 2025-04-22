@@ -5,7 +5,7 @@
 -- Description : Test suite for the Clod application
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module orchestrates the test suite for the Clod application.

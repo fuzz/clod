@@ -5,7 +5,7 @@
 -- Description : Tests for output formatting and path transformations
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module contains tests for the output formatting and path transformation functionality.

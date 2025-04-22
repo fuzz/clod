@@ -17,7 +17,7 @@
 -- Description : Core types for the Clod application
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module defines the core types used throughout the Clod application.

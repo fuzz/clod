@@ -12,7 +12,7 @@
 -- Description : Checksums-based file tracking for Clod
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module provides functions for tracking file changes using checksums.

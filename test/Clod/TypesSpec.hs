@@ -8,7 +8,7 @@
 -- Description : Tests for core types
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module contains tests for the core types of the Clod application.

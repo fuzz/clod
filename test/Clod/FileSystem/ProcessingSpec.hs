@@ -6,7 +6,7 @@
 -- Description : Tests for file processing functions
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module contains tests for file processing functionality.

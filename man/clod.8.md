@@ -1,5 +1,5 @@
 % CLOD(8) Clod 0.2.2
-% Fuzz Leonard & Claude <ink@fuzz.ink>
+% Fuzz Leonard <fuzz@fuzz.ink>
 % March 2025
 
 # NAME

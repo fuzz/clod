@@ -5,7 +5,7 @@
 -- Description : Tests for the FileSystem.Transformations module
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module tests the file transformations functionality.

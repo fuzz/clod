@@ -8,7 +8,7 @@
 -- Description : Tests for command-line interface
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module contains tests for the main command-line interface.

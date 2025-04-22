@@ -5,7 +5,7 @@
 -- Description : File type transformations for the Clod application
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module handles special file type transformations required for Claude AI compatibility.

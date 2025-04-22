@@ -7,7 +7,7 @@
 -- Description : File detection operations for Clod
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module provides functions for detecting file types and states

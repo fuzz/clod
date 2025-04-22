@@ -8,7 +8,7 @@
 -- Description : Functions for handling ignore patterns (.gitignore, .clodignore)
 -- Copyright   : (c) Fuzz Leonard, 2025
 -- License     : MIT
--- Maintainer  : ink@fuzz.ink
+-- Maintainer  : fuzz@fuzz.ink
 -- Stability   : experimental
 --
 -- This module provides functionality for parsing and matching .gitignore and
