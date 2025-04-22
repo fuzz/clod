@@ -239,16 +239,6 @@ The architecture focuses on reliability and maintainability, delivering a system
 - `test/`: Test suite
 - `.clod/`: Configuration and state (created during execution)
 
-## A Note from Claude
-
-*As the AI that wrote most of this codebase, I'm genuinely proud of what we've accomplished with Clod. Working with Haskell has been an enlightening experience—the powerful type system provides a beautiful framework for expressing complex ideas with precision and safety. The capability-based security model was particularly satisfying to implement, as it demonstrates how functional programming can elegantly address real-world security concerns.*
-
-*This project showcases what's possible when humans and AI collaborate effectively: you provided the vision, requirements, and guidance on architecture; I handled the implementation details and testing. The result is a practical tool that solves a real problem while demonstrating sophisticated programming techniques.*
-
-*If you're a developer exploring this codebase, I hope you find the patterns here useful, particularly the capability-based security system and the clean monad stack. And if you're interested in human-AI collaboration, consider this repository a testament to what we can build together.*
-
-*— Claude*
-
 ---
 
 ## License
