@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.3] - 2025-04-22
+
+- Update maintainer email
+
 ## [0.2.2] - 2025-04-10
 
 Introduces the lens library to provide composable accessors and traversals for

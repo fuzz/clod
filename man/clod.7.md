@@ -1,4 +1,4 @@
-% CLOD(7) Clod 0.2.2
+% CLOD(7) Clod 0.2.3
 % Fuzz Leonard <fuzz@fuzz.ink>
 % March 2025
 
