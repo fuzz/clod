@@ -56,7 +56,6 @@ Developed by [Fuzz, Inc](https://fuzz.ink) - World-class technical leadership an
 - Create optimized filenames for Claude's UI
 - Generate a path manifest for mapping optimized names back to original paths
 - Capability-based security for file operations
-- Simple, well-structured monad stack for reliable behavior
 
 ## Installation
 
